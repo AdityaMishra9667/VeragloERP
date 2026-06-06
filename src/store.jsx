@@ -2650,8 +2650,37 @@
       return null;
     },
 
+    startEvaluationTrial(actor) {
+      const act = (DB.settings && DB.settings.activation) || {};
+      const trialEnd = new Date();
+      trialEnd.setDate(trialEnd.getDate() + 14);
+      DB.settings.activation = {
+        ...act,
+        status: "Trial",
+        licenseKeyId: "",
+        serial: "",
+        trialEndsAt: act.trialEndsAt && act.trialEndsAt >= todayISO()
+          ? act.trialEndsAt
+          : trialEnd.toISOString().slice(0, 10),
+      };
+      this.audit(actor || "installer", "update", "license", "trial", "Evaluation trial started");
+      notify();
+      return { ok: true, trialEndsAt: DB.settings.activation.trialEndsAt };
+    },
+
     isLicensed() {
       const act = (DB.settings && DB.settings.activation) || {};
+      const trialEnd = act.trialEndsAt;
+      const trialValid = trialEnd && trialEnd >= todayISO();
+      if (!act.licenseKeyId && trialValid) {
+        return { ok: true, trial: true, trialEndsAt: trialEnd };
+      }
+      if (act.status === "Trial") {
+        if (trialEnd && trialEnd < todayISO()) {
+          return { ok: false, reason: "Trial expired — activate with a license", expired: true };
+        }
+        return { ok: true, trial: true, trialEndsAt: trialEnd };
+      }
       if (act.status === "Active" && act.licenseKeyId) {
         const lic = this.get("licenseKeys", act.licenseKeyId);
         if (lic && lic.status === "Blocked") return { ok: false, reason: "License is blocked" };

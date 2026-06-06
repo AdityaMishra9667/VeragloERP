@@ -100,10 +100,23 @@
   }
 
   /* ---------------- Login ---------------- */
-  function Login({ onLogin, theme, setTheme }) {
+  function Login({ onLogin, theme, setTheme, needsSetup }) {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [busy, setBusy] = useState(false);
+    const [authHint, setAuthHint] = useState("");
+
+    useEffect(() => {
+      fetch((VG.apiBase || "") + "/api/auth/status")
+        .then((r) => r.ok ? r.json() : null)
+        .then((data) => {
+          if (!data) return;
+          if (data.needsSetup) setAuthHint("First launch on this server — close this screen and use Create administrator, or ask your IT team to run: cd server && npm run db:reset-admin");
+          else if (!data.licensed) setAuthHint("License not active — return to the activation screen and start the evaluation trial or enter your license.");
+          else setAuthHint("");
+        })
+        .catch(() => {});
+    }, []);
 
     function submit(e) {
       e.preventDefault();
@@ -174,7 +187,12 @@
                   </div>
 
                   <Button type="submit" icon="logout" className="w-full !py-3" disabled={busy}>{busy ? "Signing in…" : "Sign in to workspace"}</Button>
-                  <p className="text-[11px] text-center login-muted">Use the email and password set in Admin → Users</p>
+                  {needsSetup ? (
+                    <p className="text-[11px] text-center text-amber-700">No administrator exists yet — refresh the page to open <b>Create administrator</b>.</p>
+                  ) : (
+                    <p className="text-[11px] text-center login-muted">Use the email and password from your administrator setup. Dev credentials from other machines do not carry over after deploy.</p>
+                  )}
+                  {authHint && <p className="text-[11px] text-center text-amber-700 mt-2">{authHint}</p>}
                 </form>
               </div>
             </div>
@@ -629,9 +647,23 @@
     VG.useDB();
     const lic = VG.store.isLicensed();
     const trialEnd = (VG.store.settings().activation || {}).trialEndsAt;
+    const [startingTrial, setStartingTrial] = useState(false);
     useEffect(() => {
       if (lic.ok && onActivated) onActivated();
     }, [lic.ok]);
+    function beginTrial() {
+      if (startingTrial || !VG.store.startEvaluationTrial) return;
+      setStartingTrial(true);
+      try {
+        const res = VG.store.startEvaluationTrial("installer");
+        if (res && res.ok) {
+          VG.toast("14-day evaluation trial started", "success");
+          onActivated && onActivated();
+        }
+      } finally {
+        setStartingTrial(false);
+      }
+    }
     if (lic.ok) return null;
     return (
       <div className="relative min-h-screen flex items-center justify-center p-6">
@@ -646,9 +678,16 @@
             </div>
           </div>
           {lic.expired && <Card className="p-3 mb-4 border border-amber-500/40 text-sm text-amber-200">{lic.reason}</Card>}
+          <Card className="p-4 mb-4 border border-indigo-500/30 text-sm">
+            <p className="font-medium text-indigo-100">New installation?</p>
+            <p className="text-xs opacity-70 mt-1">Start the built-in evaluation trial to reach login and create your administrator account.</p>
+            <Button className="mt-3 !py-2" icon="check" onClick={beginTrial} disabled={startingTrial}>
+              {startingTrial ? "Starting…" : "Continue with 14-day evaluation trial"}
+            </Button>
+          </Card>
           {VG.ActivationForm ? <VG.ActivationForm onDone={() => onActivated && onActivated()} compact /> : <p className="text-sm opacity-60">Loading activation…</p>}
           {trialEnd && (
-            <p className="text-xs opacity-45 mt-4 text-center">Evaluation trial available until {trialEnd} — sign in after activating or ask admin for a trial extension.</p>
+            <p className="text-xs opacity-45 mt-4 text-center">Evaluation trial available until {trialEnd}.</p>
           )}
         </div>
       </div>
@@ -789,7 +828,7 @@
     let screen;
     if (!licensed) screen = <ActivationScreen onActivated={() => setLicensed(true)} />;
     else if (!session && needsSetup) screen = <InitialSetup onComplete={login} theme={theme} setTheme={setTheme} />;
-    else if (!session) screen = <Login onLogin={login} theme={theme} setTheme={setTheme} />;
+    else if (!session) screen = <Login onLogin={login} theme={theme} setTheme={setTheme} needsSetup={needsSetup} />;
     else if (!moduleId) screen = (VG.WelcomeHome ? <VG.WelcomeHome roleKey={session.roleKey} email={session.email} onOpen={openModule} onLogout={logout} theme={theme} setTheme={setTheme} onOpenSearch={openSearch} /> : <Launcher roleKey={session.roleKey} email={session.email} onOpen={openModule} onLogout={logout} theme={theme} setTheme={setTheme} onOpenSearch={openSearch} />);
     else screen = <Workspace roleKey={session.roleKey} email={session.email} moduleId={moduleId} onOpen={openModule} onHome={goHome} onLogout={logout} theme={theme} setTheme={setTheme} onOpenSearch={openSearch} />;
     const SearchModal = VG.UniversalSearch;

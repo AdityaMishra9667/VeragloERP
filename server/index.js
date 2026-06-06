@@ -6,6 +6,8 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { access, constants } from "fs/promises";
 import * as db from "./db.js";
+import { createAdminUser, generatePassword, hasLoginUsers } from "./auth-utils.js";
+import { ensureDeploymentReady } from "./first-run.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.join(__dirname, "..");
@@ -14,6 +16,92 @@ const PORT = Number(process.env.PORT || 3000);
 const app = express();
 app.use(cors({ origin: process.env.CORS_ORIGIN || true }));
 app.use(express.json({ limit: "25mb" }));
+
+/** Public auth / first-run diagnostics for login troubleshooting. */
+app.get("/api/auth/status", async (_req, res) => {
+  try {
+    const state = (await db.getState()) || { _v: 11, settings: { activation: {} }, erpUsers: [] };
+    const ready = ensureDeploymentReady(state);
+    const act = (ready.settings && ready.settings.activation) || {};
+    const today = new Date().toISOString().slice(0, 10);
+    const trialValid = act.trialEndsAt && act.trialEndsAt >= today;
+    const licensed =
+      act.status === "Trial" && trialValid
+      || (act.status === "Active" && !!act.licenseKeyId)
+      || (!act.licenseKeyId && trialValid);
+    res.json({
+      ok: true,
+      storage: db.storageMode(),
+      hasUsers: hasLoginUsers(ready),
+      needsSetup: !hasLoginUsers(ready),
+      licensed,
+      trialEndsAt: act.trialEndsAt || null,
+      activationStatus: act.status || "unknown",
+      hint: !hasLoginUsers(ready)
+        ? "First launch: use Create administrator on the login screen, or POST /api/setup/bootstrap-admin"
+        : "Sign in with the email and password from Admin → Users",
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+/**
+ * Create the first administrator when no login users exist (fresh GitHub / server deploy).
+ * Safe to call only on empty installations — returns 403 once users exist.
+ */
+app.post("/api/setup/bootstrap-admin", async (req, res) => {
+  try {
+    await db.ensureSchema();
+    let state = await db.getState();
+    if (!state || !state._v) {
+      state = {
+        _v: 11,
+        seq: { USR: 0 },
+        erpUsers: [],
+        customRoles: [],
+        locations: [{ id: "loc1", name: "Main Warehouse", locType: "Warehouse", status: "Active" }],
+        settings: { activation: { status: "Trial" }, security: { minPasswordLength: 8 } },
+        connectedSessions: [],
+        revokedSessions: [],
+        auditLog: [],
+      };
+    }
+    state = ensureDeploymentReady(state);
+    if (hasLoginUsers(state)) {
+      return res.status(403).json({
+        error: "users_exist",
+        message: "An administrator already exists. Sign in with that account or run: cd server && npm run db:reset-admin",
+      });
+    }
+    const body = req.body || {};
+    const creds = await createAdminUser(state, {
+      email: body.email || process.env.ADMIN_EMAIL || "admin@veraglo.com",
+      password: body.password || process.env.ADMIN_PASSWORD || generatePassword(),
+      name: body.name || process.env.ADMIN_NAME || "System Administrator",
+    });
+    state.auditLog = (state.auditLog || []).concat({
+      id: "A-bootstrap-" + Date.now(),
+      ts: Date.now(),
+      actor: "system",
+      action: "create",
+      entity: "erpUsers",
+      refId: creds.userId,
+      summary: "Bootstrap administrator: " + creds.email,
+    });
+    await db.saveState(state);
+    res.status(201).json({
+      ok: true,
+      email: creds.email,
+      password: creds.password,
+      userId: creds.userId,
+      message: "Administrator created — sign in with these credentials and change the password in Admin → Users",
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "bootstrap_failed", message: e.message });
+  }
+});
 
 app.get("/api/health", async (_req, res) => {
   try {
@@ -152,6 +240,10 @@ app.get("*", (_req, res) => {
 async function start() {
   try {
     await db.ensureSchema();
+    const existing = await db.getState();
+    if (existing && existing._v) {
+      await db.saveState(ensureDeploymentReady(existing));
+    }
     const h = await db.healthCheck();
     const mode = db.storageMode();
     console.log(`Veraglo ERP API listening on http://localhost:${PORT}`);
