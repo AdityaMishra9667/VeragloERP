@@ -738,12 +738,26 @@
       ];
     }
   }
-  function load() {
+  function readLocalState() {
     try {
       const raw = JSON.parse(localStorage.getItem(KEY) || "null");
       if (raw && raw._v) return migrate(raw);
     } catch (e) {}
+    return null;
+  }
+
+  function stateSavedAt(st) {
+    if (!st) return 0;
+    const local = Number(st._localSavedAt);
+    if (local > 0) return local;
+    return st._updatedAt ? new Date(st._updatedAt).getTime() : 0;
+  }
+
+  function load() {
+    const saved = readLocalState();
+    if (saved) return saved;
     const fresh = seed();
+    fresh._localSavedAt = Date.now();
     try { localStorage.setItem(KEY, JSON.stringify(fresh)); } catch (e) {}
     return fresh;
   }
@@ -753,25 +767,49 @@
     return (typeof VG !== "undefined" && VG.apiBase != null) ? String(VG.apiBase) : "";
   }
 
-  async function pushStateToApi() {
-    if (!_usePostgres) return;
+  async function pushStateToApi(opts) {
+    if (!_usePostgres) return false;
     try {
+      DB._localSavedAt = DB._localSavedAt || Date.now();
       const res = await fetch(apiBase() + "/api/state", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(DB),
+        keepalive: !!(opts && opts.keepalive),
       });
       if (!res.ok) throw new Error("PUT /api/state " + res.status);
+      const body = await res.json().catch(() => ({}));
+      if (body.updatedAt) DB._updatedAt = body.updatedAt;
+      try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {}
+      return true;
     } catch (e) {
       console.warn("[Veraglo store] PostgreSQL sync failed:", e.message || e);
+      return false;
     }
   }
 
   let persistTimer;
   function persist() {
+    DB._localSavedAt = Date.now();
     try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {}
     clearTimeout(persistTimer);
-    persistTimer = setTimeout(pushStateToApi, 400);
+    persistTimer = setTimeout(() => { pushStateToApi(); }, 400);
+  }
+
+  function flushPersist() {
+    clearTimeout(persistTimer);
+    persistTimer = null;
+    DB._localSavedAt = Date.now();
+    try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {}
+    if (_usePostgres) pushStateToApi({ keepalive: true });
+  }
+
+  if (typeof window !== "undefined") {
+    window.addEventListener("beforeunload", flushPersist);
+    window.addEventListener("pagehide", flushPersist);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") flushPersist();
+    });
   }
   function notify() { persist(); listeners.forEach((fn) => fn()); }
 
@@ -2239,17 +2277,28 @@
     backend: () => (_usePostgres ? "postgresql" : "localStorage"),
 
     async init() {
+      const localState = readLocalState();
       const base = apiBase();
       try {
         const res = await fetch(base + "/api/state");
         if (res.status === 404) {
-          DB = load();
+          DB = localState || load();
+          if (!DB._localSavedAt) DB._localSavedAt = Date.now();
           _usePostgres = true;
           await pushStateToApi();
         } else if (res.ok) {
-          DB = migrate(await res.json());
+          const serverState = migrate(await res.json());
           _usePostgres = true;
-          try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {}
+          const localTs = stateSavedAt(localState);
+          const serverTs = stateSavedAt(serverState);
+          if (localState && localTs > serverTs) {
+            console.warn("[Veraglo store] Local data is newer than server — restoring and syncing to PostgreSQL");
+            DB = localState;
+            await pushStateToApi();
+          } else {
+            DB = serverState;
+            try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {}
+          }
         } else {
           DB = load();
         }
