@@ -8,7 +8,8 @@
     "start": "node index.js",
     "dev": "node --watch index.js",
     "db:init": "node scripts/init-db.js",
-    "db:import": "node scripts/import-state.js"
+    "db:import": "node scripts/import-state.js",
+    "db:reset-admin": "node scripts/reset-admin.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
