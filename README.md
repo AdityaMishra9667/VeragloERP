@@ -51,7 +51,7 @@ python3 -m http.server 5173
 
 Falls back to **`localStorage`** when `GET /api/state` is unreachable.
 
-> Demo login: pick **any role** (password pre-filled). Session/theme in `localStorage`; ERP data in **PostgreSQL** when the API is up.
+> **Login:** there are no default users. On first launch, create the administrator account (email + password). After a server/GitHub deploy, credentials from another machine **do not** apply — reset with `cd server && npm run db:reset-admin` if needed. Check `GET /api/auth/status` for setup hints.
 
 ## What's included
 
