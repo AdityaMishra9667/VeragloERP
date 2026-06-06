@@ -304,16 +304,10 @@
     const isHidden = (id) => (prefs.hiddenPanels || []).includes(id);
 
     return (
-      <div className="space-y-4 max-w-[1600px]">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
-          <div>
-            <h2 className="text-lg font-display font-bold">{cfg.title || mod.name + " Dashboard"}</h2>
-            <p className="text-xs opacity-55 mt-0.5">{cfg.subtitle || "At-a-glance control for your daily work"}</p>
-          </div>
-          <div className="flex items-center gap-2 text-[11px] opacity-45">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            Live · refreshes automatically
-          </div>
+      <div className="space-y-4 max-w-[1600px] vg-module-dashboard">
+        <div className="flex items-center justify-end gap-2 text-[11px] opacity-45 -mt-1">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          Live · refreshes automatically
         </div>
 
         <QuickActionsBar actions={cfg.quickActions} can={can} />
