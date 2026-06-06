@@ -587,6 +587,45 @@
     return "INV:" + (inv.no || "") + "|DT:" + (inv.date || "") + "|AMT:" + (inv.amount || "");
   }
 
+  function buildExportInvoiceBlock(q, co, currency, fx) {
+    if (!q.invoiceType || q.invoiceType === "domestic") return "";
+    const fxTotals = q.fxTotals || (VG.computeFxTotals ? VG.computeFxTotals(q, q.totals || {}) : {});
+    const pairs = [
+      ["Invoice type", VG.invoiceTypeLabel ? VG.invoiceTypeLabel(q) : q.invoiceType],
+      ["Buyer country", q.buyerCountry],
+      ["Consignee country", q.consigneeCountry],
+      ["Port of loading", q.portOfLoading],
+      ["Port of discharge", q.portOfDischarge],
+      ["Final destination", q.finalDestination],
+      ["Country of origin", q.countryOfOrigin],
+      ["Country of final destination", q.countryOfFinalDestination],
+      ["IEC code", q.iecCode || co.iec],
+      ["LUT / Bond", [q.lutNumber, q.lutBondDetails].filter(Boolean).join(" · ")],
+      ["LUT validity", q.lutValidity],
+      ["Export supply", q.exportSupplyType === "with_igst" ? "With payment of IGST" : "Without payment of IGST under LUT"],
+      ["Shipping bill", [q.shippingBillNo, q.shippingBillDate].filter(Boolean).join(" · ")],
+      ["AD code", q.adCode],
+      ["Incoterms", q.incoterms],
+      ["Shipment mode", q.shipmentMode],
+      ["Net / Gross weight", [q.netWeight, q.grossWeight].filter((x) => x != null && x !== "").join(" / ") + (q.netWeight || q.grossWeight ? " kg" : "")],
+      ["Packages", q.packages],
+      ["Packing", q.packingDetails],
+    ].filter(([, v]) => v);
+    const bank = [q.remittanceBank || co.bank, q.remittanceAccount || co.accountNo, q.swiftCode || co.swiftCode ? "SWIFT: " + (q.swiftCode || co.swiftCode) : ""].filter(Boolean).join(" · ");
+    return `
+      <div class="vg-q-section">
+        <div class="vg-q-section-hdr">Export &amp; remittance details</div>
+        <div class="vg-q-kv">${pairs.map(([k, v]) => `<span class="k">${esc(k)}</span><span>${esc(String(v))}</span>`).join("")}</div>
+        ${currency !== "INR" ? `<div class="vg-q-kv" style="margin-top:8px">
+          <span class="k">Exchange rate</span><span>1 ${esc(currency)} = ₹${esc(fx)} (as on ${esc(q.exchangeRateDate || q.date || "—")}, ${esc(q.exchangeRateSource === "manual" ? "manual" : "currency master")})</span>
+          <span class="k">INR equivalent</span><span>${fmtMoney(fxTotals.grandTotalInr || 0, "INR")}</span>
+          <span class="k">Taxable (INR)</span><span>${fmtMoney(fxTotals.taxableValueInr || 0, "INR")}</span>
+        </div>` : ""}
+        ${bank ? `<div class="vg-bank" style="margin-top:10px"><b>Bank details for foreign remittance</b><br>${esc(bank)}</div>` : ""}
+        ${q.exportDeclaration ? `<div class="vg-amount-words" style="margin-top:10px"><strong>Export declaration:</strong> ${esc(q.exportDeclaration)}</div>` : ""}
+      </div>`;
+  }
+
   function buildInvoiceComplianceBlock(inv, einv, eway, co) {
     let html = "";
     if (einv && einv.irn) {
@@ -854,11 +893,14 @@
     const contactPhone = customerContactPhone(c);
     const warrantyText = defaultWarrantyText(t, q, co);
     const subject = q.subject || q.projectName || (q.remarks ? String(q.remarks).split("\n")[0] : "") || "";
-    const docTitle = (t.docTitleOverride || labels.title || "").trim();
+    let docTitle = (t.docTitleOverride || labels.title || "").trim();
     const isInvoice = docType === "Tax Invoice";
+    if (isInvoice && q.invoiceType && q.invoiceType !== "domestic" && VG.invoiceTypeLabel) docTitle = VG.invoiceTypeLabel(q);
     const einv = q.eInvoice || {};
     const eway = q.ewayBill || {};
+    const exportBlock = isInvoice ? buildExportInvoiceBlock(q, co, currency, fx) : "";
     const invoiceCompliance = isInvoice ? buildInvoiceComplianceBlock(q, einv, eway, co) : "";
+    const fxTotals = q.fxTotals || (VG.computeFxTotals ? VG.computeFxTotals(q, totals) : {});
 
     const showBilling = policy.billing === true || (policy.billing === "optional" && (q.billing || "").trim());
     const showShipping = policy.shipping === true || (policy.shipping === "optional" && (q.shipping || "").trim());
@@ -896,7 +938,7 @@
     const qrPayload = esc((q.no || docType.slice(0, 2)) + "|Rev-" + rev);
     const showCustomerQr = t.showQr !== false && !isInvoice;
     const showInvoiceQr = isInvoice;
-    const incoterms = c.incoterms || q.incoterms || "";
+    const incoterms = q.incoterms || c.incoterms || "";
 
     const addrBlock = (showBilling || showShipping) ? `
       <div class="vg-q-addr-row">
@@ -940,6 +982,8 @@
           <span>Due Date<b>${esc(q.dueDate || "—")}</b></span>
           <span>SO Ref.<b>${esc(q.salesOrderNo || "—")}</b></span>
           <span>Currency<b>${esc(currency)}</b></span>
+          ${currency !== "INR" ? `<span>Exchange rate<b>₹${esc(fx)} / ${esc(currency)}</b></span>` : ""}
+          ${incoterms ? `<span>Incoterms<b>${esc(incoterms)}</b></span>` : ""}
           <span>Buyer GSTIN<b>${esc(q.gstin || c.gstin || "—")}</b></span>
         </div>
         <div class="vg-q-contact-row">
@@ -987,21 +1031,25 @@
             <span class="k">Payment terms</span><span>${esc(pt)}</span>
             <span class="k">Delivery terms</span><span>${esc(dt)}</span>
             <span class="k">Warranty</span><span>${esc(warrantyText)}</span>
+            ${incoterms ? `<span class="k">Incoterms</span><span>${esc(incoterms)}</span>` : ""}
           </div>
-          ${t.showAmountInWords !== false ? `<div class="vg-amount-words"><strong>Amount in words:</strong> ${esc(amountInWordsIntl(totals.final != null ? totals.final : totals.grand, currency))}</div>` : ""}
+          ${t.showAmountInWords !== false ? `<div class="vg-amount-words"><strong>Amount in words (${esc(currency)}):</strong> ${esc(amountInWordsIntl(totals.final != null ? totals.final : totals.grand, currency))}</div>` : ""}
+          ${currency !== "INR" && t.showAmountInWords !== false ? `<div class="vg-amount-words"><strong>Amount in words (INR):</strong> ${esc(amountInWordsIntl(fxTotals.grandTotalInr || totals.final * fx || totals.grand * fx, "INR"))}</div>` : ""}
         </div>
         <div class="vg-q-total-panel">
           <div class="row"><span>Basic amount</span><span>${fmtMoney(totals.sub, currency)}</span></div>
           ${totals.discount ? `<div class="row"><span>Discount</span><span>- ${fmtMoney(totals.discount, currency)}</span></div>` : ""}
-          <div class="row"><span>Taxable value</span><span>${fmtMoney(totals.taxable, currency)}</span></div>
+          <div class="row"><span>Taxable value (${esc(currency)})</span><span>${fmtMoney(totals.taxable, currency)}</span></div>
           <div class="row"><span>Tax (GST)</span><span>${fmtMoney(totals.tax, currency)}</span></div>
           ${totals.charges ? `<div class="row"><span>Freight / charges</span><span>${fmtMoney(totals.charges, currency)}</span></div>` : ""}
-          <div class="grand"><span>Grand total</span><span>${fmtMoney(totals.grand, currency)}</span></div>
+          <div class="grand"><span>Grand total (${esc(currency)})</span><span>${fmtMoney(totals.grand, currency)}</span></div>
+          ${currency !== "INR" ? `<div class="row"><span>INR equivalent</span><span>${fmtMoney(fxTotals.grandTotalInr || 0, "INR")}</span></div>` : ""}
           ${totals.roundOff ? `<div class="row"><span>Round off</span><span>${totals.roundOff > 0 ? "+" : ""}${fmtMoney(totals.roundOff, currency)}</span></div><div class="final"><span>Final amount</span><span>${fmtMoney(totals.final, currency)}</span></div>` : ""}
           ${isInvoice ? `<div class="row"><span>Amount paid</span><span>${fmtMoney(q.amountPaid || 0, currency)}</span></div><div class="row"><span>Balance due</span><span>${fmtMoney(Math.max(0, (Number(q.amount) || totals.final || totals.grand || 0) - (Number(q.amountPaid) || 0)), currency)}</span></div>` : ""}
         </div>
       </div>
 
+      ${exportBlock}
       ${invoiceCompliance}
 
       ${!isInvoice ? `<div class="vg-q-section">
@@ -1012,7 +1060,7 @@
       ${!isInvoice ? `<div class="vg-q-section">
         <div class="vg-q-section-hdr">Terms &amp; conditions</div>
         <div class="vg-q-terms-cols">${termsSections}</div>
-      </div>` : (isInvoice ? `<div class="vg-q-section"><div class="vg-q-section-hdr">Statutory note</div><div class="vg-q-kv" style="font-size:${Number(t.fontSize || 9.5) - 1.5}pt"><span class="k">Declaration</span><span>We declare that this invoice shows the actual price of the goods/services described and that all particulars are true and correct. Subject to ${esc(co.jurisdiction || "Pune, Maharashtra")} jurisdiction.</span></div></div>` : "")}
+      </div>` : (isInvoice ? `<div class="vg-q-section"><div class="vg-q-section-hdr">Statutory note</div><div class="vg-q-kv" style="font-size:${Number(t.fontSize || 9.5) - 1.5}pt"><span class="k">Declaration</span><span>${esc(q.exportDeclaration || ("We declare that this invoice shows the actual price of the goods/services described and that all particulars are true and correct. Subject to " + (co.jurisdiction || "Pune, Maharashtra") + " jurisdiction."))}</span></div></div>` : "")}
 
       <div class="vg-q-sign-grid">
         <div class="slot"><div class="role">Prepared by</div><b>${esc(q.preparedBy || "—")}</b></div>

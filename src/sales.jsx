@@ -27,6 +27,9 @@
   const INVOICE_SO_STAGES = ["Ready to Dispatch", "Ready for Dispatch", "Dispatch Planned", "Partially Dispatched", "Fully Dispatched", "Dispatched", "Invoiced"];
 
   const custName = (id) => (store.get("customers", id) || {}).name || "—";
+  function invMoney(inv, n) {
+    return VG.fmtInvoiceMoney ? VG.fmtInvoiceMoney(n, inv && inv.currency) : inr(n);
+  }
 
   /* ---------- quotation math ---------- */
   function computeLine(l) {
@@ -638,11 +641,18 @@
         openInvoiceFromQuotation(existing, onClose, go);
         return;
       }
-      const inv = store.createInvoiceFromQuotation ? store.createInvoiceFromQuotation(q.id, roleKey) : null;
-      if (!inv) return VG.toast("Could not create invoice — add customer billing address in Customer master", "error");
-      VG.toast("Tax invoice " + inv.no + " created", "success");
-      onChange();
-      openInvoiceFromQuotation(inv, onClose, go);
+      const so = store.ensureQuotationSO ? store.ensureQuotationSO(q, roleKey) : null;
+      if (!so) return VG.toast("Could not create invoice — add customer billing address in Customer master", "error");
+      if (VG.openInvoiceBuilder) {
+        VG.openInvoiceBuilder(store.buildInvoiceDraftFromSO(so.id));
+        onClose && onClose();
+      } else {
+        const inv = store.createInvoiceFromSO(so.id, roleKey);
+        if (!inv) return VG.toast("Could not create invoice", "error");
+        VG.toast("Tax invoice " + inv.no + " created", "success");
+        onChange();
+        openInvoiceFromQuotation(inv, onClose, go);
+      }
     }
     function convertDispatch() {
       const so = ensureSOFromQuotation(q, roleKey);
@@ -944,7 +954,11 @@
                 <Button variant="soft" icon="truck" onClick={() => { const sh = store.createShipmentFromSO(view.id, { destination: view.shipping }, roleKey); VG.toast("Shipment " + sh.no + " created"); setView(store.get("salesOrders", view.id)); }}>Create shipment</Button>
               )}
               {(view.stage === "Partially Dispatched" || view.stage === "Ready for Dispatch" || view.stage === "Fully Dispatched") && can("add") && (
-                <Button variant="soft" icon="rupee" onClick={() => { const inv = store.createInvoiceFromSO(view.id, roleKey); VG.toast("Invoice " + inv.no + " posted"); setView(store.get("salesOrders", view.id)); }}>Post invoice</Button>
+                <Button variant="soft" icon="rupee" onClick={() => {
+                  if (VG.openInvoiceBuilder) VG.openInvoiceBuilder(store.buildInvoiceDraftFromSO(view.id));
+                  else { const inv = store.createInvoiceFromSO(view.id, roleKey); VG.toast("Invoice " + inv.no + " posted"); }
+                  setView(store.get("salesOrders", view.id));
+                }}>Post invoice</Button>
               )}
               {view.status !== "Closed" && can("edit") && <Button icon="chevronRight" onClick={() => advance(view)}>Advance stage</Button>}
             </>}>
@@ -1265,7 +1279,7 @@
     );
   }
 
-  function InvoiceView({ inv, onClose, roleKey, can, onChange }) {
+  function InvoiceView({ inv, onClose, roleKey, can, onChange, onEdit }) {
     if (!inv) return null;
     const [ewayOpen, setEwayOpen] = useState(false);
     const st = invoiceDisplayStatus(inv);
@@ -1281,9 +1295,10 @@
     }
     return (
       <>
-        <Modal open={!!inv} onClose={onClose} size="xl" title={"Tax Invoice " + inv.no} subtitle={custName(inv.customerId) + (inv.salesOrderNo ? " · SO " + inv.salesOrderNo : "")}
+        <Modal open={!!inv} onClose={onClose} size="xl" title={(VG.invoiceTypeLabel ? VG.invoiceTypeLabel(inv) : "Tax Invoice") + " " + inv.no} subtitle={custName(inv.customerId) + (inv.salesOrderNo ? " · SO " + inv.salesOrderNo : "") + (inv.currency && inv.currency !== "INR" ? " · " + inv.currency : "")}
           footer={<>
             <InvoiceDocActions inv={inv} />
+            {onEdit && <Button variant="soft" icon="edit" onClick={onEdit}>Edit invoice</Button>}
             {can("add") && !(inv.eInvoice && inv.eInvoice.irn) && <Button variant="soft" icon="shield" onClick={genEinv}>Generate E-Invoice</Button>}
             {can("add") && <Button variant="soft" icon="truck" onClick={() => setEwayOpen(true)}>{inv.ewayBill && inv.ewayBill.no ? "Regenerate E-way" : "Generate E-way Bill"}</Button>}
             {inv.status !== "Paid" && balance > 0 && can("edit") && <Button icon="rupee" onClick={() => { const amt = balance; store.recordPayment(inv.id, amt, roleKey); VG.toast("Payment recorded"); onChange(); }}>Mark paid</Button>}
@@ -1291,13 +1306,28 @@
           <div className="flex flex-wrap items-center gap-2 mb-4">
             <StatusTag value={st.label} map={INV_DOC_STATUS} />
             <StatusTag value={inv.status} map={INV_STATUS} />
+            {inv.invoiceType && inv.invoiceType !== "domestic" && <Pill color="#f59e0b">{VG.invoiceTypeLabel ? VG.invoiceTypeLabel(inv) : inv.invoiceType}</Pill>}
             <span className="text-sm opacity-60 ml-auto">{inv.date}{inv.dueDate ? " · Due " + inv.dueDate : ""}</span>
           </div>
           <div className="grid sm:grid-cols-3 gap-3 mb-4 text-sm">
-            <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Invoice amount</div><div className="font-semibold">{inr(inv.amount)}</div></Card>
-            <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Paid</div><div className="font-semibold">{inr(inv.amountPaid || 0)}</div></Card>
-            <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Balance</div><div className="font-semibold">{inr(balance)}</div></Card>
+            <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Invoice amount</div><div className="font-semibold">{invMoney(inv, inv.amount)}</div>{inv.currency !== "INR" && inv.fxTotals && <div className="text-xs opacity-55 mt-1">INR {inr(inv.fxTotals.grandTotalInr)} @ {inv.exchangeRate}</div>}</Card>
+            <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Paid</div><div className="font-semibold">{invMoney(inv, inv.amountPaid || 0)}</div></Card>
+            <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Balance</div><div className="font-semibold">{invMoney(inv, balance)}</div></Card>
           </div>
+          {VG.isExportInvoiceType && VG.isExportInvoiceType(inv.invoiceType) && (
+            <Card className="p-3 mb-3 text-xs">
+              <div className="text-[11px] uppercase opacity-55 mb-2">Export details</div>
+              <div className="grid sm:grid-cols-3 gap-2">
+                {inv.iecCode && <div><span className="opacity-50">IEC</span><div>{inv.iecCode}</div></div>}
+                {inv.incoterms && <div><span className="opacity-50">Incoterms</span><div>{inv.incoterms}</div></div>}
+                {inv.buyerCountry && <div><span className="opacity-50">Buyer country</span><div>{inv.buyerCountry}</div></div>}
+                {inv.portOfLoading && <div><span className="opacity-50">Port of loading</span><div>{inv.portOfLoading}</div></div>}
+                {inv.lutNumber && <div><span className="opacity-50">LUT</span><div>{inv.lutNumber}{inv.lutValidity ? " · valid " + inv.lutValidity : ""}</div></div>}
+                {inv.swiftCode && <div><span className="opacity-50">SWIFT</span><div>{inv.swiftCode}</div></div>}
+              </div>
+              {inv.exportDeclaration && <div className="mt-2 opacity-80 italic">{inv.exportDeclaration}</div>}
+            </Card>
+          )}
           {(inv.eInvoice && inv.eInvoice.irn) && (
             <Card className="p-3 mb-3 text-xs">
               <div className="text-[11px] uppercase opacity-55 mb-2">E-Invoice (IRP)</div>
@@ -1338,11 +1368,165 @@
     );
   }
 
+  function InvoiceBuilder({ open, onClose, roleKey, can, initial, onSaved }) {
+    const isEdit = !!(initial && initial.id);
+    const [dirty, setDirty] = useState(false);
+    const [inv, setInv] = useState(() => {
+      if (initial && initial.id) return VG.buildInvoiceDraft ? VG.buildInvoiceDraft(initial) : { ...initial, lines: (initial.lines || []).map((l) => ({ ...l, key: Math.random().toString(36).slice(2) })) };
+      return VG.buildInvoiceDraft ? VG.buildInvoiceDraft(initial || {}) : { date: today(), invoiceType: "domestic", currency: "INR", exchangeRate: 1, lines: [blankLine()] };
+    });
+    const set = (k, v) => { setDirty(true); setInv((x) => ({ ...x, [k]: v })); };
+    const patch = (p) => { setDirty(true); setInv((x) => ({ ...x, ...p })); };
+    const setLine = (key, patchLine) => { setDirty(true); setInv((x) => ({ ...x, lines: x.lines.map((l) => (l.key === key ? { ...l, ...patchLine } : l)) })); };
+    const addLine = () => { setDirty(true); setInv((x) => ({ ...x, lines: x.lines.concat(blankLine()) })); };
+    const delLine = (key) => { setDirty(true); setInv((x) => ({ ...x, lines: x.lines.filter((l) => l.key !== key) })); };
+    const totals = VG.computeInvoiceTotals ? VG.computeInvoiceTotals(inv) : computeQuote(inv);
+    const fxTotals = VG.computeFxTotals ? VG.computeFxTotals(inv, totals) : {};
+    const isExport = VG.isExportInvoiceType && VG.isExportInvoiceType(inv.invoiceType);
+    const soList = store.list("salesOrders");
+    function pickCustomer(id) {
+      const c = store.get("customers", id) || {};
+      const draft = VG.buildInvoiceDraft ? VG.buildInvoiceDraft({ ...inv, customerId: id }) : inv;
+      setDirty(true);
+      setInv((x) => (VG.applyCustomerToTransaction ? { ...VG.applyCustomerToTransaction(c, { ...draft, customerId: id }), customerDefaultCurrency: (VG.normalizeCustomer ? VG.normalizeCustomer(c) : c).currency || "INR" } : { ...x, customerId: id }));
+    }
+    function pickInvoiceType(t) {
+      const gst = VG.defaultGstTreatment ? VG.defaultGstTreatment(t) : "";
+      patch({ invoiceType: t, gstTreatment: gst, exportDeclaration: (VG.EXPORT_DECLARATIONS && VG.EXPORT_DECLARATIONS[gst]) || "", templateId: VG.isExportInvoiceType && VG.isExportInvoiceType(t) ? "tpl2exp" : inv.templateId, lines: VG.applyGstTreatmentToLines ? VG.applyGstTreatmentToLines(inv.lines, gst) : inv.lines });
+    }
+    function pickGstTreatment(gst) {
+      patch({ gstTreatment: gst, exportDeclaration: (VG.EXPORT_DECLARATIONS && VG.EXPORT_DECLARATIONS[gst]) || "", exportSupplyType: gst === "with_igst" ? "with_igst" : "lut_without_igst", lines: VG.applyGstTreatmentToLines ? VG.applyGstTreatmentToLines(inv.lines, gst) : inv.lines });
+    }
+    function pickItem(key, itemId) {
+      const it = store.get("items", itemId);
+      if (!it) return setLine(key, { itemId });
+      const pl = store.list("priceList").find((x) => x.itemId === itemId);
+      const tax = store.get("taxes", it.taxId);
+      const taxPct = VG.gstTreatmentZerosTax && VG.gstTreatmentZerosTax(inv.gstTreatment) ? 0 : (tax ? tax.rate : 18);
+      setLine(key, { itemId, sku: it.sku, desc: it.name, hsn: it.hsn, unit: it.unit, rate: pl ? pl.listRate : it.rate, taxPct });
+    }
+    function loadFromSO(id) {
+      if (!id || !store.buildInvoiceDraftFromSO) return;
+      const draft = store.buildInvoiceDraftFromSO(id);
+      if (draft) { setDirty(true); setInv({ ...draft, lines: (draft.lines || []).map((l) => ({ ...l, key: l.key || Math.random().toString(36).slice(2) })) }); }
+    }
+    function save() {
+      if (!inv.customerId) return VG.toast("Select customer", "error");
+      if (!inv.lines.length || inv.lines.some((l) => !l.itemId)) return VG.toast("Add valid line items", "error");
+      if (!store.saveInvoice) return VG.toast("Invoice save unavailable", "error");
+      const rec = store.saveInvoice({ ...inv, preparedBy: inv.preparedBy || roleKey }, roleKey, isEdit ? inv.id : null);
+      if (!rec) return VG.toast("Could not save invoice", "error");
+      VG.toast(isEdit ? "Invoice updated" : "Invoice " + rec.no + " posted");
+      onSaved && onSaved(rec);
+      onClose(true);
+    }
+    const chargeLabel = inv.currency === "INR" ? " (₹)" : " (" + inv.currency + ")";
+    return (
+      <Modal open={open} onClose={onClose} size="full" dirty={dirty} title={isEdit ? "Edit " + (VG.invoiceTypeLabel ? VG.invoiceTypeLabel(inv) : "Tax Invoice") + " " + inv.no : "Create Tax Invoice"} subtitle="Domestic & export invoices · multi-currency · LUT/Bond · Incoterms"
+        footer={<><Button variant="soft" onClick={onClose}>Close</Button>{can("print") && <Button variant="soft" icon="eye" onClick={() => printInvoiceDocument({ ...inv, totals, fxTotals }, "preview")}>Preview PDF</Button>}<Button icon="check" onClick={save}>{isEdit ? "Save invoice" : "Post invoice"}</Button></>}>
+        <div className="grid lg:grid-cols-4 gap-3 mb-4">
+          <Field label="Invoice type" required><Select value={inv.invoiceType || "domestic"} onChange={pickInvoiceType} options={VG.INVOICE_TYPES || [{ value: "domestic", label: "Domestic Tax Invoice" }]} /></Field>
+          <Field label="GST treatment"><Select value={inv.gstTreatment || ""} onChange={pickGstTreatment} options={[{ value: "", label: "— Standard domestic —" }].concat(VG.EXPORT_GST_TREATMENTS || [])} /></Field>
+          <Field label="Customer" required><MasterSelect collection="customers" value={inv.customerId} onChange={pickCustomer} actorRole={roleKey} can={can("add")} /></Field>
+          <Field label="Invoice date" required><DateF value={inv.date} onChange={(v) => set("date", v)} /></Field>
+          <Field label="Due date"><DateF value={inv.dueDate} onChange={(v) => set("dueDate", v)} /></Field>
+          <Field label="Contact"><Text value={inv.contact} onChange={(v) => set("contact", v)} /></Field>
+          <Field label="GSTIN"><Text value={inv.gstin} onChange={(v) => set("gstin", v)} /></Field>
+          <Field label="Place of supply"><Text value={inv.placeOfSupply} onChange={(v) => set("placeOfSupply", v)} /></Field>
+          <Field label="Linked sales order"><Select value={inv.salesOrderId || ""} onChange={loadFromSO} options={[{ value: "", label: "— None —" }].concat(soList.map((o) => ({ value: o.id, label: o.no + " · " + custName(o.customerId) })))} /></Field>
+          <Field label="Payment terms"><Select value={inv.paymentTermsId} onChange={(v) => set("paymentTermsId", v)} options={store.list("paymentTerms").map((t) => ({ value: t.id, label: t.name }))} /></Field>
+          <Field label="Delivery terms"><Select value={inv.deliveryTermsId} onChange={(v) => set("deliveryTermsId", v)} options={store.list("deliveryTerms").map((t) => ({ value: t.id, label: t.name }))} /></Field>
+        </div>
+        {VG.TransactionAddressCurrency ? <div className="grid lg:grid-cols-3 gap-3 mb-4"><VG.TransactionAddressCurrency customerId={inv.customerId} values={inv} onChange={patch} roleKey={roleKey} canEditCurrency={can("edit")} showExchangeMeta /></div> : null}
+        {isExport && (
+          <Card className="p-4 mb-4">
+            <div className="text-sm font-semibold mb-3">Export invoice details</div>
+            <div className="grid lg:grid-cols-4 gap-3">
+              <Field label="Buyer country"><Text value={inv.buyerCountry} onChange={(v) => set("buyerCountry", v)} /></Field>
+              <Field label="Consignee country"><Text value={inv.consigneeCountry} onChange={(v) => set("consigneeCountry", v)} /></Field>
+              <Field label="Port of loading"><Text value={inv.portOfLoading} onChange={(v) => set("portOfLoading", v)} /></Field>
+              <Field label="Port of discharge"><Text value={inv.portOfDischarge} onChange={(v) => set("portOfDischarge", v)} /></Field>
+              <Field label="Final destination"><Text value={inv.finalDestination} onChange={(v) => set("finalDestination", v)} /></Field>
+              <Field label="Country of origin"><Text value={inv.countryOfOrigin} onChange={(v) => set("countryOfOrigin", v)} /></Field>
+              <Field label="Country of final destination"><Text value={inv.countryOfFinalDestination} onChange={(v) => set("countryOfFinalDestination", v)} /></Field>
+              <Field label="IEC code"><Text value={inv.iecCode} onChange={(v) => set("iecCode", v)} /></Field>
+              <Field label="LUT / Bond details"><Text value={inv.lutBondDetails} onChange={(v) => set("lutBondDetails", v)} /></Field>
+              <Field label="LUT number"><Text value={inv.lutNumber} onChange={(v) => set("lutNumber", v)} /></Field>
+              <Field label="LUT validity"><DateF value={inv.lutValidity} onChange={(v) => set("lutValidity", v)} /></Field>
+              <Field label="Export supply type"><Select value={inv.exportSupplyType || "lut_without_igst"} onChange={(v) => { set("exportSupplyType", v); pickGstTreatment(v === "with_igst" ? "with_igst" : "lut_without_igst"); }} options={VG.EXPORT_SUPPLY_TYPES || []} /></Field>
+              <Field label="Shipping bill no."><Text value={inv.shippingBillNo} onChange={(v) => set("shippingBillNo", v)} /></Field>
+              <Field label="Shipping bill date"><DateF value={inv.shippingBillDate} onChange={(v) => set("shippingBillDate", v)} /></Field>
+              <Field label="AD code"><Text value={inv.adCode} onChange={(v) => set("adCode", v)} /></Field>
+              <Field label="Incoterms"><Select value={inv.incoterms || ""} onChange={(v) => set("incoterms", v)} options={(VG.INVOICE_INCOTERMS || ["EXW", "FOB", "CIF"]).map((x) => ({ value: x, label: x || "—" }))} /></Field>
+              <Field label="Mode of shipment"><Select value={inv.shipmentMode || ""} onChange={(v) => set("shipmentMode", v)} options={(VG.SHIPMENT_MODES || ["Air", "Sea"]).map((x) => ({ value: x, label: x || "—" }))} /></Field>
+              <Field label="Bank (foreign remittance)"><Text value={inv.remittanceBank} onChange={(v) => set("remittanceBank", v)} /></Field>
+              <Field label="Account no."><Text value={inv.remittanceAccount} onChange={(v) => set("remittanceAccount", v)} /></Field>
+              <Field label="SWIFT code"><Text value={inv.swiftCode} onChange={(v) => set("swiftCode", v)} /></Field>
+              <Field label="Net weight (kg)"><Num value={inv.netWeight} onChange={(v) => set("netWeight", v)} /></Field>
+              <Field label="Gross weight (kg)"><Num value={inv.grossWeight} onChange={(v) => set("grossWeight", v)} /></Field>
+              <Field label="No. of packages"><Num value={inv.packages} onChange={(v) => set("packages", v)} /></Field>
+              <Field label="Packing details" className="lg:col-span-2"><Area value={inv.packingDetails} onChange={(v) => set("packingDetails", v)} rows={2} /></Field>
+              <Field label={"Freight" + chargeLabel}><Num value={inv.exportFreight || inv.freight} onChange={(v) => patch({ exportFreight: v, freight: v })} /></Field>
+              <Field label={"Insurance" + chargeLabel}><Num value={inv.exportInsurance || inv.insurance} onChange={(v) => patch({ exportInsurance: v, insurance: v })} /></Field>
+            </div>
+            <Field label="Export declaration" className="mt-3"><Area value={inv.exportDeclaration} onChange={(v) => set("exportDeclaration", v)} rows={2} /></Field>
+          </Card>
+        )}
+        <TransactionLinesShell title="Line items" onAddLine={addLine} addLabel="Add line" minWidth={1180} headerRow={<tr className="text-left border-b border-white/10"><th className="min-w-[340px]">Item / SKU</th><th className="min-w-[220px]">Description</th><th className="w-20">HSN</th><th className="w-24">Qty</th><th className="w-16">Unit</th><th className="w-28">Rate</th><th className="w-20">Disc%</th><th className="w-20">Tax%</th><th className="w-28 text-right">Amount</th><th className="w-10" /></tr>}>
+          {inv.lines.map((l) => { const c = computeLine(l); return (
+            <tr key={l.key} className="border-b border-white/5 align-top">
+              <td className="min-w-[340px]"><MasterSelect variant="line" collection="items" value={l.itemId} onChange={(id) => pickItem(l.key, id)} actorRole={roleKey} can={can("add")} /></td>
+              <td className="min-w-[220px]"><div className="text-sm leading-snug py-1">{l.desc || <span className="opacity-40">—</span>}</div></td>
+              <td className="font-mono text-xs">{l.hsn || "—"}</td>
+              <td><Num value={l.qty} onChange={(v) => setLine(l.key, { qty: v })} /></td>
+              <td className="text-sm opacity-80">{l.unit}</td>
+              <td><Num value={l.rate} onChange={(v) => setLine(l.key, { rate: v })} /></td>
+              <td><Num value={l.discountPct} onChange={(v) => setLine(l.key, { discountPct: v })} /></td>
+              <td><Num value={l.taxPct} onChange={(v) => setLine(l.key, { taxPct: v })} /></td>
+              <td className="text-right font-medium">{invMoney(inv, c.total)}</td>
+              <td><button type="button" onClick={() => delLine(l.key)} className="p-1 rounded chrome-hover hover:text-rose-400"><Icon name="trash" size={14} /></button></td>
+            </tr>
+          ); })}
+        </TransactionLinesShell>
+        <div className="grid lg:grid-cols-3 gap-3 mt-4">
+          <div className="grid grid-cols-3 gap-3 lg:col-span-2 content-start">
+            <Field label={"Freight" + chargeLabel}><Num value={inv.freight} onChange={(v) => set("freight", v)} /></Field>
+            <Field label={"Packing" + chargeLabel}><Num value={inv.packing} onChange={(v) => set("packing", v)} /></Field>
+            <Field label={"Insurance" + chargeLabel}><Num value={inv.insurance} onChange={(v) => set("insurance", v)} /></Field>
+          </div>
+          <Card className="p-4 h-max">
+            <div className="text-sm font-semibold mb-2">Invoice total ({inv.currency || "INR"})</div>
+            {[["Sub total", totals.sub], ["Discount", -totals.discount], ["Taxable", totals.taxable], ["GST", totals.tax], ["Charges", totals.charges]].map(([k, v]) => (
+              <div key={k} className="flex justify-between text-sm py-0.5"><span className="opacity-60">{k}</span><span>{invMoney(inv, v)}</span></div>
+            ))}
+            <div className="flex justify-between text-base font-semibold border-t border-white/10 mt-2 pt-2"><span>Grand total</span><span>{invMoney(inv, totals.grand)}</span></div>
+            {inv.currency !== "INR" && (
+              <div className="mt-3 pt-2 border-t border-white/10 text-xs space-y-1">
+                <div className="flex justify-between"><span className="opacity-60">INR equivalent</span><span>{inr(fxTotals.grandTotalInr || 0)}</span></div>
+                <div className="flex justify-between"><span className="opacity-60">Taxable (INR)</span><span>{inr(fxTotals.taxableValueInr || 0)}</span></div>
+                <div className="opacity-50">Rate: 1 {inv.currency} = ₹{inv.exchangeRate} · {inv.exchangeRateDate || inv.date}</div>
+              </div>
+            )}
+          </Card>
+        </div>
+      </Modal>
+    );
+  }
+
   function InvoicesPage({ roleKey, can }) {
     VG.useDB();
     const [view, setView] = useState(null);
+    const [build, setBuild] = useState(null);
     const [printPick, setPrintPick] = useState(null);
     const readySO = ordersReadyToInvoice();
+    useEffect(() => {
+      VG.openInvoiceBuilder = (draft) => setBuild(draft || {});
+      if (VG._pendingInvoiceBuild) {
+        setBuild(VG._pendingInvoiceBuild);
+        VG._pendingInvoiceBuild = null;
+      }
+      return () => { delete VG.openInvoiceBuilder; };
+    }, []);
     useEffect(() => {
       if (VG._pendingInvoiceView) {
         const id = VG._pendingInvoiceView;
@@ -1360,11 +1544,13 @@
           <button type="button" onClick={() => setView(r)} className="font-mono text-xs text-left text-sky-400 hover:text-sky-300 underline decoration-dotted underline-offset-2 cursor-pointer">{r.no}</button>
         ),
       },
+      { key: "invoiceType", label: "Type", render: (r) => <span className="text-xs">{VG.invoiceTypeLabel ? VG.invoiceTypeLabel(r) : "Tax Invoice"}</span> },
       { key: "date", label: "Date" },
+      { key: "currency", label: "Curr.", render: (r) => <span className="font-mono text-xs">{r.currency || "INR"}</span> },
       { key: "quotationNo", label: "Quotation", render: (r) => <span className="font-mono text-xs">{r.quotationNo || (r.quotationId ? (store.get("quotations", r.quotationId) || {}).no : null) || "—"}</span> },
       { key: "salesOrderNo", label: "SO", render: (r) => <span className="font-mono text-xs">{r.salesOrderNo || "—"}</span> },
       { key: "customerId", label: "Customer", render: (r) => custName(r.customerId), csv: (r) => custName(r.customerId) },
-      { key: "amount", label: "Amount", render: (r) => inr(r.amount), csv: (r) => r.amount },
+      { key: "amount", label: "Amount", render: (r) => invMoney(r, r.amount), csv: (r) => r.amount },
       {
         key: "status", label: "Status",
         render: (r) => { const st = invoiceDisplayStatus(r); return <StatusTag value={st.label} map={INV_DOC_STATUS} />; },
@@ -1379,27 +1565,32 @@
     ];
     return (
       <div>
-        <PageHead title="Tax Invoices" desc="Generate invoices from sales orders · E-Invoice & E-way bill" />
+        <PageHead title="Tax Invoices" desc="Domestic & export invoices · multi-currency · LUT/Bond · E-Invoice & E-way" />
         {VG.CustomerFilterBanner ? <VG.CustomerFilterBanner /> : null}
         {readySO.length > 0 && can("add") && (
           <Card className="p-3 mb-4">
             <div className="text-[11px] uppercase opacity-55 mb-2">Create invoice from sales order</div>
             <div className="flex flex-wrap gap-2">
               {readySO.slice(0, 8).map((s) => (
-                <Button key={s.id} variant="soft" className="!py-1" icon="rupee" onClick={() => {
-                  const inv = store.createInvoiceFromSO(s.id, roleKey);
-                  if (inv) { VG.toast("Invoice " + inv.no + " created"); setView(inv); }
-                }}>{s.no} · {inr((s.totals || {}).final || (s.totals || {}).grand || 0)}</Button>
+                <Button key={s.id} variant="soft" className="!py-1" icon="rupee" onClick={() => setBuild(store.buildInvoiceDraftFromSO ? store.buildInvoiceDraftFromSO(s.id) : {})}>{s.no} · {invMoney(s, (s.totals || {}).final || (s.totals || {}).grand || 0)}</Button>
               ))}
               {readySO.length > 8 && <span className="text-xs opacity-50 self-center">+{readySO.length - 8} more orders ready</span>}
             </div>
           </Card>
         )}
         <RecordTable title="All tax invoices" columns={cols} rows={rows} can={can} printTitle="Tax Invoices"
-          searchKeys={["no", "salesOrderNo", "status"]}
-          filters={[{ key: "status", label: "All status", get: (r) => invoiceDisplayStatus(r).label, options: Object.keys(INV_DOC_STATUS) }]}
-          onView={(r) => setView(r)} empty="No invoices yet — create from a dispatched sales order" />
-        {view && <InvoiceView inv={store.get("invoices", view.id)} onClose={() => setView(null)} roleKey={roleKey} can={can} onChange={() => { const fresh = store.get("invoices", view.id); if (fresh) setView(fresh); }} />}
+          searchKeys={["no", "salesOrderNo", "status", "invoiceType", "currency"]}
+          filters={[
+            { key: "status", label: "All status", get: (r) => invoiceDisplayStatus(r).label, options: Object.keys(INV_DOC_STATUS) },
+            { key: "invoiceType", label: "All types", get: (r) => r.invoiceType || "domestic", options: (VG.INVOICE_TYPES || []).map((x) => x.value) },
+          ]}
+          onView={(r) => setView(r)}
+          onNew={can("add") ? () => setBuild({}) : null}
+          newLabel="New Tax Invoice"
+          onEdit={can("edit") ? (r) => setBuild(r) : null}
+          empty="No invoices yet — create from a sales order or click New Tax Invoice" />
+        {view && <InvoiceView inv={store.get("invoices", view.id)} onClose={() => setView(null)} roleKey={roleKey} can={can} onChange={() => { const fresh = store.get("invoices", view.id); if (fresh) setView(fresh); }} onEdit={can("edit") ? () => { setBuild(store.get("invoices", view.id)); setView(null); } : null} />}
+        {build != null && <InvoiceBuilder open onClose={() => setBuild(null)} roleKey={roleKey} can={can} initial={build} onSaved={(rec) => setView(rec)} />}
         {printPick && <InvoicePrintCopiesModal inv={printPick.inv} mode={printPick.mode} onClose={() => setPrintPick(null)} />}
       </div>
     );
@@ -1728,7 +1919,14 @@
     const reports = [
       { n: "Quotation Register", run: () => fx.printTable("Quotation Register", [{ key: "no", label: "No" }, { key: "c", label: "Customer", csv: (r) => custName(r.customerId) }, { key: "date", label: "Date" }, { key: "v", label: "Value", csv: (r) => inr((r.totals || computeQuote(r)).grand) }, { key: "status", label: "Status" }], quotes) },
       { n: "Sales Order Register", run: () => fx.printTable("Sales Order Register", [{ key: "no", label: "No" }, { key: "c", label: "Customer", csv: (r) => custName(r.customerId) }, { key: "date", label: "Date" }, { key: "v", label: "Value", csv: (r) => inr((r.totals || {}).grand || 0) }, { key: "status", label: "Status" }], orders) },
-      { n: "Tax Invoice Register", run: () => fx.printTable("Tax Invoice Register", [{ key: "no", label: "No" }, { key: "so", label: "SO", csv: (r) => r.salesOrderNo }, { key: "c", label: "Customer", csv: (r) => custName(r.customerId) }, { key: "date", label: "Date" }, { key: "v", label: "Amount", csv: (r) => r.amount }, { key: "einv", label: "E-Invoice", csv: (r) => (r.eInvoice && r.eInvoice.irn) ? "Yes" : "No" }, { key: "eway", label: "E-way", csv: (r) => (r.ewayBill && r.ewayBill.no) || r.ewayBillNo || "—" }, { key: "status", label: "Status" }], store.list("invoices")) },
+      { n: "Tax Invoice Register", run: () => fx.printTable("Tax Invoice Register", [{ key: "no", label: "No" }, { key: "type", label: "Type", csv: (r) => VG.invoiceTypeLabel ? VG.invoiceTypeLabel(r) : "Domestic" }, { key: "curr", label: "Currency", csv: (r) => r.currency || "INR" }, { key: "so", label: "SO", csv: (r) => r.salesOrderNo }, { key: "c", label: "Customer", csv: (r) => custName(r.customerId) }, { key: "date", label: "Date" }, { key: "v", label: "Amount", csv: (r) => r.amount }, { key: "inr", label: "INR Eq.", csv: (r) => (r.fxTotals && r.fxTotals.grandTotalInr) || r.amount }, { key: "fx", label: "FX Rate", csv: (r) => r.exchangeRate || 1 }, { key: "einv", label: "E-Invoice", csv: (r) => (r.eInvoice && r.eInvoice.irn) ? "Yes" : "No" }, { key: "status", label: "Status" }], store.list("invoices")) },
+      { n: "Export Invoice Register", run: () => fx.printTable("Export Invoice Register", [{ key: "no", label: "No" }, { key: "c", label: "Customer", csv: (r) => custName(r.customerId) }, { key: "country", label: "Buyer country", csv: (r) => r.buyerCountry }, { key: "curr", label: "Currency", csv: (r) => r.currency }, { key: "v", label: "Amount (FCY)", csv: (r) => r.amount }, { key: "inr", label: "INR Eq.", csv: (r) => (r.fxTotals && r.fxTotals.grandTotalInr) || "" }, { key: "lut", label: "LUT", csv: (r) => r.lutNumber || "—" }, { key: "inc", label: "Incoterms", csv: (r) => r.incoterms || "—" }], store.list("invoices").filter((i) => VG.isExportInvoiceType && VG.isExportInvoiceType(i.invoiceType))) },
+      { n: "Currency-wise Sales Report", run: () => { const m = {}; store.list("invoices").forEach((i) => { const c = i.currency || "INR"; m[c] = (m[c] || 0) + (Number(i.amount) || 0); }); fx.printTable("Currency-wise Sales", [{ key: "c", label: "Currency" }, { key: "v", label: "Total (FCY)" }], Object.keys(m).map((c) => ({ c, v: m[c] }))); } },
+      { n: "Exchange Rate Report", run: () => fx.printTable("Exchange Rate Report", [{ key: "no", label: "Invoice" }, { key: "curr", label: "Currency", csv: (r) => r.currency }, { key: "rate", label: "Rate", csv: (r) => r.exchangeRate }, { key: "date", label: "Rate date", csv: (r) => r.exchangeRateDate }, { key: "src", label: "Source", csv: (r) => r.exchangeRateSource }], store.list("invoices").filter((i) => i.currency && i.currency !== "INR")) },
+      { n: "LUT-wise Export Report", run: () => fx.printTable("LUT-wise Export Report", [{ key: "lut", label: "LUT No.", csv: (r) => r.lutNumber || "—" }, { key: "no", label: "Invoice" }, { key: "c", label: "Customer", csv: (r) => custName(r.customerId) }, { key: "v", label: "Amount", csv: (r) => r.amount }, { key: "decl", label: "Declaration", csv: (r) => (r.exportDeclaration || "").slice(0, 60) }], store.list("invoices").filter((i) => i.lutNumber || i.gstTreatment === "lut_without_igst")) },
+      { n: "Country-wise Export Sales", run: () => { const m = {}; store.list("invoices").filter((i) => VG.isExportInvoiceType && VG.isExportInvoiceType(i.invoiceType)).forEach((i) => { const k = i.buyerCountry || i.countryOfFinalDestination || "—"; m[k] = (m[k] || 0) + (Number((i.fxTotals && i.fxTotals.grandTotalInr) || i.amount) || 0); }); fx.printTable("Country-wise Export Sales (INR)", [{ key: "country", label: "Country" }, { key: "inr", label: "INR Total" }], Object.keys(m).map((country) => ({ country, inr: m[country] }))); } },
+      { n: "Customer-wise Export Sales", run: () => fx.printTable("Customer-wise Export Sales", [{ key: "c", label: "Customer", csv: (r) => custName(r.customerId) }, { key: "no", label: "Invoice" }, { key: "curr", label: "Currency", csv: (r) => r.currency }, { key: "fcy", label: "FCY Amount", csv: (r) => r.amount }, { key: "inr", label: "INR Eq.", csv: (r) => (r.fxTotals && r.fxTotals.grandTotalInr) || "" }], store.list("invoices").filter((i) => VG.isExportInvoiceType && VG.isExportInvoiceType(i.invoiceType))) },
+      { n: "Foreign Currency Receivables", run: () => fx.printTable("Foreign Currency Receivables", [{ key: "no", label: "Invoice" }, { key: "c", label: "Customer", csv: (r) => custName(r.customerId) }, { key: "curr", label: "Currency", csv: (r) => r.currency }, { key: "bal", label: "Balance (FCY)", csv: (r) => (Number(r.amount) || 0) - (Number(r.amountPaid) || 0) }, { key: "inr", label: "INR Eq.", csv: (r) => { const bal = (Number(r.amount) || 0) - (Number(r.amountPaid) || 0); const fx = r.exchangeRate || 1; return Math.round(bal * fx * 100) / 100; } }], store.list("invoices").filter((i) => i.currency && i.currency !== "INR" && i.status !== "Paid")) },
       { n: "Won / Lost Analysis", run: () => fx.printTable("Won / Lost Analysis", [{ key: "no", label: "No" }, { key: "c", label: "Customer", csv: (r) => custName(r.customerId) }, { key: "status", label: "Status" }], quotes.filter((q) => q.status === "Won" || q.status === "Lost")) },
       { n: "Customer Master", run: () => fx.printTable("Customer Master", [{ key: "code", label: "Code" }, { key: "name", label: "Name" }, { key: "gstin", label: "GSTIN" }, { key: "state", label: "State" }], store.list("customers")) },
     ];

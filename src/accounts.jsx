@@ -13,12 +13,13 @@
     const c = VG.normalizeCustomer ? VG.normalizeCustomer(store.get("customers", fresh.customerId) || {}) : (store.get("customers", fresh.customerId) || {});
     const t = fresh.totals || {};
     const cur = fresh.currency || c.currency || "INR";
-    const fmt = (n) => (cur === "INR" ? inr(n) : (cur + " " + Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })));
+    const fmt = (n) => (VG.fmtInvoiceMoney ? VG.fmtInvoiceMoney(n, cur) : (cur === "INR" ? inr(n) : (cur + " " + Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 }))));
     const pt = (store.get("paymentTerms", fresh.paymentTermsId) || {}).name || "—";
     const dt = (store.get("deliveryTerms", fresh.deliveryTermsId) || {}).name || "—";
     if (VG.buildIndustrialDocument) {
-      const tpl = VG.resolveDocTemplate ? VG.resolveDocTemplate("Tax Invoice", fresh.templateId) : {};
-      const usePremium = tpl.themeId === "industrial" || tpl.docVariant === "quotation-international" || !fresh.templateId;
+      const tplId = fresh.templateId || (VG.isExportInvoiceType && VG.isExportInvoiceType(fresh.invoiceType) ? "tpl2exp" : "");
+      const tpl = VG.resolveDocTemplate ? VG.resolveDocTemplate("Tax Invoice", tplId) : {};
+      const usePremium = tpl.themeId === "industrial" || tpl.docVariant === "export_inv" || tpl.docVariant === "quotation-international" || !fresh.templateId || (VG.isExportInvoiceType && VG.isExportInvoiceType(fresh.invoiceType));
       if (usePremium) {
         return VG.buildIndustrialDocument({
           docType: "Tax Invoice",
@@ -27,7 +28,7 @@
           totals: t,
           paymentTerms: pt,
           deliveryTerms: dt,
-          templateId: fresh.templateId,
+          templateId: tplId || fresh.templateId,
           lines: (fresh.lines || []).map((l, i) => {
             const amt = (Number(l.qty) || 0) * (Number(l.rate) || 0);
             return { no: i + 1, sku: l.sku, desc: l.desc, hsn: l.hsn, qty: String(l.qty), unit: l.unit || "", rate: fmt(l.rate), tax: (l.taxPct || 0) + "%", amount: fmt(amt) };
@@ -102,7 +103,7 @@
       { key: "date", label: "Date" },
       { key: "salesOrderNo", label: "SO" },
       { key: "customerId", label: "Customer", render: (r) => custName(r.customerId), csv: (r) => custName(r.customerId) },
-      { key: "amount", label: "Amount", render: (r) => inr(r.amount), csv: (r) => r.amount },
+      { key: "amount", label: "Amount", render: (r) => VG.fmtInvoiceMoney ? VG.fmtInvoiceMoney(r.amount, r.currency) : inr(r.amount), csv: (r) => r.amount },
       { key: "amountPaid", label: "Paid", render: (r) => inr(r.amountPaid || 0) },
       { key: "status", label: "Status", render: (r) => <StatusTag value={r.status} map={INV_STATUS} /> },
       { key: "act", label: "Action", render: (r) => r.status !== "Paid" && can("edit") ? <Button variant="soft" className="!py-1" onClick={() => setPay(r)}>Payment</Button> : null },
@@ -116,9 +117,11 @@
             <span className="opacity-70">Create invoice from SO:</span>
             {toInvoice.map((s) => (
               <Button key={s.id} variant="soft" className="!py-1" onClick={() => {
-                const inv = store.createInvoiceFromSO(s.id, roleKey);
-                VG.toast("Invoice " + inv.no + " posted", "success");
-              }}>{s.no} · {inr((s.totals || {}).grand)}</Button>
+                const draft = store.buildInvoiceDraftFromSO ? store.buildInvoiceDraftFromSO(s.id) : null;
+                if (VG.openInvoiceBuilder && draft) VG.openInvoiceBuilder(draft);
+                else if (draft && VG.goTo) { VG._pendingInvoiceBuild = draft; VG.goTo("sales", "invoices"); }
+                else { const inv = store.createInvoiceFromSO(s.id, roleKey); VG.toast("Invoice " + inv.no + " posted", "success"); }
+              }}>{s.no} · {VG.fmtInvoiceMoney ? VG.fmtInvoiceMoney((s.totals || {}).grand, s.currency) : inr((s.totals || {}).grand)}</Button>
             ))}
           </Card>
         )}

@@ -1033,11 +1033,12 @@
   VG.useFilteredCustomerRows = useFilteredCustomerRows;
   VG.CustomerPages = { currencies: CurrenciesPage, pincodes: PincodesPage };
   /* ================= Transaction address & currency (quotation / SO / PI) ================= */
-  function TransactionAddressCurrency({ customerId, values, onChange, roleKey, canEditCurrency, showAddresses = true }) {
+  function TransactionAddressCurrency({ customerId, values, onChange, roleKey, canEditCurrency, showAddresses = true, showExchangeMeta = false }) {
     const c = customerId ? normalize(store.get("customers", customerId)) : null;
     const opts = c ? customerAddressOptions(c) : [];
     const currencies = store.list("currencies");
     const cur = values.currency || "INR";
+    const custCur = (c && c.currency) || values.customerDefaultCurrency || "INR";
     const isForeign = cur !== "INR";
     function pickBill(id) {
       const bill = customerAddr(c, "billing", id);
@@ -1049,7 +1050,20 @@
     }
     function pickCurrency(code) {
       const row = currencies.find((x) => x.code === code);
-      onChange({ currency: code, exchangeRate: row ? row.rate : 1 });
+      onChange({
+        currency: code,
+        exchangeRate: row ? row.rate : 1,
+        exchangeRateDate: today(),
+        exchangeRateSource: "currency_master",
+        customerDefaultCurrency: custCur,
+      });
+    }
+    function setExchangeRate(v) {
+      onChange({
+        exchangeRate: v,
+        exchangeRateDate: values.exchangeRateDate || today(),
+        exchangeRateSource: "manual",
+      });
     }
     async function updateCustomerDefault() {
       if (!c || !customerId) return;
@@ -1072,12 +1086,23 @@
           </Field>
         </>}
         <div className={"grid grid-cols-2 gap-3 content-start" + (showAddresses ? "" : " lg:col-span-3")}>
-          <Field label="Transaction currency">
+          {showExchangeMeta && (
+            <Field label="Customer default currency">
+              <Text value={custCur} onChange={() => {}} disabled />
+            </Field>
+          )}
+          <Field label={showExchangeMeta ? "Invoice currency" : "Transaction currency"}>
             <Select value={cur} onChange={pickCurrency} disabled={!canEditCurrency}
               options={currencies.map((x) => ({ value: x.code, label: x.code + " — " + x.name }))} />
           </Field>
-          {isForeign && (
-            <Field label="Exchange rate (→ INR)"><Num value={values.exchangeRate} onChange={(v) => onChange({ exchangeRate: v })} /></Field>
+          {(isForeign || showExchangeMeta) && (
+            <Field label="Exchange rate (→ INR)"><Num value={values.exchangeRate} onChange={setExchangeRate} disabled={!canEditCurrency} /></Field>
+          )}
+          {showExchangeMeta && (
+            <>
+              <Field label="Exchange rate date"><DateF value={values.exchangeRateDate || today()} onChange={(v) => onChange({ exchangeRateDate: v })} /></Field>
+              <Field label="Rate source"><Text value={values.exchangeRateSource === "manual" ? "Manual entry" : "Currency master"} onChange={() => {}} disabled /></Field>
+            </>
           )}
           {canEditCurrency && isForeign && c.currency !== cur && (
             <div className="col-span-2"><Button variant="soft" className="!text-xs !py-1.5" onClick={updateCustomerDefault}>Update customer default to {cur}</Button></div>
