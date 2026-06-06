@@ -37,7 +37,7 @@ if [ ! -f "${ENV_FILE}" ]; then
   mkdir -p "${APP_DIR}/server"
   cat > "${ENV_FILE}" <<'EOF'
 # Edit DATABASE_URL to your RDS endpoint before first deploy.
-DATABASE_URL=postgresql://veraglo:CHANGE_ME@your-rds-endpoint.region.rds.amazonaws.com:5432/veraglo_erp
+DATABASE_URL=postgresql://veraglo:CHANGE_ME@your-db.xxxxx.region.rds.amazonaws.com:5432/veraglo_erp?sslmode=require
 PORT=3000
 CORS_ORIGIN=https://your-domain.example.com
 EOF
