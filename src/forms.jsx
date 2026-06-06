@@ -611,11 +611,12 @@
   function companyFooter() {
     const c = store.company();
     const terms = c.terms || c.docFooter || "";
-    return `<div class="vg-foot"><div>${c.bank || c.bankName || ""}${c.ifsc ? " · IFSC " + c.ifsc : ""}</div><div>${terms}</div><div>© ${new Date().getFullYear()} ${c.legalName || c.name}${c.jurisdiction ? " · " + c.jurisdiction : ""}</div></div>`;
+    return `<div class="vg-foot vg-foot-document-end"><div>${c.bank || c.bankName || ""}${c.ifsc ? " · IFSC " + c.ifsc : ""}</div><div>${terms}</div><div>© ${new Date().getFullYear()} ${c.legalName || c.name}${c.jurisdiction ? " · " + c.jurisdiction : ""}</div></div>`;
   }
   function buildPrintCSS() {
     const base = VG.printBaseCSS ? VG.printBaseCSS() : "*{box-sizing:border-box;font-family:Inter,Arial,sans-serif}";
-    return `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');` + base + `
+    const footerCss = VG.printFooterRepeatCSS ? VG.printFooterRepeatCSS(10.5, 14) : "";
+    return `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');` + base + footerCss + `
     body{margin:0;color:#0f172a}
     .vg-page{padding:28px 32px}
     .vg-head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #6366f1;padding-bottom:14px;margin-bottom:18px}
@@ -643,8 +644,7 @@
     .vg-bar button{background:#6366f1;color:#fff;border:0;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer}
     .vg-bar button.ghost{background:rgba(255,255,255,.14)}
     .vg-bar .tip{opacity:.75;font-size:12px}
-    @page{margin:14mm}
-    @media print{.vg-page{padding:0}.vg-bar{display:none!important}}
+    @media print{.vg-page{padding:0;padding-bottom:26mm!important}.vg-bar{display:none!important}}
   `;
   }
   const printCSS = buildPrintCSS();
@@ -655,7 +655,10 @@
     const tip = mode === "download" ? '<span class="tip">To download: choose <b>“Save as PDF”</b> as the destination.</span>' : '<span class="tip">Use your browser’s print dialog to print or save as PDF.</span>';
     const bar = `<div class="vg-bar"><button onclick="window.print()">🖨 Print / Save as PDF</button><button class="ghost" onclick="window.close()">Close</button>${tip}</div>`;
     const css = buildPrintCSS();
-    w.document.write(`<!doctype html><html><head><title>${title}</title><style>${css}</style></head><body>${bar}<div class="vg-page">${companyHeader()}${inner}${companyFooter()}</div><script>window.onload=function(){${auto ? "setTimeout(function(){window.print()},300)" : ""}}<\/script></body></html>`);
+    const repeatFooter = VG.buildRepeatingPrintFooter
+      ? VG.buildRepeatingPrintFooter({}, { docType: title, subtitle: "" })
+      : "";
+    w.document.write(`<!doctype html><html><head><title>${title}</title><style>${css}</style></head><body>${bar}<div class="vg-page">${companyHeader()}${inner}${companyFooter()}</div>${repeatFooter}<script>window.onload=function(){${auto ? "setTimeout(function(){window.print()},300)" : ""}}<\/script></body></html>`);
     w.document.close();
   }
   function printDocument({ title, subtitle, inner, docType, templateId, copies, useIntlLayout }, mode = "print") {

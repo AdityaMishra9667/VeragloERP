@@ -354,6 +354,63 @@
     };
   }
 
+  /** CSS for company footer fixed at bottom of every printed page. */
+  function printFooterRepeatCSS(fs, marginMm) {
+    const m = Math.max(8, Number(marginMm) || 12);
+    const fsz = Math.max(7, (Number(fs) || 10.5) - 2.5);
+    return `
+    @page{size:A4;margin:${m}mm ${m}mm 24mm ${m}mm}
+    .vg-print-footer-repeat{display:none}
+    @media print{
+      .vg-print-footer-repeat{
+        display:block;position:fixed;left:0;right:0;bottom:0;z-index:9999;
+        padding:3mm ${m}mm 2.5mm;background:#fff;border-top:1.5px solid #334155;
+        font-size:${fsz}pt;line-height:1.35;color:#64748b;
+        -webkit-print-color-adjust:exact;print-color-adjust:exact
+      }
+      .vg-pfr-inner{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;flex-wrap:wrap}
+      .vg-pfr-left{flex:1;min-width:40%;font-weight:600;color:#334155}
+      .vg-pfr-left span{font-weight:400;color:#64748b}
+      .vg-pfr-center{flex:1;text-align:center;font-style:italic;max-width:38%}
+      .vg-pfr-right{text-align:right;white-space:nowrap}
+      .vg-pfr-page::after{content:counter(page)}
+      .vg-foot-document-end{display:none!important}
+      .vg-page,.vg-quotation-intl{padding-bottom:26mm!important}
+      .vg-print-copy{padding-bottom:26mm!important}
+    }`;
+  }
+
+  /** Compact footer HTML repeated on every printed page. */
+  function buildRepeatingPrintFooter(tpl, opts) {
+    const c = store.company();
+    const t = { ...DEFAULT_LAYOUT, ...(tpl || {}) };
+    const reg = companyRegBlock(c);
+    const foot = (t.footerOverride || c.docFooter || "").trim();
+    const conf = foot || "Confidential — ERP-generated document. Unauthorised distribution prohibited.";
+    const docLabel = (opts && opts.docType) ? String(opts.docType) : "";
+    const ref = (opts && opts.subtitle) ? String(opts.subtitle) : "";
+    const bank = t.showBankBlock !== false && (c.bank || c.accountNo)
+      ? `${esc(c.bankName || c.bank || "")}${c.accountNo ? " · A/c " + esc(c.accountNo) : ""}${c.ifsc ? " · IFSC " + esc(c.ifsc) : ""}`
+      : "";
+    return `<div class="vg-print-footer-repeat" aria-hidden="true">
+      <div class="vg-pfr-inner">
+        <div class="vg-pfr-left">
+          <strong>${esc(c.legalName || c.name)}</strong>
+          <span> · GSTIN ${esc(reg.gstin || c.gstin || "—")} · PAN ${esc(c.pan || "—")}${c.iec ? " · IEC " + esc(c.iec) : ""}</span>
+          ${bank ? `<div style="font-weight:400;margin-top:2px">${bank}</div>` : ""}
+        </div>
+        <div class="vg-pfr-center">${esc(conf).slice(0, 160)}${conf.length > 160 ? "…" : ""}</div>
+        <div class="vg-pfr-right">
+          ${docLabel ? esc(docLabel) + " · " : ""}${ref ? esc(ref) + " · " : ""}Page <span class="vg-pfr-page"></span>
+          · © ${new Date().getFullYear()} ${esc(c.legalName || c.name)}
+        </div>
+      </div>
+    </div>`;
+  }
+
+  VG.buildRepeatingPrintFooter = buildRepeatingPrintFooter;
+  VG.printFooterRepeatCSS = printFooterRepeatCSS;
+
   VG.templatePrintCSS = function (tpl) {
     const t = { ...DEFAULT_LAYOUT, ...(tpl || {}) };
     const docFont = resolveDocFont(t);
@@ -457,12 +514,12 @@
     .vg-bar button{background:${accent};color:#fff;border:0;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer}
     .vg-bar button.ghost{background:rgba(255,255,255,.12)}
     .vg-bar .tip{opacity:.8;font-size:12px;margin-left:auto}
-    @page{size:${t.pageSize || "A4"};margin:${margin}mm}
+    ${printFooterRepeatCSS(fs, margin)}
     @media print{.vg-page{padding:0;max-width:none}.vg-bar{display:none!important}body{background:#fff}}
     ${headerBanner ? "" : ".vg-head-banner{background:none;color:inherit;padding:0;margin:0}"}
     ${headerMinimal ? ".vg-doc-badge{background:transparent;color:" + accent + ";padding:0}" : ""}
     ${tblRules}
-    ${t.docVariant === "quotation-international" ? quotationIntlCSS(t, fs, margin) : ""}`;
+    ${t.docVariant === "quotation-international" || t.docVariant === "export_inv" ? quotationIntlCSS(t, fs, margin) : ""}`;
   };
 
   function customerRegion(c) {
@@ -668,7 +725,7 @@
     const reg = companyRegBlock(co);
     const t = { ...DEFAULT_LAYOUT, ...(tpl || {}) };
     return `
-    <div class="vg-q-foot-seller">
+    <div class="vg-q-foot-seller vg-foot-document-end">
       <div class="vg-q-foot-grid">
         <div class="vg-q-foot-col">
           <div class="vg-q-foot-brand">${esc(co.legalName || co.name)}</div>
@@ -850,10 +907,10 @@
         ${esc(c.bank || "")}${c.accountNo ? "<br>Account: " + esc(c.accountNo) : ""}${c.ifsc ? " · IFSC: " + esc(c.ifsc) : ""}
       </div>` : "";
     const qr = t.showQr ? `<div class="vg-qr">SCAN<br><span style="font-size:7px">${esc((c.gstin || "DOC").slice(0, 15))}</span></div>` : "";
-    return `${sign}${bank}<div class="vg-foot">
+    return `${sign}${bank}<div class="vg-foot vg-foot-document-end">
       <div>${foot ? esc(foot) : ""}</div>
       <div>${terms ? "<strong>Terms:</strong> " + esc(terms).slice(0, 200) + (terms.length > 200 ? "…" : "") : ""}</div>
-      <div>Page 1 · © ${new Date().getFullYear()} ${esc(c.legalName || c.name)}</div>
+      <div>© ${new Date().getFullYear()} ${esc(c.legalName || c.name)}${c.jurisdiction ? " · " + esc(c.jurisdiction) : ""}</div>
     </div>${qr}`;
   }
 
@@ -1276,8 +1333,9 @@
     const auto = mode === "print";
     const copyTip = copyList ? '<span class="tip">' + copyList.length + " cop" + (copyList.length > 1 ? "ies" : "y") + " · " + esc(copyList.join(", ")) + "</span>" : "";
     const tip = mode === "download" ? '<span class="tip">Choose “Save as PDF” in the print dialog.</span>' + copyTip : '<span class="tip">Professional template · ' + esc(tpl.name || tpl.themeId || "default") + "</span>" + copyTip;
+    const repeatFooter = buildRepeatingPrintFooter(tpl, { docType: title, subtitle: subtitle || "" });
     const bar = `<div class="vg-bar"><button onclick="window.print()">Print / Save PDF</button><button class="ghost" onclick="window.close()">Close</button>${tip}</div>`;
-    w.document.write(`<!doctype html><html lang="en"><head><meta charset="utf-8"/><title>${esc(title)}</title><style>${css}</style></head><body class="${bodyClass}">${bar}<div class="vg-page ${bodyClass}">${body}</div><script>window.onload=function(){${auto ? "setTimeout(function(){window.print()},400)" : ""}}<\/script></body></html>`);
+    w.document.write(`<!doctype html><html lang="en"><head><meta charset="utf-8"/><title>${esc(title)}</title><style>${css}</style></head><body class="${bodyClass}">${bar}<div class="vg-page ${bodyClass}">${body}</div>${repeatFooter}<script>window.onload=function(){${auto ? "setTimeout(function(){window.print()},400)" : ""}}<\/script></body></html>`);
     w.document.close();
   };
 
