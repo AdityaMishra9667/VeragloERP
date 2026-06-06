@@ -2,10 +2,14 @@
 # Run on EC2 after files are synced (called by GitHub Actions or manually).
 set -euo pipefail
 
-APP_DIR="${VERAGLO_APP_DIR:-/opt/veraglo-erp}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# scripts/deploy/deploy.sh → repo root (works for ~/VeragloERP or any clone path)
+DEFAULT_APP_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+APP_DIR="${VERAGLO_APP_DIR:-${DEFAULT_APP_DIR}}"
 SERVER_DIR="${APP_DIR}/server"
 ENV_FILE="${SERVER_DIR}/.env"
 
+echo "==> Deploying from ${APP_DIR}"
 cd "${SERVER_DIR}"
 
 if [ ! -f "${ENV_FILE}" ]; then

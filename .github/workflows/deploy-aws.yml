@@ -7,7 +7,7 @@
 #   EC2_SSH_KEY   — private key (.pem) contents for that instance
 #
 # Optional secrets:
-#   EC2_APP_DIR         — install path (default: /opt/veraglo-erp)
+#   EC2_APP_DIR         — install path (default: /home/ubuntu/VeragloERP)
 #   DEPLOY_HEALTH_URL   — e.g. https://erp.example.com/api/health (post-deploy check)
 
 name: Deploy — AWS (EC2)
@@ -54,7 +54,7 @@ jobs:
           EC2_APP_DIR: ${{ secrets.EC2_APP_DIR }}
         run: |
           SSH_USER="${EC2_USER:-ubuntu}"
-          APP_DIR="${EC2_APP_DIR:-/opt/veraglo-erp}"
+          APP_DIR="${EC2_APP_DIR:-/home/${SSH_USER}/VeragloERP}"
           TARGET="${SSH_USER}@${EC2_HOST}:${APP_DIR}/"
           RSYNC_RSH='ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes'
 
@@ -80,10 +80,10 @@ jobs:
           EC2_APP_DIR: ${{ secrets.EC2_APP_DIR }}
         run: |
           SSH_USER="${EC2_USER:-ubuntu}"
-          APP_DIR="${EC2_APP_DIR:-/opt/veraglo-erp}"
+          APP_DIR="${EC2_APP_DIR:-/home/${SSH_USER}/VeragloERP}"
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes \
             "${SSH_USER}@${EC2_HOST}" \
-            "bash ${APP_DIR}/scripts/deploy/deploy.sh"
+            "VERAGLO_APP_DIR='${APP_DIR}' bash '${APP_DIR}/scripts/deploy/deploy.sh'"
 
       - name: Health check
         env:

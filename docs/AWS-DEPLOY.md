@@ -23,17 +23,22 @@ git push main  →  GitHub Actions  →  rsync over SSH  →  EC2 (Node + PM2)
 
 ### 2. Bootstrap the EC2 instance
 
-SSH into the instance and run (after cloning the repo once, or paste the script):
+Pick **one** install path and use it everywhere (GitHub secret `EC2_APP_DIR`, `.env` location, and commands below).
+
+| Layout | `EC2_APP_DIR` (GitHub secret) | Example `.env` path |
+|--------|-------------------------------|-------------------|
+| Clone in home (**default**) | `/home/ubuntu/VeragloERP` | `~/VeragloERP/server/.env` |
+| Custom path | set `EC2_APP_DIR` to your full path | `<path>/server/.env` |
+
+**If you cloned in your home directory** (`ls` shows `VeragloERP` after SSH):
 
 ```bash
-sudo VERAGLO_APP_DIR=/opt/veraglo-erp bash scripts/deploy/ec2-setup.sh
+cd ~/VeragloERP
+sudo VERAGLO_APP_DIR="$HOME/VeragloERP" VERAGLO_DEPLOY_USER="$USER" bash scripts/deploy/ec2-setup.sh
+nano ~/VeragloERP/server/.env
 ```
 
-Edit the environment file (RDS connection + your public URL):
-
-```bash
-sudo nano /opt/veraglo-erp/server/.env
-```
+`.env` contents:
 
 ```env
 DATABASE_URL=postgresql://USER:PASSWORD@your-db.xxxx.region.rds.amazonaws.com:5432/veraglo_erp
@@ -41,10 +46,10 @@ PORT=3000
 CORS_ORIGIN=https://erp.yourcompany.com
 ```
 
-Initialize the database once:
+Initialize the database once (adjust path if you cloned to home):
 
 ```bash
-cd /opt/veraglo-erp/server && npm install && npm run db:init
+cd ~/VeragloERP/server && npm install && npm run db:init
 ```
 
 ### 3. SSH key for GitHub Actions
@@ -67,7 +72,7 @@ ssh-keygen -t ed25519 -f veraglo-deploy -N ""
 | `EC2_HOST` | EC2 public IP or DNS, e.g. `3.110.x.x` or `erp.yourcompany.com` |
 | `EC2_USER` | `ubuntu` (Ubuntu AMI) or `ec2-user` (Amazon Linux) |
 | `EC2_SSH_KEY` | Full contents of the **private** key file (`veraglo-deploy`) |
-| `EC2_APP_DIR` | *(optional)* default `/opt/veraglo-erp` |
+| `EC2_APP_DIR` | *(optional)* default `/home/ubuntu/VeragloERP` — set if your clone lives elsewhere |
 | `DEPLOY_HEALTH_URL` | *(optional)* `https://erp.yourcompany.com/api/health` |
 
 ### 5. First deploy
@@ -100,7 +105,7 @@ No SSH, no Docker, no manual steps on the server.
 ```bash
 scp backup.json ubuntu@EC2_HOST:/tmp/
 ssh ubuntu@EC2_HOST
-cd /opt/veraglo-erp/server
+cd ~/VeragloERP/server
 npm run db:import -- /tmp/backup.json
 pm2 restart veraglo-erp
 ```
@@ -110,7 +115,7 @@ pm2 restart veraglo-erp
 | Problem | Fix |
 |---------|-----|
 | Workflow fails at SSH | Check `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`; security group allows SSH from GitHub IPs (or use a self-hosted runner in the VPC) |
-| `Missing server/.env` | Create `/opt/veraglo-erp/server/.env` on EC2 (never commit it to git) |
+| `Missing server/.env` | Create `~/VeragloERP/server/.env` (or your `EC2_APP_DIR`/server/.env) on EC2 — never commit it to git |
 | App won't start | `pm2 logs veraglo-erp` — usually wrong `DATABASE_URL` or RDS security group |
 | Health check fails | ALB/target group must point to EC2 port 3000; app listens on all interfaces by default |
 | GitHub SSH blocked | GitHub-hosted runners use dynamic IPs — open SSH to `0.0.0.0/0` temporarily, or use a [self-hosted runner](https://docs.github.com/en/actions/hosting-your-own-runners) on the EC2 |
@@ -118,5 +123,5 @@ pm2 restart veraglo-erp
 ## Manual deploy on the server
 
 ```bash
-bash /opt/veraglo-erp/scripts/deploy/deploy.sh
+bash ~/VeragloERP/scripts/deploy/deploy.sh
 ```

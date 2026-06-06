@@ -3,8 +3,8 @@
 # Run as root or with sudo:  sudo bash scripts/deploy/ec2-setup.sh
 set -euo pipefail
 
-APP_DIR="${VERAGLO_APP_DIR:-/opt/veraglo-erp}"
 DEPLOY_USER="${VERAGLO_DEPLOY_USER:-ubuntu}"
+APP_DIR="${VERAGLO_APP_DIR:-/home/${DEPLOY_USER}/VeragloERP}"
 
 if [ "$(id -u)" -ne 0 ]; then
   echo "Run with sudo: sudo bash $0"
