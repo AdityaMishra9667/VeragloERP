@@ -37,6 +37,7 @@
           "server/file-db.js",
           "server/auth-utils.js",
           "server/first-run.js",
+          "server/weather.js",
           "server/schema.sql",
           "server/scripts/**/*",
           "server/package.json",

@@ -55,47 +55,47 @@
       }
     }
 
+    const Shell = VG.LoginWeatherShell || (({ children, header }) => (
+      <div className="relative min-h-screen"><div className="relative z-10">{header}{children}</div></div>
+    ));
     return (
-      <div className="relative min-h-screen w-full overflow-hidden">
-        <img src={HERO} alt="" className="absolute inset-0 w-full h-full object-cover" />
-        <div className="absolute inset-0" style={{ background: "linear-gradient(110deg, rgba(8,13,24,.92) 0%, rgba(8,13,24,.72) 38%, rgba(8,13,24,.30) 100%)" }} />
-        <div className="relative z-10 min-h-screen flex flex-col">
-          <header className="flex items-center justify-between px-6 sm:px-10 py-6">
+      <Shell
+        header={(
+          <header className="flex items-center justify-between">
             <img src={LOGO} alt="Veraglo" className="h-9 w-auto drop-shadow" />
             <button type="button" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} className="glass rounded-xl p-2.5 text-white/90">
               <Icon name={theme === "dark" ? "sun" : "moon"} size={18} />
             </button>
           </header>
-          <div className="flex-1 flex items-center justify-center px-6 pb-14">
-            <div className="login-panel rounded-2xl p-7 sm:p-8 w-full max-w-md">
-              <h2 className="text-2xl font-display font-semibold text-slate-900">Create administrator</h2>
-              <p className="text-sm login-muted mt-1">No default users or passwords. Set up the first account for this installation.</p>
-              <form onSubmit={submit} className="mt-6 space-y-4">
-                <div>
-                  <label className="text-xs login-label">Full name</label>
-                  <input value={name} onChange={(e) => setName(e.target.value)} required className="login-input mt-1.5 w-full rounded-xl px-3.5 py-3 text-sm" />
-                </div>
-                <div>
-                  <label className="text-xs login-label">Work email</label>
-                  <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" required
-                    placeholder="you@company.com" className="login-input mt-1.5 w-full rounded-xl px-3.5 py-3 text-sm" />
-                </div>
-                <div>
-                  <label className="text-xs login-label">Password</label>
-                  <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" required
-                    className="login-input mt-1.5 w-full rounded-xl px-3.5 py-3 text-sm" />
-                </div>
-                <div>
-                  <label className="text-xs login-label">Confirm password</label>
-                  <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" required
-                    className="login-input mt-1.5 w-full rounded-xl px-3.5 py-3 text-sm" />
-                </div>
-                <Button type="submit" icon="check" className="w-full !py-3" disabled={busy}>{busy ? "Creating…" : "Create account & continue"}</Button>
-              </form>
+        )}
+      >
+        <div className="login-panel rounded-2xl p-7 sm:p-8 w-full max-w-md">
+          <h2 className="text-2xl font-display font-semibold text-slate-900">Create administrator</h2>
+          <p className="text-sm login-muted mt-1">No default users or passwords. Set up the first account for this installation.</p>
+          <form onSubmit={submit} className="mt-6 space-y-4">
+            <div>
+              <label className="text-xs login-label">Full name</label>
+              <input value={name} onChange={(e) => setName(e.target.value)} required className="login-input mt-1.5 w-full rounded-xl px-3.5 py-3 text-sm" />
             </div>
-          </div>
+            <div>
+              <label className="text-xs login-label">Work email</label>
+              <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" required
+                placeholder="you@company.com" className="login-input mt-1.5 w-full rounded-xl px-3.5 py-3 text-sm" />
+            </div>
+            <div>
+              <label className="text-xs login-label">Password</label>
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" required
+                className="login-input mt-1.5 w-full rounded-xl px-3.5 py-3 text-sm" />
+            </div>
+            <div>
+              <label className="text-xs login-label">Confirm password</label>
+              <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" required
+                className="login-input mt-1.5 w-full rounded-xl px-3.5 py-3 text-sm" />
+            </div>
+            <Button type="submit" icon="check" className="w-full !py-3" disabled={busy}>{busy ? "Creating…" : "Create account & continue"}</Button>
+          </form>
         </div>
-      </div>
+      </Shell>
     );
   }
 
@@ -125,14 +125,17 @@
       Promise.resolve(onLogin(email.trim(), password)).finally(() => setBusy(false));
     }
 
-    return (
+    const Shell = VG.LoginWeatherShell || (({ children, header, hero }) => (
       <div className="relative min-h-screen w-full overflow-hidden">
         <img src={HERO} alt="" className="absolute inset-0 w-full h-full object-cover" />
         <div className="absolute inset-0" style={{ background: "linear-gradient(110deg, rgba(8,13,24,.92) 0%, rgba(8,13,24,.72) 38%, rgba(8,13,24,.30) 100%)" }} />
-        <div className="absolute inset-0 bg-gradient-to-t from-ink-950/90 via-transparent to-ink-950/40" />
-
-        <div className="relative z-10 min-h-screen flex flex-col">
-          <header className="flex items-center justify-between px-6 sm:px-10 py-6">
+        <div className="relative z-10 min-h-screen flex flex-col px-6 sm:px-10 py-6">{header}{hero}{children}</div>
+      </div>
+    ));
+    return (
+      <Shell
+        header={(
+          <header className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <img src={LOGO} alt="Veraglo" className="h-9 w-auto drop-shadow" />
               <span className="text-white/90 font-display font-semibold tracking-wide hidden sm:block">Veraglo ERP</span>
@@ -141,64 +144,59 @@
               <Icon name={theme === "dark" ? "sun" : "moon"} size={18} />
             </button>
           </header>
-
-          <div className="flex-1 grid lg:grid-cols-2 items-center gap-10 px-6 sm:px-10 pb-14">
-            {/* Left: brand promise */}
-            <div className="min-w-0 max-w-xl text-white animate-fade-up hidden lg:block">
-              <Pill color="#a5b4fc">Enterprise Resource Planning</Pill>
-              <h1 className="mt-4 text-4xl xl:text-5xl font-display font-bold leading-[1.1] text-balance">
-                One workspace for your whole factory floor.
-              </h1>
-              <p className="mt-4 text-white/70 text-lg leading-relaxed">
-                Sales, production, quality, inventory, dispatch, accounts and people —
-                each team gets its own focused, premium environment with role-based access.
-              </p>
-              <div className="mt-7 flex flex-wrap gap-2">
-                {["Role-based access", "15 modules", "Light & dark", "Real-time KPIs"].map((f) => (
-                  <span key={f} className="glass rounded-full px-3.5 py-1.5 text-sm text-white/85">{f}</span>
-                ))}
-              </div>
+        )}
+        hero={(
+          <>
+            <Pill color="var(--login-accent, #a5b4fc)">Enterprise Resource Planning</Pill>
+            <h1 className="mt-4 text-4xl xl:text-5xl font-display font-bold leading-[1.1] text-balance">
+              One workspace for your whole factory floor.
+            </h1>
+            <p className="mt-4 text-lg leading-relaxed opacity-80">
+              Sales, production, quality, inventory, dispatch, accounts and people —
+              each team gets its own focused, premium environment with role-based access.
+            </p>
+            <div className="mt-7 flex flex-wrap gap-2">
+              {["Role-based access", "15 modules", "Weather-aware login", "Real-time KPIs"].map((f) => (
+                <span key={f} className="glass rounded-full px-3.5 py-1.5 text-sm opacity-90">{f}</span>
+              ))}
             </div>
-
-            {/* Right: login card — light panel for readable inputs on dark hero */}
-            <div className="min-w-0 w-full max-w-md justify-self-center lg:justify-self-end animate-scale-in">
-              <div className="login-panel rounded-2xl p-7 sm:p-8">
-                <div className="lg:hidden flex items-center gap-2 mb-5">
-                  <img src={LOGO} alt="" className="h-8 w-auto" />
-                  <span className="font-display font-semibold text-slate-900">Veraglo ERP</span>
-                </div>
-                <h2 className="text-2xl font-display font-semibold text-slate-900">Welcome back</h2>
-                <p className="text-sm login-muted mt-1">Sign in to your workspace</p>
-
-                <form onSubmit={submit} className="mt-6 space-y-4">
-                  <div>
-                    <label className="text-xs login-label">Email</label>
-                    <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="username" required
-                      placeholder="you@company.com"
-                      className="login-input mt-1.5 w-full rounded-xl px-3.5 py-3 text-sm focus:ring-2"
-                      style={{ "--tw-ring-color": "var(--accent)" }} />
-                  </div>
-                  <div>
-                    <label className="text-xs login-label">Password</label>
-                    <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password"
-                      placeholder="Enter password"
-                      className="login-input mt-1.5 w-full rounded-xl px-3.5 py-3 text-sm focus:ring-2"
-                      style={{ "--tw-ring-color": "var(--accent)" }} />
-                  </div>
-
-                  <Button type="submit" icon="logout" className="w-full !py-3" disabled={busy}>{busy ? "Signing in…" : "Sign in to workspace"}</Button>
-                  {needsSetup ? (
-                    <p className="text-[11px] text-center text-amber-700">No administrator exists yet — refresh the page to open <b>Create administrator</b>.</p>
-                  ) : (
-                    <p className="text-[11px] text-center login-muted">Use the email and password from your administrator setup. Dev credentials from other machines do not carry over after deploy.</p>
-                  )}
-                  {authHint && <p className="text-[11px] text-center text-amber-700 mt-2">{authHint}</p>}
-                </form>
-              </div>
-            </div>
+          </>
+        )}
+      >
+        <div className="login-panel rounded-2xl p-7 sm:p-8">
+          <div className="lg:hidden flex items-center gap-2 mb-5">
+            <img src={LOGO} alt="" className="h-8 w-auto" />
+            <span className="font-display font-semibold text-slate-900">Veraglo ERP</span>
           </div>
+          <h2 className="text-2xl font-display font-semibold text-slate-900">Welcome back</h2>
+          <p className="text-sm login-muted mt-1">Sign in to your workspace</p>
+
+          <form onSubmit={submit} className="mt-6 space-y-4">
+            <div>
+              <label className="text-xs login-label">Email</label>
+              <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="username" required
+                placeholder="you@company.com"
+                className="login-input mt-1.5 w-full rounded-xl px-3.5 py-3 text-sm focus:ring-2"
+                style={{ "--tw-ring-color": "var(--login-accent, var(--accent))" }} />
+            </div>
+            <div>
+              <label className="text-xs login-label">Password</label>
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password"
+                placeholder="Enter password"
+                className="login-input mt-1.5 w-full rounded-xl px-3.5 py-3 text-sm focus:ring-2"
+                style={{ "--tw-ring-color": "var(--login-accent, var(--accent))" }} />
+            </div>
+
+            <Button type="submit" icon="logout" className="w-full !py-3" disabled={busy}>{busy ? "Signing in…" : "Sign in to workspace"}</Button>
+            {needsSetup ? (
+              <p className="text-[11px] text-center text-amber-700">No administrator exists yet — refresh the page to open <b>Create administrator</b>.</p>
+            ) : (
+              <p className="text-[11px] text-center login-muted">Use the email and password from your administrator setup.</p>
+            )}
+            {authHint && <p className="text-[11px] text-center text-amber-700 mt-2">{authHint}</p>}
+          </form>
         </div>
-      </div>
+      </Shell>
     );
   }
 
@@ -667,32 +665,46 @@
       }
     }
     if (lic.ok) return null;
-    return (
+    const Shell = VG.LoginWeatherShell || (({ children, header }) => (
       <div className="relative min-h-screen flex items-center justify-center p-6">
         <img src={HERO} alt="" className="absolute inset-0 w-full h-full object-cover" />
         <div className="absolute inset-0 bg-ink-950/90" />
-        <div className="relative z-10 w-full max-w-lg glass-dark rounded-2xl p-8 animate-scale-in">
-          <div className="flex items-center gap-3 mb-6">
-            <img src={LOGO} alt="" className="h-10" />
-            <div>
-              <h1 className="text-xl font-display font-bold">Activate Veraglo ERP</h1>
-              <p className="text-sm opacity-60">Install on this computer with your license</p>
-            </div>
-          </div>
-          {lic.expired && <Card className="p-3 mb-4 border border-amber-500/40 text-sm text-amber-200">{lic.reason}</Card>}
-          <Card className="p-4 mb-4 border border-indigo-500/30 text-sm">
-            <p className="font-medium text-indigo-100">New installation?</p>
-            <p className="text-xs opacity-70 mt-1">Start the built-in evaluation trial to reach login and create your administrator account.</p>
-            <Button className="mt-3 !py-2" icon="check" onClick={beginTrial} disabled={startingTrial}>
-              {startingTrial ? "Starting…" : "Continue with 14-day evaluation trial"}
-            </Button>
-          </Card>
-          {VG.ActivationForm ? <VG.ActivationForm onDone={() => onActivated && onActivated()} compact /> : <p className="text-sm opacity-60">Loading activation…</p>}
-          {trialEnd && (
-            <p className="text-xs opacity-45 mt-4 text-center">Evaluation trial available until {trialEnd}.</p>
-          )}
-        </div>
+        <div className="relative z-10 w-full">{header}{children}</div>
       </div>
+    ));
+    return (
+      <Shell
+        showWidget={false}
+        header={(
+          <header className="flex items-center justify-between px-6 sm:px-10 py-6">
+            <img src={LOGO} alt="Veraglo" className="h-9 w-auto drop-shadow" />
+          </header>
+        )}
+      >
+        <div className="flex items-center justify-center px-6 pb-14">
+          <div className="w-full max-w-lg glass-dark rounded-2xl p-8 animate-scale-in">
+            <div className="flex items-center gap-3 mb-6">
+              <img src={LOGO} alt="" className="h-10" />
+              <div>
+                <h1 className="text-xl font-display font-bold">Activate Veraglo ERP</h1>
+                <p className="text-sm opacity-60">Install on this computer with your license</p>
+              </div>
+            </div>
+            {lic.expired && <Card className="p-3 mb-4 border border-amber-500/40 text-sm text-amber-200">{lic.reason}</Card>}
+            <Card className="p-4 mb-4 border border-indigo-500/30 text-sm">
+              <p className="font-medium text-indigo-100">New installation?</p>
+              <p className="text-xs opacity-70 mt-1">Start the built-in evaluation trial to reach login and create your administrator account.</p>
+              <Button className="mt-3 !py-2" icon="check" onClick={beginTrial} disabled={startingTrial}>
+                {startingTrial ? "Starting…" : "Continue with 14-day evaluation trial"}
+              </Button>
+            </Card>
+            {VG.ActivationForm ? <VG.ActivationForm onDone={() => onActivated && onActivated()} compact /> : <p className="text-sm opacity-60">Loading activation…</p>}
+            {trialEnd && (
+              <p className="text-xs opacity-45 mt-4 text-center">Evaluation trial available until {trialEnd}.</p>
+            )}
+          </div>
+        </div>
+      </Shell>
     );
   }
 

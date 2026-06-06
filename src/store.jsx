@@ -315,6 +315,23 @@
         accent: "#6366f1", defaultMode: "dark", sidebarCollapsed: false, fontSize: "medium",
         loginBackground: "assets/happy-employees.png",
       },
+      weatherLogin: {
+        enabled: true,
+        locationSource: "company",
+        manualCity: "",
+        refreshIntervalMins: 30,
+        openWeatherApiKey: "",
+        defaultWallpaper: "assets/happy-employees.png",
+        wallpapers: {
+          clear: "",
+          cloudy: "",
+          rain: "",
+          fog: "",
+          storm: "",
+          night: "",
+          snow: "",
+        },
+      },
       typography: {
         fontFamily: "inter", headingSize: "medium", tableSize: "medium", formSize: "medium",
         pdfFontFamily: "inter", fontWeight: "medium", lineSpacing: "comfortable", density: "comfortable",
@@ -373,6 +390,8 @@
     else db.settings.skuNumbering = { ...defaultSettings().skuNumbering, ...db.settings.skuNumbering, categoryPrefixes: { ...defaultSettings().skuNumbering.categoryPrefixes, ...(db.settings.skuNumbering.categoryPrefixes || {}) } };
     if (!db.settings.activation) db.settings.activation = defaultSettings().activation;
     if (!db.settings.dataPath) db.settings.dataPath = defaultSettings().dataPath;
+    if (!db.settings.weatherLogin) db.settings.weatherLogin = defaultSettings().weatherLogin;
+    else db.settings.weatherLogin = { ...defaultSettings().weatherLogin, ...db.settings.weatherLogin, wallpapers: { ...defaultSettings().weatherLogin.wallpapers, ...(db.settings.weatherLogin.wallpapers || {}) } };
     migrateLicense(db);
     db.seq = db.seq || {};
     ["PR", "PO", "QC", "QCI", "NCR", "BOM", "WO", "MR", "FG", "SH", "INV", "LP", "PAY", "USR"].forEach((k) => { if (db.seq[k] == null) db.seq[k] = 0; });

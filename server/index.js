@@ -8,6 +8,7 @@ import { access, constants } from "fs/promises";
 import * as db from "./db.js";
 import { createAdminUser, generatePassword, hasLoginUsers } from "./auth-utils.js";
 import { ensureDeploymentReady } from "./first-run.js";
+import * as weather from "./weather.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.join(__dirname, "..");
@@ -100,6 +101,38 @@ app.post("/api/setup/bootstrap-admin", async (req, res) => {
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: "bootstrap_failed", message: e.message });
+  }
+});
+
+/** Login weather theme — public, cached, non-blocking for sign-in. */
+app.get("/api/weather/settings", async (_req, res) => {
+  try {
+    const state = (await db.getState()) || {};
+    res.json({ ok: true, ...weather.weatherLoginSettings(state) });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get("/api/weather/current", async (req, res) => {
+  try {
+    const state = (await db.getState()) || {};
+    const cfg = weather.weatherLoginSettings(state);
+    if (!cfg.enabled) {
+      return res.json({ ok: false, disabled: true, reason: "Weather login theme disabled" });
+    }
+    const source = req.query.source || cfg.locationSource || "company";
+    const data = await weather.getCurrentWeather({
+      source,
+      state,
+      manualCity: req.query.city || cfg.manualCity,
+      lat: req.query.lat,
+      lon: req.query.lon,
+      city: req.query.city,
+    });
+    res.json({ ...data, settings: { wallpapers: cfg.wallpapers, defaultWallpaper: cfg.defaultWallpaper } });
+  } catch (e) {
+    res.status(200).json({ ok: false, error: e.message, unavailable: true });
   }
 });
 
