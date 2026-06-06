@@ -169,6 +169,8 @@
       enquiryId: src.enquiryId || "",
       preparedBy: src.preparedBy || "",
       remarks: src.remarks || "",
+      terms: src.terms || "",
+      warranty: src.warranty || "Warranty: 12 months from the date of invoice.",
       templateId: src.templateId || (isExportInvoiceType(invoiceType) ? "tpl2exp" : ""),
       ...emptyExportFields(),
       iecCode: src.iecCode || co.iec || c.iec || "",

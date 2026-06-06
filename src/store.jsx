@@ -1972,6 +1972,9 @@
           quotationId: so.quotationId || "",
           quotationNo: (qRow && qRow.no) || "",
           preparedBy: so.preparedBy || "",
+          terms: so.terms || (qRow && qRow.terms) || "",
+          warranty: so.warranty || (qRow && qRow.warranty) || "",
+          remarks: so.remarks || (qRow && qRow.remarks) || "",
         });
       }
       return { ...so, salesOrderId: so.id, salesOrderNo: so.no, type: "Tax Invoice", invoiceType: "domestic" };

@@ -932,7 +932,9 @@
     const lineRows = lines.map((row) => `<tr>${visibleCols.map((c) => lineCell(c.key, row)).join("")}</tr>`).join("");
 
     const revList = revisionDocList(q);
-    const termsSections = opts.termsSections || buildQuotationTerms(q, pt, dt, co, t, warrantyText);
+    const termsSections = opts.termsSections || (isInvoice
+      ? buildInvoiceTerms(q, pt, dt, co, t, warrantyText)
+      : buildQuotationTerms(q, pt, dt, co, t, warrantyText));
     const qrData = quotationQrPayload(q, c, totals, currency, validUntil, rev);
     const headerQrData = isInvoice ? invoiceQrPayload(q, einv, co) : qrData;
     const qrPayload = esc((q.no || docType.slice(0, 2)) + "|Rev-" + rev);
@@ -1057,10 +1059,12 @@
         <ul class="vg-q-rev-list">${revList}</ul>
       </div>` : ""}
 
-      ${!isInvoice ? `<div class="vg-q-section">
+      <div class="vg-q-section">
         <div class="vg-q-section-hdr">Terms &amp; conditions</div>
         <div class="vg-q-terms-cols">${termsSections}</div>
-      </div>` : (isInvoice ? `<div class="vg-q-section"><div class="vg-q-section-hdr">Statutory note</div><div class="vg-q-kv" style="font-size:${Number(t.fontSize || 9.5) - 1.5}pt"><span class="k">Declaration</span><span>${esc(q.exportDeclaration || ("We declare that this invoice shows the actual price of the goods/services described and that all particulars are true and correct. Subject to " + (co.jurisdiction || "Pune, Maharashtra") + " jurisdiction."))}</span></div></div>` : "")}
+      </div>
+
+      ${isInvoice ? `<div class="vg-q-section"><div class="vg-q-section-hdr">Statutory declaration</div><div class="vg-q-kv" style="font-size:${Number(t.fontSize || 9.5) - 1.5}pt"><span class="k">Declaration</span><span>${esc(q.exportDeclaration || ("We declare that this invoice shows the actual price of the goods/services described and that all particulars are true and correct. Subject to " + (co.jurisdiction || "Pune, Maharashtra") + " jurisdiction."))}</span></div></div>` : ""}
 
       <div class="vg-q-sign-grid">
         <div class="slot"><div class="role">Prepared by</div><b>${esc(q.preparedBy || "—")}</b></div>
@@ -1088,6 +1092,44 @@
   VG.buildQuotationDocument = function (opts) {
     return VG.buildIndustrialDocument({ ...opts, docType: "Quotation", document: opts.quotation || opts.document });
   };
+
+  /** Standard commercial T&amp;C for tax invoices (same clauses as quotations, invoice wording). */
+  function buildInvoiceTerms(q, pt, dt, co, tpl, warrantyText) {
+    const raw = (q.terms || "").trim();
+    const override = (tpl && tpl.termsOverride) || "";
+    if (override.trim()) return `<div class="vg-q-terms-custom">${nl2br(override)}</div>`;
+    const warr = warrantyText || defaultWarrantyText(tpl || {}, q, co);
+    const due = q.dueDate || "—";
+    const blocks = [
+      ["1. Payment Due", "Payment for this invoice is due on or before " + due + " unless otherwise agreed in writing. Late payments may attract interest as per agreed credit terms."],
+      ["2. Delivery", (dt || co.deliveryTermsDefault || "Ex-works / FOR destination as mutually agreed") + ". Delivery schedule is indicative and subject to drawing approval, advance receipt, and material availability."],
+      ["3. Freight & Logistics", "Freight, insurance, and transit arrangements apply as stated in the commercial summary. Risk transfer follows agreed Incoterms. Export documentation charges, if any, shall be borne as agreed."],
+      ["4. Packing", "Standard export-worthy / industrial packing suitable for domestic or international transit unless special packing is quoted separately."],
+      ["5. Taxes & Duties", "GST / IGST / cess extra as applicable under Indian law. For export orders, LUT / bond / refund conditions apply per statutory rules and customer instructions. Import duties and local taxes at destination are buyer's responsibility unless expressly included."],
+      ["6. Warranty", warr],
+      ["7. Installation & Commissioning", "Supply only unless explicitly mentioned. Installation, commissioning, calibration, civil works, cabling, and third-party integration are excluded unless specifically quoted."],
+      ["8. Exclusions", "Any item, accessory, consumable, or service not listed in the schedule of quantities is excluded. Statutory fees, permits, and insurance beyond quoted scope are excluded unless specified."],
+      ["9. Force Majeure", "Neither party is liable for delay or non-performance caused by events beyond reasonable control including natural calamities, war, strikes, pandemic restrictions, government actions, or supply-chain disruption."],
+      ["10. Material Availability", "Supply is subject to raw material, component, and capacity availability at the time of dispatch. Alternate specifications of equivalent quality may be proposed if required."],
+      ["11. Payment Terms", pt || co.paymentTermsDefault || "As per agreed credit terms. Title to goods remains with seller until full payment is received unless otherwise agreed in writing."],
+      ["12. Dispatch & Readiness", "Dispatch shall be effected after clearance of payments as per agreed terms and readiness of goods. Partial dispatch may be made where mutually agreed."],
+      ["13. Transit & Damage", "Transit damage claims must be notified within 48 hours of receipt with photographic evidence and carrier acknowledgement. Concealed damage claims within 7 days of delivery."],
+      ["14. Testing & Inspection", "Standard factory inspection applies. Third-party inspection, if required, shall be at buyer's cost and arranged with reasonable advance notice."],
+      ["15. Customer Dependencies", "Delays caused by pending approvals, drawings, site readiness, or information from buyer may extend delivery without penalty to seller."],
+      ["16. Storage After Readiness", "If buyer fails to take delivery within 15 days of readiness notification, seller may store goods at buyer's risk and cost or invoice storage charges."],
+      ["17. Cancellation", "Orders once confirmed may be cancelled only with written consent. Cancellation charges including material procurement, engineering, and restocking costs shall apply."],
+      ["18. Price Variation", "Prices are based on current input costs. Seller reserves the right to revise pricing if significant currency, duty, freight, or raw-material variation occurs before dispatch, with prior notice."],
+      ["19. Limitation of Liability", "Seller's liability is limited to repair, replacement, or credit of defective supplied goods. Consequential, indirect, or loss-of-profit claims are excluded to the maximum extent permitted by law."],
+      ["20. Intellectual Property", "Drawings, designs, specifications, and technical data shared remain seller's property and shall not be reproduced or disclosed without consent."],
+      ["21. Confidentiality", "Commercial terms, pricing, and technical information in this document are confidential and for recipient's internal use only."],
+      ["22. Jurisdiction", co.jurisdiction || "Courts at Pune, Maharashtra, India shall have exclusive jurisdiction unless otherwise agreed in writing."],
+      ["23. Acknowledgement", "Receipt of this tax invoice constitutes acknowledgement of supply as described. Disputes must be raised in writing within seven (7) days of invoice date."],
+    ];
+    let html = "";
+    if (raw) html += `<h4>Additional Conditions</h4><ol><li>${nl2br(raw)}</li></ol>`;
+    html += blocks.map(([h, t]) => `<h4>${esc(h)}</h4><ol><li>${esc(t)}</li></ol>`).join("");
+    return html;
+  }
 
   function buildQuotationTerms(q, pt, dt, co, tpl, warrantyText) {
     const raw = (q.terms || "").trim();
