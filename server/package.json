@@ -1,0 +1,19 @@
+{
+  "name": "veraglo-erp-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Veraglo ERP API — PostgreSQL backend",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "db:init": "node scripts/init-db.js",
+    "db:import": "node scripts/import-state.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "pg": "^8.13.0"
+  }
+}

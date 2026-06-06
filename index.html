@@ -1,0 +1,651 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b1220" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <title>Veraglo ERP — Enterprise Workspace</title>
+    <link rel="icon" type="image/png" href="assets/veraglo-logo.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Poppins:wght@300;400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Source+Sans+3:wght@400;500;600;700&family=Roboto:wght@300;400;500;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Tailwind (Play CDN) — prototype only; production uses Vite + Tailwind build (see README) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ["var(--vg-font-family)", "Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+              display: ["var(--vg-font-family)", "Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+              mono: ["var(--vg-font-family)", "Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+            },
+            colors: {
+              ink: {
+                50: "#f5f7fb",
+                100: "#e8edf6",
+                700: "#27324a",
+                800: "#161e30",
+                900: "#0d1424",
+                950: "#080d18",
+              },
+            },
+            boxShadow: {
+              glass: "0 8px 32px rgba(2, 8, 23, 0.37)",
+              glow: "0 0 0 1px rgba(255,255,255,0.06), 0 20px 50px -20px var(--accent)",
+            },
+            keyframes: {
+              "fade-up": {
+                "0%": { opacity: "0", transform: "translateY(14px)" },
+                "100%": { opacity: "1", transform: "translateY(0)" },
+              },
+              "scale-in": {
+                "0%": { opacity: "0", transform: "scale(.96)" },
+                "100%": { opacity: "1", transform: "scale(1)" },
+              },
+              float: {
+                "0%,100%": { transform: "translateY(0)" },
+                "50%": { transform: "translateY(-6px)" },
+              },
+              shimmer: {
+                "100%": { transform: "translateX(100%)" },
+              },
+            },
+            animation: {
+              "fade-up": "fade-up .5s cubic-bezier(.2,.7,.2,1) both",
+              "scale-in": "scale-in .35s cubic-bezier(.2,.7,.2,1) both",
+              float: "float 6s ease-in-out infinite",
+            },
+          },
+        },
+      };
+    </script>
+
+    <!-- React + Babel (Play/standalone CDNs) for a zero-build prototype -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+      :root,
+      html.dark {
+        --accent: #6366f1;
+        --accent-soft: rgba(99, 102, 241, 0.16);
+        --vg-text: #e2e8f0;
+        --vg-text-muted: #94a3b8;
+        --vg-heading: #f8fafc;
+        --vg-bg: #0d1424;
+        --vg-surface: rgba(255, 255, 255, 0.06);
+        --vg-input-bg: rgba(15, 23, 42, 0.65);
+        --vg-input-border: rgba(255, 255, 255, 0.14);
+        --vg-input-text: #f1f5f9;
+        --vg-input-placeholder: #94a3b8;
+        --vg-table-head: #cbd5e1;
+        --vg-border: rgba(255, 255, 255, 0.1);
+        --vg-font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --vg-font-pdf: Inter, "Segoe UI", Arial, sans-serif;
+        --vg-fs-base: 14px;
+        --vg-fs-heading: 20px;
+        --vg-fs-subheading: 16px;
+        --vg-fs-table: 13px;
+        --vg-fs-form: 14px;
+        --vg-fs-label: 12px;
+        --vg-lh: 1.5;
+        --vg-lh-tight: 1.35;
+        --vg-fw-normal: 400;
+        --vg-fw-medium: 500;
+        --vg-fw-semibold: 600;
+        --vg-fw-heading: 650;
+        --vg-letter-spacing: -0.015em;
+      }
+      html.light {
+        --vg-text: #1e293b;
+        --vg-text-muted: #64748b;
+        --vg-heading: #0f172a;
+        --vg-bg: #f4f6fc;
+        --vg-surface: rgba(255, 255, 255, 0.9);
+        --vg-input-bg: #ffffff;
+        --vg-input-border: #cbd5e1;
+        --vg-input-text: #0f172a;
+        --vg-input-placeholder: #94a3b8;
+        --vg-table-head: #475569;
+        --vg-border: rgba(15, 23, 42, 0.1);
+      }
+      body,
+      #root,
+      .vg-app-shell {
+        color: var(--vg-text);
+        font-family: var(--vg-font-family);
+        font-size: var(--vg-fs-base);
+        line-height: var(--vg-lh);
+        letter-spacing: var(--vg-letter-spacing);
+        font-weight: var(--vg-fw-normal);
+        font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
+      }
+      h1, h2, h3, h4, .font-display, .vg-heading {
+        color: var(--vg-heading);
+        font-family: var(--vg-font-family) !important;
+        font-weight: var(--vg-fw-heading);
+        letter-spacing: -0.02em;
+        line-height: var(--vg-lh-tight);
+      }
+      h1, .vg-h1 { font-size: var(--vg-fs-heading); }
+      h2, .vg-h2 { font-size: var(--vg-fs-subheading); }
+      h3, .vg-h3 { font-size: calc(var(--vg-fs-subheading) - 1px); font-weight: var(--vg-fw-semibold); }
+      .font-mono, .font-display, [class*="font-mono"] {
+        font-family: var(--vg-font-family) !important;
+      }
+      .font-mono, .vg-mono, .vg-doc-no, .vg-tabular {
+        font-variant-numeric: tabular-nums;
+        font-feature-settings: "tnum", "cv02", "cv03", "cv04", "cv11";
+      }
+      .vg-typo-compact .vg-app-shell table th,
+      .vg-typo-compact .vg-app-shell table td {
+        padding-top: 0.45rem;
+        padding-bottom: 0.45rem;
+      }
+      .vg-app-shell table,
+      .vg-line-table-wrap table,
+      table.vg-tbl {
+        font-size: var(--vg-fs-table);
+        line-height: var(--vg-lh-tight);
+      }
+      .vg-app-shell label,
+      .login-label,
+      .vg-label {
+        font-size: var(--vg-fs-label);
+        line-height: var(--vg-lh-tight);
+        font-weight: var(--vg-fw-medium);
+      }
+      .vg-app-shell input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),
+      .vg-app-shell select,
+      .vg-app-shell textarea,
+      .vg-input,
+      .login-input,
+      .vg-app-shell button,
+      .vg-dropdown-item {
+        font-family: inherit;
+        font-size: var(--vg-fs-form);
+        line-height: var(--vg-lh-tight);
+      }
+      .vg-module-nav .vg-tab,
+      .vg-module-nav .vg-tab-group {
+        font-family: inherit;
+      }
+      .vg-line-table-wrap .vg-line-table tbody tr:nth-child(even) {
+        background: rgba(255, 255, 255, 0.03);
+      }
+      html.light .vg-line-table-wrap .vg-line-table tbody tr:nth-child(even) {
+        background: rgba(15, 23, 42, 0.04);
+      }
+      .vg-line-table-wrap .vg-line-table tbody tr:hover {
+        background: rgba(99, 102, 241, 0.08);
+      }
+      .vg-line-table-wrap .vg-line-table td,
+      .vg-line-table-wrap .vg-line-table th {
+        padding: 0.65rem 0.75rem;
+        vertical-align: top;
+      }
+      .vg-master-dropdown-panel {
+        z-index: 120;
+        box-shadow: 0 12px 40px rgba(2, 8, 23, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.08);
+      }
+      .vg-master-option-hi {
+        background: rgba(99, 102, 241, 0.22) !important;
+      }
+      label,
+      .vg-app-shell th,
+      .vg-app-shell td {
+        color: inherit;
+      }
+      .vg-input,
+      input.vg-input,
+      select.vg-input,
+      textarea.vg-input,
+      .vg-app-shell input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),
+      .vg-app-shell select,
+      .vg-app-shell textarea {
+        color: var(--vg-input-text) !important;
+        background: var(--vg-input-bg) !important;
+        border: 1px solid var(--vg-input-border) !important;
+        caret-color: var(--vg-input-text);
+      }
+      .vg-app-shell input::placeholder,
+      .vg-app-shell textarea::placeholder {
+        color: var(--vg-input-placeholder) !important;
+        opacity: 1;
+      }
+      .vg-app-shell input:disabled,
+      .vg-app-shell select:disabled,
+      .vg-app-shell textarea:disabled {
+        opacity: 0.65;
+        color: var(--vg-input-text) !important;
+      }
+      .vg-app-shell option,
+      option.vg-option {
+        background: #1e293b;
+        color: #f8fafc;
+      }
+      html.light .vg-app-shell option,
+      html.light option.vg-option {
+        background: #ffffff;
+        color: #0f172a;
+      }
+      .vg-app-shell table {
+        color: var(--vg-text);
+      }
+      .vg-app-shell thead th {
+        color: var(--vg-table-head);
+      }
+      .vg-dropdown-menu {
+        position: absolute;
+        top: calc(100% + 6px);
+        left: 0;
+        z-index: 60;
+        min-width: 220px;
+        max-width: min(320px, 90vw);
+        border-radius: 14px;
+        background: rgba(13, 20, 36, 0.97);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        box-shadow: 0 16px 48px rgba(2, 8, 23, 0.55);
+        color: var(--vg-text);
+      }
+      html.light .vg-dropdown-menu {
+        background: rgba(255, 255, 255, 0.98);
+        border-color: rgba(15, 23, 42, 0.12);
+        color: #1e293b;
+      }
+      .vg-dropdown-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.55rem 0.85rem;
+        font-size: 0.8125rem;
+        text-align: left;
+        border-radius: 0.5rem;
+        margin: 0 0.25rem;
+        width: calc(100% - 0.5rem);
+        color: inherit;
+        transition: background 0.15s ease;
+      }
+      .vg-dropdown-item:hover {
+        background: rgba(255, 255, 255, 0.08);
+      }
+      html.light .vg-dropdown-item:hover {
+        background: rgba(15, 23, 42, 0.06);
+      }
+      .vg-dropdown-item.is-active {
+        background: var(--accent);
+        color: #fff;
+      }
+      .vg-module-card {
+        background: rgba(255, 255, 255, 0.07);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        color: #f8fafc;
+      }
+      .vg-module-card:hover {
+        border-color: color-mix(in srgb, var(--mod-accent) 55%, transparent);
+      }
+      html.light .vg-module-card {
+        background: #fff;
+        border-color: rgba(15, 23, 42, 0.1);
+        color: #0f172a;
+      }
+      .vg-sidebar-sections {
+        max-height: min(420px, 55vh);
+        overflow-y: auto;
+      }
+      .vg-sidebar-module + .vg-sidebar-module {
+        margin-top: 2px;
+      }
+      html,
+      body,
+      #root {
+        height: 100%;
+      }
+      body {
+        margin: 0;
+        font-family: var(--vg-font-family);
+        font-size: var(--vg-fs-base);
+        line-height: var(--vg-lh);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
+        background: var(--vg-bg, #0d1424);
+        color: var(--vg-text, #e2e8f0);
+      }
+      html.light body {
+        background: var(--vg-bg);
+        color: var(--vg-text);
+      }
+      ::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: rgba(127, 140, 170, 0.35);
+        border-radius: 999px;
+        border: 2px solid transparent;
+        background-clip: content-box;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: rgba(127, 140, 170, 0.55);
+        background-clip: content-box;
+      }
+      .glass {
+        background: rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(18px) saturate(140%);
+        -webkit-backdrop-filter: blur(18px) saturate(140%);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+      }
+      .glass-dark {
+        background: rgba(13, 20, 36, 0.55);
+        backdrop-filter: blur(18px) saturate(140%);
+        -webkit-backdrop-filter: blur(18px) saturate(140%);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      .light .glass {
+        background: rgba(255, 255, 255, 0.65);
+        border: 1px solid rgba(15, 23, 42, 0.08);
+      }
+      .light .glass-dark {
+        background: rgba(255, 255, 255, 0.78);
+        border: 1px solid rgba(15, 23, 42, 0.08);
+      }
+      /* App chrome (sidebar + topbar): near-opaque so it stays correct in
+         both themes regardless of what the backdrop-filter samples. */
+      .app-chrome {
+        background: rgba(11, 17, 32, 0.88);
+        color: #e2e8f0;
+        border-color: rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(16px) saturate(140%);
+        -webkit-backdrop-filter: blur(16px) saturate(140%);
+      }
+      .light .app-chrome {
+        background: rgba(255, 255, 255, 0.92);
+        color: #1f2937;
+        border-color: rgba(15, 23, 42, 0.08);
+      }
+      .chrome-hover:hover {
+        background: rgba(255, 255, 255, 0.07);
+      }
+      /* Compact numeric inputs inside dense transaction tables so values aren't clipped */
+      table input[type="number"] {
+        padding-left: 0.45rem;
+        padding-right: 0.2rem;
+        -moz-appearance: textfield;
+      }
+      table input[type="number"]::-webkit-outer-spin-button,
+      table input[type="number"]::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      .light .chrome-hover:hover {
+        background: rgba(15, 23, 42, 0.05);
+      }
+      .accent-ring {
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06),
+          0 24px 60px -28px var(--accent);
+      }
+      .text-balance {
+        text-wrap: balance;
+      }
+      /* Login: opaque panel + inputs (readable on dark hero regardless of theme) */
+      .login-panel {
+        background: rgba(255, 255, 255, 0.98);
+        color: #0f172a;
+        border: 1px solid rgba(15, 23, 42, 0.1);
+        box-shadow: 0 24px 64px rgba(2, 8, 23, 0.4);
+      }
+      .login-panel .login-label {
+        color: #475569;
+        font-weight: 500;
+      }
+      .login-panel .login-muted {
+        color: #64748b;
+      }
+      .login-input {
+        background: #f8fafc;
+        color: #0f172a;
+        border: 1px solid #cbd5e1;
+        caret-color: #0f172a;
+      }
+      .login-input::placeholder {
+        color: #94a3b8;
+      }
+      .login-input:focus {
+        background: #ffffff;
+        border-color: var(--accent);
+        outline: none;
+      }
+      /* Admin permission matrix */
+      .perm-cb {
+        width: 1rem;
+        height: 1rem;
+        accent-color: var(--accent);
+        cursor: pointer;
+      }
+      .perm-cb:disabled { opacity: 0.45; cursor: not-allowed; }
+      .perm-matrix-card { border: 1px solid rgba(148, 163, 184, 0.15); }
+      .perm-matrix-head th {
+        background: var(--card, rgba(15, 23, 42, 0.92));
+        backdrop-filter: blur(8px);
+      }
+      .perm-group-row td { background: rgba(99, 102, 241, 0.08); }
+      .perm-group-label { color: inherit; }
+      .perm-mod-row.perm-mod-on { background: rgba(52, 211, 153, 0.04); }
+      .perm-mod-row:hover { background: rgba(148, 163, 184, 0.06); }
+      .perm-cell-off { opacity: 0.35; }
+      .perm-tab-chip {
+        display: inline-flex; align-items: center; gap: 0.35rem;
+        padding: 0.25rem 0.5rem; border-radius: 0.5rem;
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        cursor: pointer;
+      }
+      .perm-tab-chip.perm-tab-on {
+        border-color: var(--accent);
+        background: var(--accent-soft, rgba(99, 102, 241, 0.12));
+      }
+      .perm-hint { color: inherit; opacity: 0.55; }
+      html.light .perm-group-row td { background: rgba(99, 102, 241, 0.06); }
+      html.light .perm-mod-row.perm-mod-on { background: rgba(16, 185, 129, 0.06); }
+
+      .login-input option {
+        color: #0f172a;
+        background: #ffffff;
+      }
+      /* Autofill on dark hero — force light field + dark text */
+      .login-input:-webkit-autofill,
+      .login-input:-webkit-autofill:hover,
+      .login-input:-webkit-autofill:focus {
+        -webkit-text-fill-color: #0f172a !important;
+        box-shadow: 0 0 0 1000px #f8fafc inset !important;
+        border: 1px solid #cbd5e1 !important;
+      }
+      .no-scrollbar::-webkit-scrollbar {
+        display: none;
+      }
+      .loader {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        color: #93a4c8;
+        font-family: "Inter", sans-serif;
+        letter-spacing: 0.02em;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          animation: none !important;
+          transition: none !important;
+        }
+      }
+      /* Welcome home */
+      .vg-welcome-bg {
+        background: radial-gradient(ellipse 120% 80% at 10% -10%, rgba(99, 102, 241, 0.35), transparent 50%),
+          radial-gradient(ellipse 80% 60% at 90% 100%, rgba(34, 211, 238, 0.2), transparent 45%);
+      }
+      .vg-welcome-in {
+        animation: vg-welcome-in 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+      }
+      @keyframes vg-welcome-in {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .vg-welcome-hero {
+        background: linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(14, 165, 233, 0.12));
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        backdrop-filter: blur(12px);
+      }
+      .vg-quick-card {
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      .vg-quick-card-glow {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        transition: opacity 0.3s;
+        background: radial-gradient(circle at 30% 20%, color-mix(in srgb, var(--mod-accent) 40%, transparent), transparent 65%);
+      }
+      .vg-quick-card:hover .vg-quick-card-glow { opacity: 1; }
+      .vg-notif-row:hover {
+        background: rgba(255, 255, 255, 0.08);
+      }
+      .light .vg-quick-card {
+        background: rgba(255, 255, 255, 0.85);
+        border-color: rgba(15, 23, 42, 0.08);
+      }
+      /* Vibrant module tabs */
+      .vg-module-nav {
+        box-shadow: 0 4px 24px rgba(2, 8, 23, 0.35);
+      }
+      .vg-tab-group,
+      .vg-tab {
+        transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, color 0.2s ease;
+      }
+      .vg-tab-group {
+        padding: 0.4rem 0.75rem;
+        border-radius: 0.75rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        white-space: nowrap;
+        opacity: 0.65;
+      }
+      .vg-tab-group:hover {
+        opacity: 1;
+        transform: translateY(-1px);
+      }
+      .vg-tab-group.is-active {
+        opacity: 1;
+        color: #fff;
+        background: var(--tab-accent, var(--accent));
+        box-shadow: 0 4px 14px color-mix(in srgb, var(--tab-accent, var(--accent)) 45%, transparent);
+      }
+      .vg-tab {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.45rem 0.85rem;
+        border-radius: 0.75rem;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        white-space: nowrap;
+        opacity: 0.72;
+        border: 1px solid transparent;
+      }
+      .vg-tab:hover {
+        opacity: 1;
+        transform: translateY(-1px);
+        background: rgba(255, 255, 255, 0.06);
+      }
+      .vg-tab.is-active {
+        opacity: 1;
+        color: #fff;
+        background: var(--tab-accent, var(--accent));
+        border-color: rgba(255, 255, 255, 0.12);
+        box-shadow: 0 4px 16px color-mix(in srgb, var(--tab-accent, var(--accent)) 50%, transparent);
+      }
+      .vg-tab-dash.is-active {
+        background: linear-gradient(135deg, var(--tab-accent, var(--accent)), #22d3ee);
+      }
+      .light .vg-tab:hover {
+        background: rgba(15, 23, 42, 0.05);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div class="loader">
+        <div style="text-align:center">
+          <div style="font-family:var(--vg-font-family,'Inter',sans-serif);font-weight:650;font-size:20px;color:#cdd8f0;letter-spacing:-0.02em">Veraglo ERP</div>
+          <div style="margin-top:8px;font-size:13px;opacity:.7">Preparing your workspace…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Deterministic sequential loader. The app is split into small modules that
+         share a global VG namespace; Babel's multi-script loader does NOT preserve
+         order for external src, so we fetch + transform + eval each file in order. -->
+    <script>
+      (async function () {
+        window.VG_BUILD = "2026-06-sidebar-nav";
+        var files = [
+          "src/data.jsx", "src/typography.jsx", "src/ui.jsx", "src/store.jsx", "src/sku-engine.jsx", "src/item-mfr.jsx", "src/admin-config.jsx", "src/doc-designer.jsx", "src/forms.jsx", "src/doc-template-designer.jsx", "src/customer.jsx",
+          "src/module-dashboard.jsx", "src/modules.jsx", "src/shell-ui.jsx", "src/enquiry.jsx", "src/sales.jsx", "src/bom.jsx", "src/inventory.jsx", "src/purchase.jsx", "src/quality.jsx",
+          "src/production.jsx", "src/dispatch.jsx", "src/accounts.jsx", "src/hr.jsx", "src/attendance.jsx",
+          "src/licensing-core.jsx", "src/admin-licensing.jsx", "src/admin-permissions.jsx", "src/admin.jsx", "src/search.jsx", "src/welcome-home.jsx", "src/app.jsx",
+        ];
+        try {
+          for (var i = 0; i < files.length; i++) {
+            var res = await fetch(files[i] + "?v=" + Date.now());
+            if (!res.ok) throw new Error("Failed to load " + files[i] + " (" + res.status + ")");
+            var src = await res.text();
+            var out = Babel.transform(src, { presets: ["react"], filename: files[i] });
+            (0, eval)(out.code);
+          }
+          VG.apiBase = "";
+          var initInfo = await VG.store.init();
+          if (VG.applyTypography) {
+            var st = VG.store.settings();
+            VG.applyTypography(st.typography, st.theme);
+            if (st.theme && st.theme.accent) document.documentElement.style.setProperty("--accent", st.theme.accent);
+            if (st.theme && st.theme.defaultMode === "light") {
+              document.documentElement.classList.remove("dark");
+              document.documentElement.classList.add("light");
+            } else if (st.theme && st.theme.defaultMode === "dark") {
+              document.documentElement.classList.add("dark");
+              document.documentElement.classList.remove("light");
+            }
+          }
+          var loaderEl = document.querySelector(".loader");
+          if (loaderEl) {
+            var sub = loaderEl.querySelector("div > div:last-child");
+            if (sub) sub.textContent = "Connected to " + (initInfo.backend === "postgresql" ? "PostgreSQL" : "local storage") + "…";
+          }
+          VG.bootApp();
+        } catch (e) {
+          console.error(e);
+          var msg = (e && (e.stack || e.message)) || String(e);
+          document.getElementById("root").innerHTML =
+            '<div style="min-height:100vh;background:#0b1120;color:#fecaca;font:13px Inter,sans-serif;padding:24px">' +
+            '<h1 style="color:#f8fafc;font-size:18px;margin:0 0 12px">Startup error</h1>' +
+            '<pre style="white-space:pre-wrap;opacity:.9;margin:0">' + msg + '</pre>' +
+            '<p style="opacity:.5;margin-top:16px;font-size:12px">Check that you opened <b>http://localhost:3000</b> from the project folder and hard-refresh (Cmd+Shift+R).</p></div>';
+        }
+      })();
+    </script>
+  </body>
+</html>

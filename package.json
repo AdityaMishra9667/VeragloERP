@@ -1,0 +1,17 @@
+{
+  "name": "veraglo-erp",
+  "private": true,
+  "description": "Veraglo ERP — React UI + PostgreSQL API",
+  "scripts": {
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "server:install": "npm install --prefix server",
+    "server:start": "npm start --prefix server",
+    "server:dev": "npm run dev --prefix server",
+    "db:init": "npm run db:init --prefix server",
+    "dev": "npm run docker:up && npm run server:install && npm run server:start",
+    "desktop:install": "npm install --prefix desktop",
+    "desktop:start": "npm start --prefix desktop",
+    "build:win": "bash scripts/build-windows-installer.sh"
+  }
+}

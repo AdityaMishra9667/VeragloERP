@@ -1,0 +1,65 @@
+{
+  "name": "veraglo-erp-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Veraglo ERP Windows desktop installer",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win --x64",
+    "dist:dir": "electron-builder --win --x64 --dir"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "in.veraglo.erp",
+    "productName": "Veraglo ERP",
+    "copyright": "Veraglo",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js"
+    ],
+    "extraResources": [
+      {
+        "from": "../",
+        "to": "app",
+        "filter": [
+          "index.html",
+          "assets/**/*",
+          "src/**/*",
+          "server/index.js",
+          "server/db.js",
+          "server/file-db.js",
+          "server/schema.sql",
+          "server/package.json",
+          "server/node_modules/**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "Veraglo-ERP-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Veraglo ERP",
+      "installerLanguages": ["en_US"],
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}

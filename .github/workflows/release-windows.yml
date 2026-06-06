@@ -1,0 +1,81 @@
+# Build Veraglo-ERP-Setup.exe and attach to GitHub Releases.
+name: Release — Windows installer
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Installer version (e.g. 1.0.0)"
+        required: true
+        default: "1.0.0"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: ver
+        shell: bash
+        run: |
+          if [ -n "${{ github.event.release.tag_name }}" ]; then
+            V="${{ github.event.release.tag_name }}"
+          else
+            V="v${{ inputs.version }}"
+          fi
+          V="${V#v}"
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "Building version: $V"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Apply version to desktop package
+        shell: bash
+        run: |
+          cd desktop
+          npm version "${{ steps.ver.outputs.version }}" --no-git-tag-version --allow-same-version
+
+      - name: Install API dependencies
+        run: npm install --omit=dev
+        working-directory: server
+
+      - name: Install Electron build tools
+        run: npm install
+        working-directory: desktop
+
+      - name: Build Windows installer (NSIS)
+        working-directory: desktop
+        env:
+          # Unsigned installer on CI (no code-signing cert)
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npm run dist:win
+
+      - name: List build output
+        shell: bash
+        run: ls -la desktop/dist/
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Veraglo-ERP-Setup-${{ steps.ver.outputs.version }}-windows-x64
+          path: desktop/dist/*.exe
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Attach installer to GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: desktop/dist/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

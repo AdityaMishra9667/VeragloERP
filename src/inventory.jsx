@@ -1,0 +1,1060 @@
+/* Veraglo ERP — Inventory Management module (fully functional, stock-ledger driven). */
+(function (VG) {
+  const { useState, useMemo, useEffect, useRef } = React;
+  const ui = VG.ui, fx = VG.fx, store = VG.store, inr = VG.fmt.inr, today = VG.fmt.todayISO;
+  const { Icon, Button, Pill, Card } = ui;
+  const { Field, Text, Area, Num, DateF, Select, MasterSelect, Modal, RecordTable, PageHead, StatusTag, printDocument, DocActions } = fx;
+  const MasterForm = VG.MasterForm;
+
+  const itemName = (id) => (VG.itemMfr && VG.itemMfr.label(id)) || "—";
+  const mfrCols = () => (VG.itemMfr && VG.itemMfr.tableColumns()) || [];
+  const PartNumberSuggest = (VG.itemMfr && VG.itemMfr.PartNumberSuggest) || function () { return null; };
+  const readDatasheet = (VG.itemMfr && VG.itemMfr.readDatasheet) || function (file, done) { done(null, null); };
+  const locName = (id) => (store.get("locations", id) || {}).name || "—";
+  const suppName = (id) => (store.get("suppliers", id) || {}).name || "—";
+  const unitsOpt = () => store.list("units").map((u) => u.name);
+  const taxRate = (id) => (store.get("taxes", id) || {}).rate || 0;
+  const typeCodeOptions = () => (VG.CATEGORY_TYPE_CODES || []).map((t) => ({ value: t.code, label: t.code + " — " + t.label }));
+  const typeCodeLabel = (code) => {
+    const t = (VG.CATEGORY_TYPE_CODES || []).find((x) => x.code === code);
+    return t ? t.code + " — " + t.label : code || "—";
+  };
+
+  const ISSUE_TYPES = [
+    "Issue for Invoicing", "Internal Use / Production", "Vendor Returnable Challan", "Vendor Non-Returnable Challan",
+  ];
+
+  /* Resize uploaded reference images so localStorage stays reliable. */
+  function readItemImage(file, done) {
+    if (!file || !file.type.startsWith("image/")) return done(null, "Please choose an image file (JPG, PNG, WebP)");
+    if (file.size > 4 * 1024 * 1024) return done(null, "Image must be under 4 MB");
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const max = 480;
+        let w = img.width, h = img.height;
+        if (w > max || h > max) {
+          if (w >= h) { h = Math.round(h * (max / w)); w = max; }
+          else { w = Math.round(w * (max / h)); h = max; }
+        }
+        const c = document.createElement("canvas");
+        c.width = w; c.height = h;
+        c.getContext("2d").drawImage(img, 0, 0, w, h);
+        done(c.toDataURL("image/jpeg", 0.82), null);
+      };
+      img.onerror = () => done(null, "Could not read image");
+      img.src = reader.result;
+    };
+    reader.onerror = () => done(null, "Could not read file");
+    reader.readAsDataURL(file);
+  }
+
+  function ItemForm({ open, onClose, record, roleKey, can, onSaved }) {
+    const isEdit = !!(record && record.id);
+    const disabled = isEdit && !can("edit");
+    const [form, setForm] = useState(() => ({
+      unit: "Nos", taxId: "gst18", batchTracked: "No", reorder: 0, minStock: 0, rate: 0,
+      ...record,
+      batchTracked: record && record.batchTracked === true ? "Yes" : record && record.batchTracked === false ? "No" : (record && record.batchTracked) || "No",
+    }));
+    const [err, setErr] = useState({});
+    const [dirty, setDirty] = useState(false);
+    const fileRef = useRef(null);
+    const sheetRef = useRef(null);
+    const set = (k, v) => { setDirty(true); setForm((f) => ({ ...f, [k]: v })); };
+    const pickCategory = (categoryId) => {
+      setDirty(true);
+      setForm((f) => {
+        const next = { ...f, categoryId };
+        if (!isEdit) next.sku = store.nextSku(categoryId);
+        return next;
+      });
+    };
+    useEffect(() => {
+      if (!open) return;
+      const base = {
+        unit: "Nos", taxId: "gst18", batchTracked: "No", reorder: 0, minStock: 0, rate: 0,
+        ...record,
+        batchTracked: record && record.batchTracked === true ? "Yes" : record && record.batchTracked === false ? "No" : (record && record.batchTracked) || "No",
+      };
+      if (!record || !record.id) base.sku = record && record.categoryId ? store.nextSku(record.categoryId) : "";
+      setForm(base);
+      setErr({});
+      setDirty(false);
+    }, [open, record && record.id]);
+    function onImagePick(e) {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      readItemImage(file, (dataUrl, msg) => {
+        if (msg) return VG.toast(msg, "error");
+        set("image", dataUrl);
+        VG.toast("Reference image attached");
+      });
+      e.target.value = "";
+    }
+    function onDatasheetPick(e) {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      readDatasheet(file, (doc, msg) => {
+        if (msg) return VG.toast(msg, "error");
+        if (doc) {
+          set("datasheetName", doc.name);
+          set("datasheetData", doc.data);
+          VG.toast("Datasheet attached");
+        }
+      });
+      e.target.value = "";
+    }
+    function save() {
+      if (disabled) return onClose();
+      const e = {};
+      if (!form.name) e.name = "Required";
+      if (!form.categoryId) e.categoryId = "Required";
+      if (form.rate === "" || form.rate == null) e.rate = "Required";
+      const mfrId = form.manufacturerId;
+      const partNo = String(form.manufacturerPartNumber || "").trim();
+      if (mfrId && partNo) {
+        const dup = store.findDuplicateItemMfr({ manufacturerId: mfrId, manufacturerPartNumber: partNo }, isEdit ? form.id : null);
+        if (dup) {
+          VG.toast(VG.ITEM_MFR_DUP_MSG || store.validateItemMfrDuplicate({ manufacturerId: mfrId, manufacturerPartNumber: partNo }).message, "error");
+          return;
+        }
+      }
+      if (Object.keys(e).length) { setErr(e); return VG.toast("Please fill required fields", "error"); }
+      const payload = {
+        ...form,
+        batchTracked: form.batchTracked === "Yes",
+        rate: Number(form.rate) || 0,
+        reorder: Number(form.reorder) || 0,
+        minStock: Number(form.minStock) || 0,
+        manufacturerPartNumber: partNo,
+      };
+      if (!isEdit) {
+        payload._skuModule = "Item Master";
+        if (!(VG.skuEngine && VG.skuEngine.canManualOverride(roleKey))) delete payload.sku;
+        const rec = store.create("items", payload, roleKey);
+        if (!rec) return;
+        VG.toast("Item " + rec.sku + " created");
+      } else {
+        if (!(VG.skuEngine && VG.skuEngine.canManualOverride(roleKey))) delete payload.sku;
+        const rec = store.update("items", form.id, payload, roleKey);
+        if (!rec) return;
+        VG.toast("Item " + rec.sku + " updated");
+      }
+      onSaved();
+    }
+    return (
+      <Modal open={open} onClose={onClose} size="full" dirty={dirty && !disabled}
+        title={isEdit ? "Edit Item · " + (form.sku || "") : "New Item"}
+        subtitle={isEdit ? form.name : "SKU auto-generated from Admin numbering rules — select category first"}
+        footer={<>
+          <Button variant="soft" onClick={onClose}>Close</Button>
+          {!disabled && <Button icon="check" onClick={save}>{isEdit ? "Save changes" : "Create item"}</Button>}
+        </>}>
+        <div className="grid lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-5">
+            <div>
+              <h4 className="text-xs font-semibold uppercase tracking-wider opacity-50 mb-3">Basic details</h4>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <Field label="SKU / Item code" hint={isEdit ? "SKU is locked — Super Admin may override if enabled in Admin → SKU Numbering" : "Auto-generated — unique across ERP"}>
+                  <Text
+                    value={form.sku || (form.categoryId && !isEdit ? store.nextSku(form.categoryId) : "")}
+                    onChange={(v) => { if (VG.skuEngine && VG.skuEngine.canManualOverride(roleKey)) set("sku", v); }}
+                    disabled={!(VG.skuEngine && VG.skuEngine.canManualOverride(roleKey) && !isEdit)}
+                    placeholder="Select category to generate SKU"
+                  />
+                </Field>
+                <Field label="Category" required error={err.categoryId}>
+                  <MasterSelect collection="categories" value={form.categoryId} onChange={pickCategory} actorRole={roleKey} can={can("add")} />
+                  {form.categoryId && !isEdit && (
+                    <p className="text-[11px] opacity-50 mt-1">Type: {typeCodeLabel((store.get("categories", form.categoryId) || {}).typeCode)} → next SKU {store.nextSku(form.categoryId)}</p>
+                  )}
+                </Field>
+                <Field label="Item description" required error={err.name} className="sm:col-span-2">
+                  <Text value={form.name} onChange={(v) => set("name", v)} disabled={disabled} placeholder="e.g. LED Driver 36W Constant Current" />
+                </Field>
+                <Field label="HSN / SAC"><Text value={form.hsn} onChange={(v) => set("hsn", v)} disabled={disabled} placeholder="85044090" /></Field>
+                <Field label="Warranty"><Text value={form.warranty} onChange={(v) => set("warranty", v)} disabled={disabled} placeholder="e.g. 24 months" /></Field>
+              </div>
+            </div>
+            <div>
+              <h4 className="text-xs font-semibold uppercase tracking-wider opacity-50 mb-3">Manufacturer details</h4>
+              <p className="text-[11px] opacity-50 mb-3">Manufacturer + part number must be unique in Item Master (case and spacing normalized).</p>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <Field label="Manufacturer" hint="From Manufacturer Master — add new only with permission">
+                  <MasterSelect collection="manufacturers" value={form.manufacturerId} onChange={(v) => set("manufacturerId", v)} actorRole={roleKey} can={can("add")} filterFn={(m) => m.active !== false} />
+                </Field>
+                <Field label="Manufacturer part number" hint="Searchable — shows matching existing items while typing">
+                  <PartNumberSuggest value={form.manufacturerPartNumber} onChange={(v) => set("manufacturerPartNumber", v)} manufacturerId={form.manufacturerId} excludeItemId={isEdit ? form.id : null} disabled={disabled} />
+                </Field>
+                <Field label="Manufacturer item description" className="sm:col-span-2">
+                  <Area value={form.manufacturerDesc} onChange={(v) => set("manufacturerDesc", v)} disabled={disabled} placeholder="As per manufacturer catalogue / datasheet" />
+                </Field>
+                <Field label="Manufacturer model number"><Text value={form.manufacturerModel} onChange={(v) => set("manufacturerModel", v)} disabled={disabled} placeholder="If applicable" /></Field>
+                <Field label="Brand name"><Text value={form.brandName} onChange={(v) => set("brandName", v)} disabled={disabled} placeholder="If applicable" /></Field>
+                <Field label="Datasheet / document" className="sm:col-span-2">
+                  <input ref={sheetRef} type="file" accept=".pdf,image/*" className="hidden" onChange={onDatasheetPick} />
+                  <div className="flex flex-wrap items-center gap-2">
+                    {form.datasheetName ? <Pill color="var(--accent)">{form.datasheetName}</Pill> : <span className="text-xs opacity-50">No file attached</span>}
+                    {!disabled && <>
+                      <Button variant="soft" icon="upload" className="!py-1" onClick={() => sheetRef.current && sheetRef.current.click()}>Upload</Button>
+                      {form.datasheetName && <Button variant="ghost" icon="trash" className="!py-1" onClick={() => { set("datasheetName", ""); set("datasheetData", ""); }}>Remove</Button>}
+                      {form.datasheetData && <Button variant="ghost" icon="eye" className="!py-1" onClick={() => window.open(form.datasheetData, "_blank")}>View</Button>}
+                    </>}
+                  </div>
+                  <p className="text-[11px] opacity-45 mt-1">PDF or image · max 3 MB</p>
+                </Field>
+              </div>
+            </div>
+            <div>
+              <h4 className="text-xs font-semibold uppercase tracking-wider opacity-50 mb-3">Stock & pricing</h4>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <Field label="Unit of measure"><Select value={form.unit} onChange={(v) => set("unit", v)} options={unitsOpt().map((u) => ({ value: u, label: u }))} /></Field>
+                <Field label="Rate (₹)" required error={err.rate}><Num value={form.rate} onChange={(v) => set("rate", v)} disabled={disabled} /></Field>
+                <Field label="GST">
+                  <Select value={form.taxId} onChange={(v) => set("taxId", v)} options={store.list("taxes").map((t) => ({ value: t.id, label: t.name }))} />
+                </Field>
+                <Field label="Reorder level"><Num value={form.reorder} onChange={(v) => set("reorder", v)} disabled={disabled} /></Field>
+                <Field label="Minimum stock"><Num value={form.minStock} onChange={(v) => set("minStock", v)} disabled={disabled} /></Field>
+                <Field label="Batch / lot tracked">
+                  <Select value={form.batchTracked} onChange={(v) => set("batchTracked", v)} options={["Yes", "No"].map((x) => ({ value: x, label: x }))} />
+                </Field>
+                <Field label="Default store location" className="sm:col-span-2">
+                  <MasterSelect collection="locations" value={form.locationId} onChange={(v) => set("locationId", v)} actorRole={roleKey} can={can("add")} />
+                </Field>
+              </div>
+            </div>
+          </div>
+          <div>
+            <h4 className="text-xs font-semibold uppercase tracking-wider opacity-50 mb-3">Reference image</h4>
+            <Card className="p-4 flex flex-col items-center">
+              <div className="w-full aspect-square max-h-[280px] rounded-xl glass overflow-hidden grid place-items-center mb-3 bg-black/20">
+                {form.image ? (
+                  <img src={form.image} alt="Reference" className="w-full h-full object-contain" />
+                ) : (
+                  <div className="text-center p-6 opacity-50">
+                    <Icon name="box" size={48} className="mx-auto mb-2 opacity-40" />
+                    <p className="text-sm">No reference image</p>
+                    <p className="text-xs mt-1">Upload a photo or drawing for stores &amp; purchase</p>
+                  </div>
+                )}
+              </div>
+              <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onImagePick} />
+              {!disabled && (
+                <div className="flex flex-wrap gap-2 w-full justify-center">
+                  <Button variant="soft" icon="upload" onClick={() => fileRef.current && fileRef.current.click()}>Upload image</Button>
+                  {form.image && <Button variant="ghost" icon="trash" onClick={() => set("image", "")}>Remove</Button>}
+                </div>
+              )}
+              <p className="text-[11px] opacity-45 mt-3 text-center">JPG or PNG · max 4 MB · resized for storage</p>
+            </Card>
+          </div>
+        </div>
+      </Modal>
+    );
+  }
+
+  /* ================= Masters ================= */
+  function ManufacturerForm({ open, onClose, record, roleKey, can, onSaved }) {
+    const isEdit = !!(record && record.id);
+    const disabled = isEdit && !can("edit");
+    const [form, setForm] = useState(() => ({ active: true, ...record }));
+    const [err, setErr] = useState({});
+    const [dirty, setDirty] = useState(false);
+    const set = (k, v) => { setDirty(true); setForm((f) => ({ ...f, [k]: v })); };
+    useEffect(() => {
+      if (!open) return;
+      const base = { active: true, ...record };
+      if (!record || !record.id) base.code = store.nextManufacturerCode();
+      setForm(base);
+      setErr({});
+      setDirty(false);
+    }, [open, record && record.id]);
+    function save() {
+      if (disabled) return onClose();
+      const e = {};
+      if (!form.name) e.name = "Required";
+      if (Object.keys(e).length) { setErr(e); return VG.toast("Please fill required fields", "error"); }
+      const payload = { ...form, active: form.active !== false };
+      if (!isEdit) {
+        payload.code = form.code || store.nextManufacturerCode();
+        store.create("manufacturers", payload, roleKey);
+        VG.toast("Manufacturer " + payload.name + " created");
+      } else {
+        store.update("manufacturers", form.id, payload, roleKey);
+        VG.toast("Manufacturer updated");
+      }
+      onSaved();
+    }
+    return (
+      <Modal open={open} onClose={onClose} size="lg" dirty={dirty && !disabled}
+        title={isEdit ? "Edit Manufacturer · " + (form.code || "") : "New Manufacturer"}
+        subtitle="Used on Item Master — duplicate prevention uses manufacturer name + part number"
+        footer={<><Button variant="soft" onClick={onClose}>Close</Button>{!disabled && <Button icon="check" onClick={save}>{isEdit ? "Save changes" : "Create manufacturer"}</Button>}</>}>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Field label="Code"><Text value={form.code || (!isEdit ? store.nextManufacturerCode() : "")} onChange={() => {}} disabled /></Field>
+          <Field label="Manufacturer name" required error={err.name}><Text value={form.name} onChange={(v) => set("name", v)} disabled={disabled} /></Field>
+          <Field label="Brand name"><Text value={form.brand} onChange={(v) => set("brand", v)} disabled={disabled} /></Field>
+          <Field label="Country"><Text value={form.country} onChange={(v) => set("country", v)} disabled={disabled} /></Field>
+          <Field label="Website"><Text value={form.website} onChange={(v) => set("website", v)} disabled={disabled} /></Field>
+          <Field label="Contact"><Text value={form.contact} onChange={(v) => set("contact", v)} disabled={disabled} /></Field>
+          <Field label="Email" className="sm:col-span-2"><Text type="email" value={form.email} onChange={(v) => set("email", v)} disabled={disabled} /></Field>
+        </div>
+      </Modal>
+    );
+  }
+
+  function ManufacturersPage({ roleKey, can }) {
+    VG.useDB();
+    const [edit, setEdit] = useState(null);
+    const rows = store.list("manufacturers");
+    const cols = [
+      { key: "code", label: "Code", render: (r) => <span className="font-mono text-xs">{r.code}</span> },
+      { key: "name", label: "Manufacturer" },
+      { key: "brand", label: "Brand" },
+      { key: "country", label: "Country" },
+      { key: "items", label: "Items", render: (r) => store.list("items").filter((i) => i.manufacturerId === r.id).length },
+      { key: "active", label: "Status", render: (r) => <Pill color={r.active !== false ? "#34d399" : "#94a3b8"}>{r.active !== false ? "Active" : "Inactive"}</Pill> },
+    ];
+    return (
+      <div>
+        <PageHead title="Manufacturer Master" desc="Canonical manufacturer list for Item Master and purchase traceability" />
+        <RecordTable title="Manufacturers" columns={cols} rows={rows} can={can} printTitle="Manufacturer Master" searchKeys={["name", "code", "brand", "country"]}
+          onNew={() => setEdit({ active: true })} newLabel="New Manufacturer" onEdit={can("edit") ? (r) => setEdit(r) : null}
+          onDelete={can("delete") ? async (r) => {
+            const used = store.list("items").some((i) => i.manufacturerId === r.id);
+            if (used) return VG.toast("Manufacturer is linked to items — cannot delete", "error");
+            if (await VG.confirm({ title: "Delete " + r.name + "?", danger: true, confirmLabel: "Delete" })) { store.remove("manufacturers", r.id, roleKey); VG.toast("Deleted"); }
+          } : null} />
+        {edit !== null && <ManufacturerForm open onClose={() => setEdit(null)} record={edit} roleKey={roleKey} can={can} onSaved={() => setEdit(null)} />}
+      </div>
+    );
+  }
+
+  function ItemsPage({ roleKey, can }) {
+    VG.useDB();
+    const [edit, setEdit] = useState(null);
+    const rows = store.stockSummary();
+    const cols = [
+      { key: "sku", label: "SKU", render: (r) => <span className="font-mono text-xs">{r.sku}</span> },
+      { key: "name", label: "Item", render: (r) => (
+        <span className="flex items-center gap-2 min-w-0">
+          {r.image ? <img src={r.image} alt="" className="w-8 h-8 rounded-lg object-cover shrink-0 border border-white/10" /> : <span className="w-8 h-8 rounded-lg glass shrink-0 grid place-items-center opacity-40"><Icon name="box" size={14} /></span>}
+          <span className="truncate">{r.name}</span>
+        </span>
+      ), csv: (r) => r.name },
+      { key: "category", label: "Category", render: (r) => (store.get("categories", r.categoryId) || {}).name, csv: (r) => (store.get("categories", r.categoryId) || {}).name },
+      ...mfrCols(),
+      { key: "unit", label: "Unit" }, { key: "hsn", label: "HSN" },
+      { key: "rate", label: "Rate", render: (r) => inr(r.rate), csv: (r) => r.rate },
+      { key: "qty", label: "On hand", render: (r) => <span className={r.below ? "text-rose-400 font-medium" : ""}>{r.qty}</span> },
+      { key: "bom", label: "BOM", render: (r) => { const b = store.getDefaultBom && store.getDefaultBom(r.id); return b ? <span className="font-mono text-[10px] opacity-80">{b.no}</span> : "—"; } },
+    ];
+    return (
+      <div>
+        <PageHead title="Item Master" desc="Central catalogue — SKU auto-generated · reference images supported" />
+        <RecordTable title="Items" columns={cols} rows={rows} can={can} printTitle="Item Master" searchKeys={["sku", "name", "hsn", "manufacturerName", "manufacturerPartNumber", "brandName"]}
+          onNew={() => setEdit({ unit: "Nos", taxId: "gst18", batchTracked: "No" })} newLabel="New Item" onView={(r) => setEdit(r)} onEdit={can("edit") ? (r) => setEdit(r) : null}
+          onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete " + r.sku + "?", danger: true, confirmLabel: "Delete" })) { store.remove("items", r.id, roleKey); VG.toast("Deleted"); } } : null} />
+        {edit !== null && <ItemForm open onClose={() => setEdit(null)} record={edit} roleKey={roleKey} can={can} onSaved={() => setEdit(null)} />}
+      </div>
+    );
+  }
+
+  function CategoryForm({ open, onClose, record, roleKey, can, onSaved }) {
+    const isEdit = !!(record && record.id);
+    const disabled = isEdit && !can("edit");
+    const [form, setForm] = useState(() => ({ typeCode: "RWM", ...record }));
+    const [err, setErr] = useState({});
+    const [dirty, setDirty] = useState(false);
+    const set = (k, v) => { setDirty(true); setForm((f) => ({ ...f, [k]: v })); };
+    useEffect(() => {
+      if (!open) return;
+      const base = { typeCode: "RWM", ...record };
+      if (!record || !record.id) base.code = store.nextCategoryCode();
+      setForm(base);
+      setErr({});
+      setDirty(false);
+    }, [open, record && record.id]);
+    function save() {
+      if (disabled) return onClose();
+      const e = {};
+      if (!form.name) e.name = "Required";
+      if (!form.typeCode) e.typeCode = "Required";
+      if (Object.keys(e).length) { setErr(e); return VG.toast("Please fill required fields", "error"); }
+      const payload = { ...form, typeCode: String(form.typeCode).toUpperCase() };
+      if (!isEdit) {
+        payload.code = form.code || store.nextCategoryCode();
+        store.create("categories", payload, roleKey);
+        VG.toast("Category " + payload.code + " created");
+      } else {
+        store.update("categories", form.id, payload, roleKey);
+        VG.toast("Category " + form.code + " updated");
+      }
+      onSaved();
+    }
+    return (
+      <Modal open={open} onClose={onClose} size="lg" dirty={dirty && !disabled}
+        title={isEdit ? "Edit Category · " + (form.code || "") : "New Category"}
+        subtitle={isEdit ? form.name : "Category code continues automatically (CAT-8 → CAT-9)"}
+        footer={<><Button variant="soft" onClick={onClose}>Close</Button>{!disabled && <Button icon="check" onClick={save}>{isEdit ? "Save changes" : "Create category"}</Button>}</>}>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Field label="Category code" hint={isEdit ? "Master category code" : "Auto-assigned from last saved code"}>
+            <Text value={form.code || (!isEdit ? store.nextCategoryCode() : "")} onChange={() => {}} disabled />
+          </Field>
+          <Field label="Stock type code (for SKU)" required error={err.typeCode} hint="Used in item SKU after GLS — e.g. RWM, FNG">
+            <Select value={form.typeCode || "RWM"} onChange={(v) => set("typeCode", v)} options={typeCodeOptions()} disabled={disabled} />
+          </Field>
+          <Field label="Category name" required error={err.name} className="sm:col-span-2">
+            <Text value={form.name} onChange={(v) => set("name", v)} disabled={disabled} placeholder="e.g. Raw Material — Aluminium" />
+          </Field>
+          {!isEdit && form.typeCode && (
+            <div className="sm:col-span-2 text-xs rounded-lg p-2.5" style={{ background: "var(--accent-soft)" }}>
+              New items in this category will get SKU like <b>{store.nextSkuByType(form.typeCode)}</b> (next available number for this type).
+            </div>
+          )}
+        </div>
+      </Modal>
+    );
+  }
+
+  function CategoriesPage({ roleKey, can }) {
+    VG.useDB();
+    const [edit, setEdit] = useState(null);
+    const rows = store.list("categories").map((c) => ({ ...c, count: store.list("items").filter((i) => i.categoryId === c.id).length }));
+    const cols = [
+      { key: "code", label: "Code", render: (r) => <span className="font-mono text-xs">{r.code}</span> },
+      { key: "typeCode", label: "SKU type", render: (r) => <Pill color="var(--accent)">{r.typeCode || "RWM"}</Pill>, csv: (r) => r.typeCode },
+      { key: "name", label: "Category" },
+      { key: "count", label: "Items" },
+    ];
+    return (
+      <div>
+        <PageHead title="Category Master" desc="Category code CAT-n auto · SKU type RWM, FNG, PKG…" />
+        <RecordTable title="Categories" columns={cols} rows={rows} can={can} printTitle="Categories" searchKeys={["name", "code", "typeCode"]}
+          onNew={() => setEdit({ typeCode: "RWM" })} newLabel="New Category" onEdit={can("edit") ? (r) => setEdit(r) : null}
+          onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete category?", danger: true, confirmLabel: "Delete" })) { store.remove("categories", r.id, roleKey); VG.toast("Deleted"); } } : null} />
+        {edit !== null && <CategoryForm open onClose={() => setEdit(null)} record={edit} roleKey={roleKey} can={can} onSaved={() => setEdit(null)} />}
+      </div>
+    );
+  }
+
+  function SuppliersPage({ roleKey, can }) {
+    VG.useDB();
+    const [edit, setEdit] = useState(null);
+    const rows = store.list("suppliers");
+    const cols = [{ key: "code", label: "Code", render: (r) => <span className="font-mono text-xs">{r.code}</span> }, { key: "name", label: "Supplier" }, { key: "contact", label: "Contact" }, { key: "gstin", label: "GSTIN", render: (r) => <span className="font-mono text-xs">{r.gstin}</span> }, { key: "category", label: "Grade", render: (r) => <Pill color="#14b8a6">{r.category}</Pill> }, { key: "rating", label: "Rating" }];
+    function save(form) { if (!form.name || !form.gstin) return VG.toast("Name & GSTIN required", "error"); if (form.id) store.update("suppliers", form.id, form, roleKey); else store.create("suppliers", { ...form, code: store.nextNo("SUPP").replace(/\//g, "-") }, roleKey); VG.toast("Saved"); setEdit(null); }
+    return (
+      <div>
+        <PageHead title="Supplier / Vendor Master" desc="Shared across Purchase, Inventory & Material Issue" />
+        <RecordTable title="Suppliers" columns={cols} rows={rows} can={can} printTitle="Supplier Master" searchKeys={["name", "code", "gstin"]}
+          onNew={() => setEdit({ category: "A-grade", rating: 4 })} newLabel="New Supplier" onView={(r) => setEdit(r)} onEdit={can("edit") ? (r) => setEdit(r) : null}
+          onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete supplier?", danger: true, confirmLabel: "Delete" })) { store.remove("suppliers", r.id, roleKey); VG.toast("Deleted"); } } : null} />
+        {edit && <MasterForm title="Supplier" open onClose={() => setEdit(null)} record={edit} onSave={save} roleKey={roleKey} can={can}
+          fields={[{ k: "name", l: "Company name", req: true }, { k: "contact", l: "Contact person" }, { k: "phone", l: "Phone" }, { k: "email", l: "Email" }, { k: "gstin", l: "GSTIN", req: true }, { k: "category", l: "Grade", select: ["A-grade", "B-grade", "C-grade", "Watch"] }, { k: "rating", l: "Rating", num: true }, { k: "address", l: "Address", area: true, full: true }]} />}
+      </div>
+    );
+  }
+
+  function LocationsPage({ roleKey, can }) {
+    VG.useDB();
+    const [edit, setEdit] = useState(null);
+    const rows = store.list("locations");
+    const cols = [{ key: "code", label: "Code", render: (r) => <span className="font-mono text-xs">{r.code}</span> }, { key: "name", label: "Location / Rack / Bin" }];
+    function save(form) { if (!form.name) return VG.toast("Name required", "error"); if (form.id) store.update("locations", form.id, form, roleKey); else store.create("locations", form, roleKey); VG.toast("Saved"); setEdit(null); }
+    return (
+      <div>
+        <PageHead title="Location / Rack / Bin Master" />
+        <RecordTable title="Locations" columns={cols} rows={rows} can={can} printTitle="Locations" searchKeys={["name", "code"]}
+          onNew={() => setEdit({})} newLabel="New Location" onEdit={can("edit") ? (r) => setEdit(r) : null}
+          onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete location?", danger: true, confirmLabel: "Delete" })) { store.remove("locations", r.id, roleKey); VG.toast("Deleted"); } } : null} />
+        {edit && <MasterForm title="Location" open onClose={() => setEdit(null)} record={edit} onSave={save} fields={[{ k: "code", l: "Code", req: true }, { k: "name", l: "Name", req: true }]} roleKey={roleKey} can={can} />}
+      </div>
+    );
+  }
+
+  /* ================= Stock ledger ================= */
+  function LedgerPage({ roleKey, can }) {
+    VG.useDB();
+    const [item, setItem] = useState("");
+    const summary = store.stockSummary();
+    let entries = store.list("stockLedger").slice().reverse();
+    if (item) entries = entries.filter((e) => e.itemId === item);
+    const TYPE_COLOR = { opening: "#64748b", receipt: "#34d399", issue: "#f87171", "transfer-in": "#60a5fa", "transfer-out": "#f59e0b", return: "#22d3ee", scrap: "#ef4444", adjustment: "#a78bfa" };
+    const ecols = [
+      { key: "date", label: "Date" }, { key: "itemId", label: "Item", render: (r) => itemName(r.itemId), csv: (r) => itemName(r.itemId) },
+      { key: "locationId", label: "Location", render: (r) => locName(r.locationId), csv: (r) => locName(r.locationId) },
+      { key: "type", label: "Type", render: (r) => <Pill color={TYPE_COLOR[r.type] || "#94a3b8"}>{r.type}</Pill> },
+      { key: "qty", label: "Qty", render: (r) => <span className={r.qty < 0 ? "text-rose-400" : "text-emerald-400"}>{r.qty > 0 ? "+" : ""}{r.qty}</span> },
+      { key: "ref", label: "Reference" }, { key: "batch", label: "Batch" },
+    ];
+    return (
+      <div className="space-y-4">
+        <PageHead title="Stock Ledger" desc="Every transaction posts here automatically" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {[["SKUs", summary.length], ["Stock value", inr(summary.reduce((s, x) => s + x.value, 0))], ["Below min", summary.filter((x) => x.below).length], ["Reorder due", summary.filter((x) => x.reorderNeeded).length]].map(([l, v], i) => (
+            <Card key={l} className="p-4"><div className="text-[11px] uppercase tracking-wider opacity-60">{l}</div><div className="text-2xl font-semibold font-display mt-1">{v}</div></Card>
+          ))}
+        </div>
+        <Card className="p-0 overflow-hidden">
+          <div className="p-4 font-semibold text-sm border-b border-white/10">Stock summary</div>
+          <div className="overflow-x-auto"><table className="w-full text-sm">
+            <thead><tr className="text-left text-[11px] uppercase opacity-55 border-b border-white/10"><th className="px-4 py-2">SKU</th><th className="px-4 py-2">Item</th><th className="px-4 py-2 text-right">On hand</th><th className="px-4 py-2 text-right">Min</th><th className="px-4 py-2 text-right">Reorder</th><th className="px-4 py-2 text-right">Value</th><th className="px-4 py-2">Status</th></tr></thead>
+            <tbody>{summary.map((s) => <tr key={s.id} className="border-b border-white/5 chrome-hover cursor-pointer" onClick={() => setItem(s.id === item ? "" : s.id)}><td className="px-4 py-2.5 font-mono text-xs">{s.sku}</td><td className="px-4 py-2.5">{s.name}</td><td className="px-4 py-2.5 text-right font-medium">{s.qty}</td><td className="px-4 py-2.5 text-right opacity-60">{s.minStock}</td><td className="px-4 py-2.5 text-right opacity-60">{s.reorder}</td><td className="px-4 py-2.5 text-right">{inr(s.value)}</td><td className="px-4 py-2.5">{s.below ? <Pill color="#ef4444">Below min</Pill> : s.reorderNeeded ? <Pill color="#f59e0b">Reorder</Pill> : <Pill color="#34d399">OK</Pill>}</td></tr>)}</tbody>
+          </table></div>
+        </Card>
+        <RecordTable title={"Stock movements" + (item ? " — " + itemName(item) : "")} columns={ecols} rows={entries} can={can} printTitle="Stock Ledger"
+          extra={item && <Button variant="soft" onClick={() => setItem("")}>Clear filter</Button>} search={false} />
+      </div>
+    );
+  }
+
+  /* ================= Material Receipt ================= */
+  function ReceiptBuilder({ open, onClose, roleKey, can }) {
+    const [f, setF] = useState({ date: today(), qcRequired: "Yes", qcStatus: "Pending", unit: "Nos" });
+    const [dirty, setDirty] = useState(false);
+    const set = (k, v) => { setDirty(true); setF((p) => ({ ...p, [k]: v })); };
+    function pickItem(id) { const it = store.get("items", id) || {}; setF((p) => ({ ...p, itemId: id, unit: it.unit, rate: it.rate, taxId: it.taxId, locationId: it.locationId, warranty: it.warranty })); }
+    const total = (Number(f.qtyAccepted ?? f.qtyReceived) || 0) * (Number(f.rate) || 0) * (1 + taxRate(f.taxId) / 100);
+    function save() {
+      if (!f.supplierId) return VG.toast("Select supplier from master", "error");
+      if (!f.itemId) return VG.toast("Select item from master", "error");
+      const acc = Number(f.qtyAccepted ?? f.qtyReceived) || 0;
+      if (acc <= 0) return VG.toast("Accepted quantity must be > 0", "error");
+      const rec = store.postReceipt({ ...f, totalValue: total }, roleKey);
+      if (f.qcRequired === "Yes") VG.toast("Receipt " + rec.no + " posted · sent to Quality for inspection", "success");
+      else VG.toast("Receipt " + rec.no + " posted · stock updated");
+      onClose();
+    }
+    const avail = f.itemId ? store.onHand(f.itemId) : 0;
+    return (
+      <Modal open={open} onClose={onClose} size="full" dirty={dirty} title="Material Receipt (GRN)" subtitle="Updates stock ledger on save"
+        footer={<><Button variant="soft" onClick={onClose}>Close</Button><Button variant="soft" icon="eye" onClick={() => printDocument(receiptDoc({ ...f, no: f.no || "DRAFT", totalValue: total }), "preview")}>Preview GRN</Button><Button icon="check" onClick={save}>Post receipt</Button></>}>
+        <div className="grid lg:grid-cols-3 gap-3">
+          <Field label="Receipt date" required><DateF value={f.date} onChange={(v) => set("date", v)} /></Field>
+          <Field label="Supplier (master)" required><MasterSelect collection="suppliers" value={f.supplierId} onChange={(v) => set("supplierId", v)} actorRole={roleKey} can={can("add")} /></Field>
+          <Field label="PO reference"><Text value={f.poRef} onChange={(v) => set("poRef", v)} placeholder="PO-xxxx" /></Field>
+          <Field label="Invoice number"><Text value={f.invoiceNo} onChange={(v) => set("invoiceNo", v)} /></Field>
+          <Field label="Invoice date"><DateF value={f.invoiceDate} onChange={(v) => set("invoiceDate", v)} /></Field>
+          <Field label="Challan number"><Text value={f.challanNo} onChange={(v) => set("challanNo", v)} /></Field>
+          <Field label="Transporter"><Text value={f.transporter} onChange={(v) => set("transporter", v)} /></Field>
+          <Field label="Vehicle number"><Text value={f.vehicleNo} onChange={(v) => set("vehicleNo", v)} /></Field>
+          <Field label="LR number"><Text value={f.lrNo} onChange={(v) => set("lrNo", v)} /></Field>
+        </div>
+        <div className="my-3 h-px bg-white/10" />
+        <div className="grid lg:grid-cols-3 gap-3">
+          <Field label="Item (master)" required className="lg:col-span-2"><MasterSelect variant="line" collection="items" value={f.itemId} onChange={pickItem} actorRole={roleKey} can={can("add")} /></Field>
+          <Field label="Current stock"><div className="rounded-lg glass px-3 py-2 text-sm opacity-80">{avail}</div></Field>
+          <Field label="Qty received" required><Num value={f.qtyReceived} onChange={(v) => set("qtyReceived", v)} /></Field>
+          <Field label="Qty accepted" required><Num value={f.qtyAccepted} onChange={(v) => set("qtyAccepted", v)} /></Field>
+          <Field label="Qty rejected"><Num value={f.qtyRejected} onChange={(v) => set("qtyRejected", v)} /></Field>
+          <Field label="Unit"><Select value={f.unit} onChange={(v) => set("unit", v)} options={unitsOpt().map((u) => ({ value: u, label: u }))} /></Field>
+          <Field label="Rate (₹)"><Num value={f.rate} onChange={(v) => set("rate", v)} /></Field>
+          <Field label="GST"><Select value={f.taxId} onChange={(v) => set("taxId", v)} options={store.list("taxes").map((t) => ({ value: t.id, label: t.name }))} /></Field>
+          <Field label="Storage location (master)" required><MasterSelect collection="locations" value={f.locationId} onChange={(v) => set("locationId", v)} actorRole={roleKey} can={can("add")} /></Field>
+          <Field label="Batch / Lot"><Text value={f.batch} onChange={(v) => set("batch", v)} /></Field>
+          <Field label="Warranty"><Text value={f.warranty} onChange={(v) => set("warranty", v)} /></Field>
+          <Field label="QC required"><Select value={f.qcRequired} onChange={(v) => set("qcRequired", v)} options={[{ value: "Yes", label: "Yes" }, { value: "No", label: "No" }]} /></Field>
+          <Field label="QC status"><Select value={f.qcStatus} onChange={(v) => set("qcStatus", v)} options={["Pending", "Passed", "Failed"].map((x) => ({ value: x, label: x }))} /></Field>
+          <Field label="Documents"><Text value={f.documents} onChange={(v) => set("documents", v)} placeholder="invoice.pdf, photo.jpg" /></Field>
+          <Field label="Remarks" className="lg:col-span-3"><Area value={f.remarks} onChange={(v) => set("remarks", v)} rows={2} /></Field>
+        </div>
+        <div className="mt-2 text-right text-sm">Total value: <b>{inr(total)}</b></div>
+      </Modal>
+    );
+  }
+  function receiptDoc(r) {
+    const supp = store.get("suppliers", r.supplierId) || {};
+    const acc = (r.qtyAccepted ?? r.qtyReceived) || 0;
+    const inner = `
+      <div class="vg-cols">
+        <div class="vg-card"><b>Supplier</b>${supp.name || "—"}<br>${supp.address || ""}<br>GSTIN: ${supp.gstin || "—"}</div>
+        <div class="vg-card"><b>Receipt (GRN)</b>No: ${r.no}<br>Date: ${r.date}<br>PO Ref: ${r.poRef || "—"}<br>Invoice: ${r.invoiceNo || "—"}</div>
+        <div class="vg-card"><b>Transport</b>Challan: ${r.challanNo || "—"}<br>Transporter: ${r.transporter || "—"}<br>Vehicle: ${r.vehicleNo || "—"}<br>LR: ${r.lrNo || "—"}</div>
+      </div>
+      <table class="vg-tbl"><thead><tr><th>Item</th><th>HSN</th><th class="vg-right">Received</th><th class="vg-right">Accepted</th><th class="vg-right">Rejected</th><th class="vg-right">Rate</th><th class="vg-right">Value</th></tr></thead>
+      <tbody><tr><td>${itemName(r.itemId)}</td><td>${(store.get("items", r.itemId) || {}).hsn || ""}</td><td class="vg-right">${r.qtyReceived || 0} ${r.unit}</td><td class="vg-right">${acc} ${r.unit}</td><td class="vg-right">${r.qtyRejected || 0}</td><td class="vg-right">${inr(r.rate || 0)}</td><td class="vg-right">${inr(r.totalValue || 0)}</td></tr></tbody></table>
+      <div class="vg-totals"><div><span>Location</span><span>${locName(r.locationId)}</span></div><div><span>Batch / Lot</span><span>${r.batch || "—"}</span></div><div><span>QC status</span><span>${r.qcStatus || "—"}</span></div><div class="grand"><span>Total Value</span><span>${inr(r.totalValue || 0)}</span></div></div>
+      <div class="vg-terms">${r.remarks ? "<b>Remarks:</b> " + r.remarks : ""}</div>
+      <div class="vg-sign"><div>Received by: <b>${r.createdBy || "—"}</b></div><div>Checked by: <b>—</b></div><div>Approved by: <b>—</b></div><div>For ${store.company().name}</div></div>`;
+    return { title: "Material Receipt (GRN)", subtitle: r.no + " · " + r.date, inner };
+  }
+  function ReceiptPage({ roleKey, can }) {
+    VG.useDB();
+    const [build, setBuild] = useState(false);
+    const rows = store.list("materialReceipts").slice().reverse();
+    const cols = [
+      { key: "no", label: "MRN", render: (r) => <span className="font-mono text-xs">{r.no}</span> }, { key: "date", label: "Date" },
+      { key: "supplierId", label: "Supplier", render: (r) => suppName(r.supplierId), csv: (r) => suppName(r.supplierId) },
+      { key: "itemId", label: "Item", render: (r) => itemName(r.itemId), csv: (r) => itemName(r.itemId) },
+      { key: "qtyAccepted", label: "Accepted", render: (r) => (r.qtyAccepted ?? r.qtyReceived) + " " + r.unit },
+      { key: "qcStatus", label: "QC", render: (r) => <StatusTag value={r.qcStatus} map={{ Pending: "#f59e0b", Passed: "#34d399", Failed: "#ef4444" }} /> },
+      { key: "totalValue", label: "Value", render: (r) => inr(r.totalValue), csv: (r) => r.totalValue },
+    ];
+    return (
+      <div>
+        <PageHead title="Material Receipt" desc="Goods Receipt Notes — auto stock-in" />
+        <RecordTable title="Receipts" columns={cols} rows={rows} can={can} printTitle="Material Receipts" searchKeys={["no", "invoiceNo"]}
+          filters={[{ key: "qcStatus", label: "All QC", options: ["Pending", "Passed", "Failed"] }]}
+          onView={(r) => printDocument(receiptDoc(r), "preview")}
+          onNew={() => setBuild(true)} newLabel="New Receipt" empty="No receipts yet" />
+        {build && <ReceiptBuilder open onClose={() => setBuild(false)} roleKey={roleKey} can={can} />}
+      </div>
+    );
+  }
+
+  /* ================= Material Issue ================= */
+  function IssueBuilder({ open, onClose, roleKey, can, initialType }) {
+    const [f, setF] = useState({ date: today(), type: initialType || ISSUE_TYPES[0], unit: "Nos", approval: "Pending" });
+    const [dirty, setDirty] = useState(false);
+    const set = (k, v) => { setDirty(true); setF((p) => ({ ...p, [k]: v })); };
+    function pickItem(id) { const it = store.get("items", id) || {}; setF((p) => ({ ...p, itemId: id, unit: it.unit, locationId: it.locationId })); }
+    function pickOrder(id) { const o = store.get("salesOrders", id) || {}; setF((p) => ({ ...p, salesOrderId: id, customerId: o.customerId })); }
+    const avail = f.itemId ? store.onHand(f.itemId, f.locationId) : 0;
+    function save() {
+      if (!f.itemId) return VG.toast("Select item from master", "error");
+      if (!f.locationId) return VG.toast("Select stock location", "error");
+      const qty = Number(f.qtyIssued) || 0;
+      if (qty <= 0) return VG.toast("Quantity must be > 0", "error");
+      if (qty > avail) return VG.toast("Insufficient stock — only " + avail + " available", "error");
+      const returnable = f.type === "Vendor Returnable Challan";
+      const no = store.nextNo("MIN", f.date);
+      store.create("materialIssues", { ...f, no, issuedBy: roleKey, pendingReturn: returnable, returnedQty: 0 }, roleKey);
+      store.postLedger({ itemId: f.itemId, locationId: f.locationId, type: "issue", qty: -qty, ref: no, batch: f.batch || "", date: f.date }, roleKey);
+      store.audit(roleKey, "stock-out", "stockLedger", no, "Issue " + qty + " × " + itemName(f.itemId) + " (" + f.type + ")");
+      VG.toast("Issue " + no + " posted · stock reduced");
+      onClose();
+    }
+    return (
+      <Modal open={open} onClose={onClose} size="full" dirty={dirty} title="Material Issue" subtitle="Reduces stock on save · challan can be printed"
+        footer={<><Button variant="soft" onClick={onClose}>Close</Button><Button variant="soft" icon="eye" onClick={() => printDocument(issueChallanDoc({ ...f, no: f.no || "DRAFT", issuedBy: roleKey }), "preview")}>Preview challan</Button><Button icon="check" onClick={save}>Post issue</Button></>}>
+        <div className="grid lg:grid-cols-3 gap-3">
+          <Field label="Issue date" required><DateF value={f.date} onChange={(v) => set("date", v)} /></Field>
+          <Field label="Issue type" required className="lg:col-span-2"><Select value={f.type} onChange={(v) => set("type", v)} options={ISSUE_TYPES.map((t) => ({ value: t, label: t }))} /></Field>
+          <Field label="Item (master)" required className="lg:col-span-2"><MasterSelect variant="line" collection="items" value={f.itemId} onChange={pickItem} actorRole={roleKey} can={can("add")} /></Field>
+          <Field label="Stock location (master)" required><MasterSelect collection="locations" value={f.locationId} onChange={(v) => set("locationId", v)} actorRole={roleKey} can={can("add")} /></Field>
+          <Field label="Available stock"><div className={"rounded-lg glass px-3 py-2 text-sm " + (avail <= 0 ? "text-rose-400" : "opacity-80")}>{avail}</div></Field>
+          <Field label="Quantity issued" required><Num value={f.qtyIssued} onChange={(v) => set("qtyIssued", v)} /></Field>
+          <Field label="Unit"><Select value={f.unit} onChange={(v) => set("unit", v)} options={unitsOpt().map((u) => ({ value: u, label: u }))} /></Field>
+          <Field label="Received by"><Text value={f.receivedBy} onChange={(v) => set("receivedBy", v)} /></Field>
+          <Field label="Approval status"><Select value={f.approval} onChange={(v) => set("approval", v)} options={["Pending", "Approved"].map((x) => ({ value: x, label: x }))} /></Field>
+          <Field label="Documents"><Text value={f.documents} onChange={(v) => set("documents", v)} placeholder="challan.pdf" /></Field>
+        </div>
+
+        <div className="my-3 h-px bg-white/10" />
+        <div className="text-[11px] uppercase tracking-wider opacity-55 mb-2">{f.type} — specific details</div>
+        <div className="grid lg:grid-cols-3 gap-3">
+          {f.type === "Issue for Invoicing" && <>
+            <Field label="Sales order (master)" required><MasterSelect collection="salesOrders" value={f.salesOrderId} onChange={pickOrder} actorRole={roleKey} allowCreate={false} /></Field>
+            <Field label="Customer"><div className="rounded-lg glass px-3 py-2 text-sm opacity-80">{f.customerId ? (store.get("customers", f.customerId) || {}).name : "—"}</div></Field>
+            <Field label="Invoice number"><Text value={f.invoiceNo} onChange={(v) => set("invoiceNo", v)} /></Field>
+            <Field label="Dispatch details"><Text value={f.dispatch} onChange={(v) => set("dispatch", v)} /></Field>
+            <Field label="Packing details"><Text value={f.packing} onChange={(v) => set("packing", v)} /></Field>
+            <Field label="Transport details"><Text value={f.transport} onChange={(v) => set("transport", v)} /></Field>
+          </>}
+          {f.type === "Internal Use / Production" && <>
+            <Field label="Work order #"><Text value={f.productionOrder} onChange={(v) => set("productionOrder", v)} placeholder="WO/2627/0001" /></Field>
+            <Field label="BOM">
+              <Select value={f.bomId || ""} onChange={(v) => {
+                const b = store.get("boms", v);
+                setF((p) => ({ ...p, bomId: v, bomRef: b ? b.no : "" }));
+              }} options={[{ value: "", label: "— Select BOM —" }].concat(
+                store.list("boms").filter((b) => b.status === "Active").map((b) => ({
+                  value: b.id,
+                  label: b.no + " · " + itemName(b.finishedItemId).split(" — ")[0],
+                }))
+              )} />
+            </Field>
+            <Field label="Department"><Text value={f.department} onChange={(v) => set("department", v)} /></Field>
+            <Field label="Machine / project"><Text value={f.machineRef} onChange={(v) => set("machineRef", v)} /></Field>
+            <Field label="Consumption purpose"><Text value={f.purpose} onChange={(v) => set("purpose", v)} /></Field>
+            <Field label="WIP tracking"><Select value={f.wip} onChange={(v) => set("wip", v)} options={["Yes", "No"].map((x) => ({ value: x, label: x }))} /></Field>
+          </>}
+          {f.type === "Vendor Returnable Challan" && <>
+            <Field label="Vendor (master)" required><MasterSelect collection="suppliers" value={f.vendorId} onChange={(v) => set("vendorId", v)} actorRole={roleKey} can={can("add")} /></Field>
+            <Field label="Returnable challan #"><Text value={f.challanNo} onChange={(v) => set("challanNo", v)} /></Field>
+            <Field label="Expected return date"><DateF value={f.expectedReturn} onChange={(v) => set("expectedReturn", v)} /></Field>
+            <Field label="Purpose"><Text value={f.purpose} onChange={(v) => set("purpose", v)} placeholder="Job work / repair" /></Field>
+            <Field label="Item condition before"><Text value={f.condition} onChange={(v) => set("condition", v)} /></Field>
+            <Field label="Partial return allowed"><Select value={f.partial} onChange={(v) => set("partial", v)} options={["Yes", "No"].map((x) => ({ value: x, label: x }))} /></Field>
+          </>}
+          {f.type === "Vendor Non-Returnable Challan" && <>
+            <Field label="Vendor (master)" required><MasterSelect collection="suppliers" value={f.vendorId} onChange={(v) => set("vendorId", v)} actorRole={roleKey} can={can("add")} /></Field>
+            <Field label="Non-returnable challan #"><Text value={f.challanNo} onChange={(v) => set("challanNo", v)} /></Field>
+            <Field label="Reason"><Text value={f.reason} onChange={(v) => set("reason", v)} /></Field>
+            <Field label="Cost impact (₹)"><Num value={f.costImpact} onChange={(v) => set("costImpact", v)} /></Field>
+            <Field label="Approval required"><Select value={f.approvalRequired} onChange={(v) => set("approvalRequired", v)} options={["Yes", "No"].map((x) => ({ value: x, label: x }))} /></Field>
+          </>}
+          <Field label="Remarks" className="lg:col-span-3"><Area value={f.remarks} onChange={(v) => set("remarks", v)} rows={2} /></Field>
+        </div>
+      </Modal>
+    );
+  }
+  function issueChallanPDF(m, mode) { printDocument(issueChallanDoc(m), mode); }
+  function issueChallanDoc(m) {
+    const cust = m.customerId ? (store.get("customers", m.customerId) || {}) : null;
+    const ship = cust && VG.customerAddr ? VG.customerAddr(cust, "shipping").text : "";
+    const inner = `
+      <div class="vg-cols">
+        <div class="vg-card"><b>Issue / Challan</b>No: ${m.no}<br>Date: ${m.date}<br>Type: ${m.type}</div>
+        <div class="vg-card"><b>Reference</b>${m.salesOrderId ? "SO: " + (store.get("salesOrders", m.salesOrderId) || {}).no : m.vendorId ? "Vendor: " + suppName(m.vendorId) : m.productionOrder ? "Prod: " + m.productionOrder : "—"}<br>${m.challanNo ? "Challan: " + m.challanNo : ""}${m.invoiceNo ? "<br>Invoice: " + m.invoiceNo : ""}</div>
+        ${cust ? `<div class="vg-card"><b>Ship To</b>${cust.name || ""}<br>${ship || ""}</div>` : `<div class="vg-card"><b>Location</b>${locName(m.locationId)}</div>`}
+      </div>
+      <table class="vg-tbl"><thead><tr><th>Item</th><th class="vg-right">Qty</th><th>Unit</th><th>Location</th><th>Batch</th></tr></thead>
+      <tbody><tr><td>${itemName(m.itemId)}</td><td class="vg-right">${m.qtyIssued || 0}</td><td>${m.unit}</td><td>${locName(m.locationId)}</td><td>${m.batch || "—"}</td></tr></tbody></table>
+      <div class="vg-terms">${m.purpose ? "<b>Purpose:</b> " + m.purpose + "<br>" : ""}${m.remarks ? "<b>Remarks:</b> " + m.remarks : ""}</div>
+      <div class="vg-sign"><div>Issued by: <b>${m.issuedBy || "—"}</b></div><div>Checked by: <b>—</b></div><div>Received by: <b>${m.receivedBy || "—"}</b></div><div>For ${store.company().name}</div></div>`;
+    return { title: m.type || "Material Issue", subtitle: m.no + " · " + m.date, inner };
+  }
+  function IssuePage({ roleKey, can, defaultType }) {
+    VG.useDB();
+    const [build, setBuild] = useState(false);
+    const rows = store.list("materialIssues").slice().reverse().filter((r) => !defaultType || r.type === defaultType);
+    const cols = [
+      { key: "no", label: "MIN", render: (r) => <span className="font-mono text-xs">{r.no}</span> }, { key: "date", label: "Date" },
+      { key: "type", label: "Type", render: (r) => <Pill color="#6366f1">{r.type.replace(" Challan", "").replace("Issue for ", "")}</Pill>, csv: (r) => r.type },
+      { key: "itemId", label: "Item", render: (r) => itemName(r.itemId), csv: (r) => itemName(r.itemId) },
+      { key: "qtyIssued", label: "Qty", render: (r) => r.qtyIssued + " " + r.unit },
+      { key: "ref", label: "Reference", render: (r) => r.salesOrderId ? (store.get("salesOrders", r.salesOrderId) || {}).no : r.vendorId ? suppName(r.vendorId) : r.productionOrder || "—", csv: (r) => r.salesOrderId || r.vendorId || r.productionOrder || "" },
+      { key: "pendingReturn", label: "Return", render: (r) => r.type === "Vendor Returnable Challan" ? (r.pendingReturn ? <Pill color="#f59e0b">Pending</Pill> : <Pill color="#34d399">Returned</Pill>) : "—" },
+    ];
+    return (
+      <div>
+        <PageHead title={defaultType === "Vendor Returnable Challan" ? "Returnable Challan" : defaultType === "Vendor Non-Returnable Challan" ? "Non-Returnable Challan" : "Material Issue"} desc="Invoicing · Production · Vendor challans" />
+        <RecordTable title="Issues" columns={cols} rows={rows} can={can} printTitle="Material Issues" searchKeys={["no", "type"]}
+          filters={defaultType ? [] : [{ key: "type", label: "All types", options: ISSUE_TYPES }]}
+          onNew={() => setBuild(true)} newLabel="New Issue" onView={(r) => issueChallanPDF(r, "preview")} empty="No issues yet" />
+        {build && <IssueBuilder open onClose={() => setBuild(false)} roleKey={roleKey} can={can} initialType={defaultType} />}
+      </div>
+    );
+  }
+
+  function MaterialReqPage({ roleKey, can }) {
+    VG.useDB();
+    const [view, setView] = useState(null);
+    const rows = store.list("materialRequirements").slice().reverse();
+    const fgRows = store.list("finishedGoodsTransfers").slice().reverse();
+    const cols = [
+      { key: "no", label: "MR #", render: (r) => <span className="font-mono text-xs">{r.no}</span> },
+      { key: "workOrderNo", label: "WO" },
+      { key: "requiredByDate", label: "Required by" },
+      { key: "bomNo", label: "BOM", render: (r) => (r.bomNo ? (r.bomNo + " · " + (r.bomRevision || "Rev-00")) : "—") },
+      { key: "priority", label: "Priority", render: (r) => <Pill color={r.priority === "Critical" ? "#ef4444" : r.priority === "High Priority" ? "#f59e0b" : "#6366f1"}>{r.priority || "Normal"}</Pill> },
+      { key: "status", label: "Status", render: (r) => <StatusTag value={r.status} map={{ Open: "#f59e0b", "Partially Issued": "#22d3ee", "Fully Issued": "#34d399", "Shortage Pending": "#ef4444" }} /> },
+      { key: "act", label: "Action", render: (r) => can("edit") ? <div className="flex gap-1">
+        <Button variant="soft" className="!py-1" onClick={() => setView(r)}>BOM run</Button>
+        <Button variant="soft" className="!py-1" onClick={() => {
+        const issued = {};
+        (r.lines || []).forEach((ln) => { issued[ln.itemId] = Number(ln.requiredQty) || 0; });
+        const out = store.issueMaterialAgainstRequirement(r.id, { issued, remarks: "Issued from stores", receivedBy: roleKey }, roleKey);
+        if (out) VG.toast("Issue status: " + out.issueStatus, out.shortages && out.shortages.length ? "warn" : "success");
+      }}>Issue material</Button>
+      </div> : "—" },
+    ];
+    const fgCols = [
+      { key: "no", label: "FG #", render: (r) => <span className="font-mono text-xs">{r.no}</span> },
+      { key: "workOrderNo", label: "WO" },
+      { key: "sku", label: "SKU" },
+      { key: "qtyTransferred", label: "Qty" },
+      { key: "status", label: "Status", render: (r) => <StatusTag value={r.status} map={{ "Pending Stores Acceptance": "#f59e0b", "Accepted by Stores": "#34d399", "Issued to QC": "#22d3ee" }} /> },
+      { key: "act", label: "Action", render: (r) => (
+        <div className="flex gap-1">
+          {r.status === "Pending Stores Acceptance" && can("edit") && <Button variant="soft" className="!py-1" onClick={() => { store.acceptFinishedGoodsTransfer(r.id, roleKey); VG.toast("FG accepted"); }}>Accept</Button>}
+          {r.status === "Accepted by Stores" && can("edit") && <Button variant="soft" className="!py-1" onClick={() => { const q = store.issueFinishedGoodsToQC(r.id, { receivedByQc: "", priority: "Normal" }, roleKey); if (q) VG.toast("Issued to QC: " + q.no); }}>Issue to QC</Button>}
+        </div>
+      ) },
+    ];
+    return (
+      <div className="space-y-5">
+        <PageHead title="Material Requirement & FG Handover" desc="Stores queue: issue materials to production and route finished goods to QC" />
+        <RecordTable title="Material requirements" columns={cols} rows={rows} can={can} printTitle="Material Requirements" searchKeys={["no", "workOrderNo"]} empty="No material requirements pending" />
+        <RecordTable title="Finished goods transfer" columns={fgCols} rows={fgRows} can={can} printTitle="Finished Goods Transfer" searchKeys={["no", "workOrderNo"]} empty="No finished goods transfers" />
+        {view && (
+          <Modal open onClose={() => setView(null)} size="xl" title={"Material Availability & Shortage · " + view.no} subtitle={view.workOrderNo}>
+            <div className="text-xs opacity-70 mb-3">WO: {view.workOrderNo} · SO: {view.salesOrderNo || "—"} · BOM: {view.bomNo || "—"} {view.bomRevision || ""}</div>
+            <div className="overflow-x-auto rounded-xl glass">
+              <table className="w-full text-xs">
+                <thead><tr className="opacity-55 text-[10px] uppercase border-b border-white/10">
+                  <th className="text-left px-2 py-2">SKU</th><th className="text-left px-2 py-2">Description</th><th className="text-left px-2 py-2">Category</th>
+                  <th className="text-right px-2 py-2">Required</th><th className="text-right px-2 py-2">Available</th><th className="text-right px-2 py-2">Reserved</th>
+                  <th className="text-right px-2 py-2">Free</th><th className="text-right px-2 py-2">Issue now</th><th className="text-right px-2 py-2">Shortage</th><th className="text-left px-2 py-2">PR</th>
+                </tr></thead>
+                <tbody>
+                  {(store.materialAvailabilityReportForMR(view.id) || []).map((ln, i) => (
+                    <tr key={i} className="border-b border-white/5">
+                      <td className="px-2 py-1.5 font-mono">{ln.sku}</td><td className="px-2 py-1.5">{ln.description}</td><td className="px-2 py-1.5">{ln.category}</td>
+                      <td className="px-2 py-1.5 text-right">{ln.requiredQty}</td><td className="px-2 py-1.5 text-right">{ln.availableStock}</td><td className="px-2 py-1.5 text-right">{ln.reservedStock}</td>
+                      <td className="px-2 py-1.5 text-right">{ln.freeStock}</td><td className="px-2 py-1.5 text-right">{ln.qtyCanIssueNow}</td><td className="px-2 py-1.5 text-right">{ln.shortageQty}</td>
+                      <td className="px-2 py-1.5">{ln.purchaseRequestStatus || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Modal>
+        )}
+      </div>
+    );
+  }
+
+  /* ================= Stock transfer ================= */
+  function TransferPage({ roleKey, can }) {
+    VG.useDB();
+    const [build, setBuild] = useState(false);
+    const rows = store.list("stockTransfers").slice().reverse();
+    const cols = [
+      { key: "no", label: "Transfer #", render: (r) => <span className="font-mono text-xs">{r.no}</span> }, { key: "date", label: "Date" },
+      { key: "itemId", label: "Item", render: (r) => itemName(r.itemId), csv: (r) => itemName(r.itemId) },
+      { key: "from", label: "From", render: (r) => locName(r.fromId), csv: (r) => locName(r.fromId) },
+      { key: "to", label: "To", render: (r) => locName(r.toId), csv: (r) => locName(r.toId) },
+      { key: "qty", label: "Qty" },
+    ];
+    return (
+      <div>
+        <PageHead title="Stock Transfer" desc="Move stock between locations / racks / bins" />
+        <RecordTable title="Transfers" columns={cols} rows={rows} can={can} printTitle="Stock Transfers" searchKeys={["no"]} onNew={() => setBuild(true)} newLabel="New Transfer" empty="No transfers yet" />
+        {build && <TxnBuilder open onClose={() => setBuild(false)} roleKey={roleKey} can={can} title="Stock Transfer" seq="TRF" coll="stockTransfers"
+          fields={[{ k: "fromId", l: "From location", master: "locations", req: true }, { k: "toId", l: "To location", master: "locations", req: true }, { k: "qty", l: "Quantity", num: true, req: true }, { k: "reason", l: "Reason" }]}
+          onPost={(f, no) => { const q = Number(f.qty); store.postLedger({ itemId: f.itemId, locationId: f.fromId, type: "transfer-out", qty: -q, ref: no, date: f.date }, roleKey); store.postLedger({ itemId: f.itemId, locationId: f.toId, type: "transfer-in", qty: q, ref: no, date: f.date }, roleKey); }} />}
+      </div>
+    );
+  }
+
+  /* ================= Returns ================= */
+  function ReturnsPage({ roleKey, can }) {
+    VG.useDB();
+    const [build, setBuild] = useState(false);
+    const rows = store.list("returns").slice().reverse();
+    const cols = [
+      { key: "no", label: "Return #", render: (r) => <span className="font-mono text-xs">{r.no}</span> }, { key: "date", label: "Date" },
+      { key: "kind", label: "Type", render: (r) => <Pill color="#22d3ee">{r.kind}</Pill> },
+      { key: "itemId", label: "Item", render: (r) => itemName(r.itemId), csv: (r) => itemName(r.itemId) },
+      { key: "qty", label: "Qty" }, { key: "reason", label: "Reason" },
+    ];
+    return (
+      <div>
+        <PageHead title="Return Management" desc="Customer returns & vendor returnable receipts (stock-in)" />
+        <RecordTable title="Returns" columns={cols} rows={rows} can={can} printTitle="Returns" searchKeys={["no", "reason"]} onNew={() => setBuild(true)} newLabel="New Return" empty="No returns yet" />
+        {build && <TxnBuilder open onClose={() => setBuild(false)} roleKey={roleKey} can={can} title="Return" seq="RET" coll="returns"
+          fields={[{ k: "kind", l: "Return type", select: ["Customer Return", "Vendor Returnable In"], req: true }, { k: "locationId", l: "To location", master: "locations", req: true }, { k: "qty", l: "Quantity", num: true, req: true }, { k: "reason", l: "Reason" }]}
+          onPost={(f, no) => { store.postLedger({ itemId: f.itemId, locationId: f.locationId, type: "return", qty: Number(f.qty), ref: no, date: f.date }, roleKey); }} />}
+      </div>
+    );
+  }
+
+  /* ================= Scrap ================= */
+  function ScrapPage({ roleKey, can }) {
+    VG.useDB();
+    const [build, setBuild] = useState(false);
+    const rows = store.list("scrap").slice().reverse();
+    const cols = [
+      { key: "no", label: "Scrap #", render: (r) => <span className="font-mono text-xs">{r.no}</span> }, { key: "date", label: "Date" },
+      { key: "itemId", label: "Item", render: (r) => itemName(r.itemId), csv: (r) => itemName(r.itemId) }, { key: "qty", label: "Qty" }, { key: "reason", label: "Reason" },
+    ];
+    return (
+      <div>
+        <PageHead title="Scrap / Rejection Entry" desc="Write off rejected / damaged stock" />
+        <RecordTable title="Scrap entries" columns={cols} rows={rows} can={can} printTitle="Scrap" searchKeys={["no", "reason"]} onNew={() => setBuild(true)} newLabel="New Scrap" empty="No scrap entries" />
+        {build && <TxnBuilder open onClose={() => setBuild(false)} roleKey={roleKey} can={can} title="Scrap" seq="SCR" coll="scrap"
+          fields={[{ k: "locationId", l: "From location", master: "locations", req: true }, { k: "qty", l: "Quantity", num: true, req: true }, { k: "reason", l: "Reason", req: true }]}
+          onPost={(f, no) => { store.postLedger({ itemId: f.itemId, locationId: f.locationId, type: "scrap", qty: -Number(f.qty), ref: no, date: f.date }, roleKey); }} />}
+      </div>
+    );
+  }
+
+  /* ================= Physical verification ================= */
+  function PhysicalPage({ roleKey, can }) {
+    VG.useDB();
+    const summary = store.stockSummary();
+    const [counts, setCounts] = useState({});
+    function postAdjust(it) {
+      const counted = Number(counts[it.id]);
+      if (Number.isNaN(counted)) return VG.toast("Enter counted qty", "error");
+      const diff = counted - it.qty;
+      if (diff === 0) return VG.toast("No difference for " + it.sku, "info");
+      const no = store.nextNo("PV", today());
+      store.postLedger({ itemId: it.id, locationId: it.locationId, type: "adjustment", qty: diff, ref: no, date: today() }, roleKey);
+      store.create("physicalVerifications", { no, date: today(), itemId: it.id, system: it.qty, counted, diff, by: roleKey }, roleKey);
+      VG.toast("Adjusted " + it.sku + " by " + (diff > 0 ? "+" : "") + diff);
+      setCounts((c) => ({ ...c, [it.id]: "" }));
+    }
+    return (
+      <div>
+        <PageHead title="Physical Stock Verification" desc="Count vs system — posts adjustment entries to the ledger" />
+        <Card className="p-0 overflow-hidden">
+          <div className="overflow-x-auto"><table className="w-full text-sm">
+            <thead><tr className="text-left text-[11px] uppercase opacity-55 border-b border-white/10"><th className="px-4 py-2">SKU</th><th className="px-4 py-2">Item</th><th className="px-4 py-2 text-right">System</th><th className="px-4 py-2 text-right w-28">Counted</th><th className="px-4 py-2 text-right">Diff</th><th className="px-4 py-2"></th></tr></thead>
+            <tbody>{summary.map((it) => { const counted = counts[it.id]; const diff = counted === "" || counted === undefined ? null : Number(counted) - it.qty; return (
+              <tr key={it.id} className="border-b border-white/5">
+                <td className="px-4 py-2 font-mono text-xs">{it.sku}</td><td className="px-4 py-2">{it.name}</td><td className="px-4 py-2 text-right">{it.qty}</td>
+                <td className="px-4 py-2"><input type="number" value={counts[it.id] ?? ""} onChange={(e) => setCounts((c) => ({ ...c, [it.id]: e.target.value }))} className="w-24 rounded-lg glass px-2 py-1 text-sm bg-transparent outline-none text-right" /></td>
+                <td className={"px-4 py-2 text-right " + (diff ? (diff < 0 ? "text-rose-400" : "text-emerald-400") : "opacity-40")}>{diff === null ? "—" : (diff > 0 ? "+" : "") + diff}</td>
+                <td className="px-4 py-2 text-right">{can("edit") && <Button variant="soft" className="!py-1" onClick={() => postAdjust(it)}>Adjust</Button>}</td>
+              </tr>); })}</tbody>
+          </table></div>
+        </Card>
+      </div>
+    );
+  }
+
+  /* ================= Alerts, batches, reports ================= */
+  function AlertsPage({ roleKey, can }) {
+    VG.useDB();
+    const low = store.stockSummary().filter((s) => s.reorderNeeded);
+    const cols = [
+      { key: "sku", label: "SKU", render: (r) => <span className="font-mono text-xs">{r.sku}</span> }, { key: "name", label: "Item" },
+      { key: "qty", label: "On hand", render: (r) => <span className="text-rose-400 font-medium">{r.qty}</span> }, { key: "minStock", label: "Min" }, { key: "reorder", label: "Reorder level" },
+      { key: "gap", label: "Shortfall", render: (r) => Math.max(0, r.reorder - r.qty), csv: (r) => Math.max(0, r.reorder - r.qty) },
+    ];
+    return (
+      <div>
+        <PageHead title="Stock Alerts & Reorder" desc="Items at or below reorder level" />
+        <RecordTable title="Reorder list" columns={cols} rows={low} can={can} printTitle="Reorder Report" searchKeys={["sku", "name"]} empty="All items above reorder level 🎉" />
+      </div>
+    );
+  }
+  function BatchesPage({ roleKey, can }) {
+    VG.useDB();
+    const map = {};
+    store.list("stockLedger").filter((e) => e.batch).forEach((e) => { const k = e.itemId + "|" + e.batch; map[k] = map[k] || { itemId: e.itemId, batch: e.batch, qty: 0, first: e.date }; map[k].qty += e.qty; });
+    const rows = Object.values(map).map((r, i) => ({ id: "b" + i, ...r }));
+    const cols = [
+      { key: "batch", label: "Batch / Lot" }, { key: "itemId", label: "Item", render: (r) => itemName(r.itemId), csv: (r) => itemName(r.itemId) },
+      { key: "qty", label: "Balance qty" }, { key: "first", label: "First seen" },
+    ];
+    return (
+      <div>
+        <PageHead title="Batch / Lot Tracking" desc="Balances by batch for traceability" />
+        <RecordTable title="Batches" columns={cols} rows={rows} can={can} printTitle="Batch Tracking" searchKeys={["batch"]} empty="No batch-tracked stock yet" />
+      </div>
+    );
+  }
+  function ReportsPage({ roleKey, can }) {
+    VG.useDB();
+    const summary = store.stockSummary();
+    const mfrItemRows = store.list("items").map((it) => ({
+      ...it,
+      manufacturer: VG.itemMfr.manufacturerName(it),
+      partNo: VG.itemMfr.partNumber(it),
+    }));
+    const dupGroups = store.scanMfrDuplicates();
+    const dupRows = dupGroups.map((g, i) => ({
+      id: "dup" + i,
+      key: g.key,
+      skus: g.items.map((it) => it.sku).join(", "),
+      names: g.items.map((it) => it.name).join(" · "),
+      count: g.items.length,
+    }));
+    const noPartRows = store.list("items").filter((it) => !String(it.manufacturerPartNumber || "").trim());
+    const purchHist = store.manufacturerPurchaseHistory();
+    const reports = [
+      { n: "Stock Summary", run: () => fx.printTable("Stock Summary", [{ key: "sku", label: "SKU" }, { key: "name", label: "Item" }, ...mfrCols(), { key: "qty", label: "On hand" }, { key: "v", label: "Value", csv: (r) => inr(r.value) }], summary) },
+      { n: "Reorder Report", run: () => fx.printTable("Reorder Report", [{ key: "sku", label: "SKU" }, { key: "name", label: "Item" }, ...mfrCols(), { key: "qty", label: "On hand" }, { key: "reorder", label: "Reorder" }], summary.filter((s) => s.reorderNeeded)) },
+      { n: "Manufacturer-wise item list", run: () => fx.printTable("Manufacturer-wise Items", [{ key: "manufacturer", label: "Manufacturer" }, { key: "partNo", label: "Part no." }, { key: "sku", label: "SKU" }, { key: "name", label: "Item" }, { key: "rate", label: "Rate", csv: (r) => inr(r.rate) }], mfrItemRows.filter((r) => r.manufacturer).sort((a, b) => String(a.manufacturer).localeCompare(b.manufacturer))) },
+      { n: "Part-number item search (all items)", run: () => fx.printTable("Items by Part Number", [{ key: "partNo", label: "Part no." }, { key: "manufacturer", label: "Manufacturer" }, { key: "sku", label: "SKU" }, { key: "name", label: "Item" }], mfrItemRows.filter((r) => r.partNo).sort((a, b) => String(a.partNo).localeCompare(b.partNo))) },
+      { n: "Duplicate item warning report", run: () => fx.printTable("Duplicate Manufacturer + Part Number", [{ key: "key", label: "Normalized key" }, { key: "count", label: "Count" }, { key: "skus", label: "SKUs" }, { key: "names", label: "Items" }], dupRows) },
+      { n: "Items without manufacturer part number", run: () => fx.printTable("Items Missing Mfr Part No.", [{ key: "sku", label: "SKU" }, { key: "name", label: "Item" }, { key: "manufacturer", label: "Manufacturer", csv: (r) => VG.itemMfr.manufacturerName(r) }], noPartRows) },
+      { n: "Manufacturer-wise purchase history", run: () => fx.printTable("Manufacturer Purchase History", [{ key: "date", label: "Date" }, { key: "docType", label: "Type" }, { key: "docNo", label: "Document" }, { key: "manufacturer", label: "Manufacturer" }, { key: "partNo", label: "Part no." }, { key: "sku", label: "SKU" }, { key: "qty", label: "Qty" }, { key: "value", label: "Value", csv: (r) => inr(r.value) }], purchHist) },
+      { n: "Stock Ledger", run: () => fx.printTable("Stock Ledger", [{ key: "date", label: "Date" }, { key: "i", label: "Item", csv: (r) => itemName(r.itemId) }, { key: "type", label: "Type" }, { key: "qty", label: "Qty" }, { key: "ref", label: "Ref" }], store.list("stockLedger")) },
+      { n: "Material Receipts", run: () => fx.printTable("Material Receipts", [{ key: "no", label: "MRN" }, { key: "date", label: "Date" }, { key: "s", label: "Supplier", csv: (r) => suppName(r.supplierId) }, { key: "i", label: "Item", csv: (r) => itemName(r.itemId) }, { key: "v", label: "Value", csv: (r) => inr(r.totalValue) }], store.list("materialReceipts")) },
+      { n: "Material Issues", run: () => fx.printTable("Material Issues", [{ key: "no", label: "MIN" }, { key: "date", label: "Date" }, { key: "type", label: "Type" }, { key: "i", label: "Item", csv: (r) => itemName(r.itemId) }, { key: "qtyIssued", label: "Qty" }], store.list("materialIssues")) },
+    ];
+    return (
+      <div>
+        <PageHead title="Inventory Reports" desc="All reports carry company header & footer" />
+        <div className="grid sm:grid-cols-2 gap-3">{reports.map((r) => (
+          <Card key={r.n} className="p-4 flex items-center gap-4"><span className="grid place-items-center w-11 h-11 rounded-xl text-white shrink-0" style={{ background: "var(--accent)" }}><Icon name="chart" size={18} /></span><div className="flex-1"><div className="font-medium text-sm">{r.n}</div></div>{can("print") && <Button variant="soft" icon="printer" onClick={r.run}>Print</Button>}{can("export") && <Button variant="ghost" icon="download" onClick={r.run}>{""}</Button>}</Card>
+        ))}</div>
+      </div>
+    );
+  }
+
+  function Dashboard(props) {
+    return VG.ModuleDashboard ? <VG.ModuleDashboard modId="inventory" {...props} /> : null;
+  }
+
+  /* generic transaction builder (transfer / return / scrap) */
+  function TxnBuilder({ open, onClose, roleKey, can, title, seq, coll, fields, onPost }) {
+    const [f, setF] = useState({ date: today() });
+    const [dirty, setDirty] = useState(false);
+    const set = (k, v) => { setDirty(true); setF((p) => ({ ...p, [k]: v })); };
+    const avail = f.itemId ? store.onHand(f.itemId, f.fromId || f.locationId) : 0;
+    function save() {
+      if (!f.itemId) return VG.toast("Select item from master", "error");
+      for (const fl of fields) if (fl.req && (f[fl.k] === undefined || f[fl.k] === "")) return VG.toast(fl.l + " required", "error");
+      const out = (f.fromId || f.locationId) && (seq === "TRF" || seq === "SCR");
+      if (out && Number(f.qty) > avail) return VG.toast("Insufficient stock — only " + avail + " available", "error");
+      const no = store.nextNo(seq, f.date);
+      store.create(coll, { ...f, no, itemId: f.itemId, by: roleKey }, roleKey);
+      onPost(f, no);
+      VG.toast(title + " " + no + " posted · stock updated");
+      onClose();
+    }
+    return (
+      <Modal open={open} onClose={onClose} size="lg" dirty={dirty} title={"New " + title} subtitle="Updates stock ledger"
+        footer={<><Button variant="soft" onClick={onClose}>Close</Button><Button icon="check" onClick={save}>Post</Button></>}>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Field label="Date"><DateF value={f.date} onChange={(v) => set("date", v)} /></Field>
+          <Field label="Item (master)" required><MasterSelect variant="line" collection="items" value={f.itemId} onChange={(v) => set("itemId", v)} actorRole={roleKey} can={can("add")} /></Field>
+          {fields.map((fl) => (
+            <Field key={fl.k} label={fl.l} required={fl.req}>
+              {fl.master ? <MasterSelect collection={fl.master} value={f[fl.k]} onChange={(v) => set(fl.k, v)} actorRole={roleKey} can={can("add")} />
+                : fl.select ? <Select value={f[fl.k]} onChange={(v) => set(fl.k, v)} options={fl.select.map((o) => ({ value: o, label: o }))} />
+                : fl.num ? <Num value={f[fl.k]} onChange={(v) => set(fl.k, v)} /> : <Text value={f[fl.k]} onChange={(v) => set(fl.k, v)} />}
+            </Field>
+          ))}
+          {f.itemId && (f.fromId || f.locationId) && <div className="sm:col-span-2 text-xs opacity-60">Available at source: <b>{avail}</b></div>}
+        </div>
+      </Modal>
+    );
+  }
+
+  const SECTIONS = [
+    { id: "dashboard", label: "Dashboard", icon: "chart", group: "Overview" },
+    { id: "items", label: "Item Master", icon: "box", group: "Inventory" },
+    { id: "receipt", label: "Material Receipt", icon: "download", group: "Inventory" },
+    { id: "issue", label: "Material Issue", icon: "logout", group: "Inventory" },
+    { id: "requirements", label: "Material Requirement", icon: "inbox", group: "Inventory" },
+    { id: "ledger", label: "Stock Ledger", icon: "activity", group: "Inventory" },
+    { id: "issue-ret", label: "Returnable Challan", icon: "truck", group: "Inventory" },
+    { id: "issue-nr", label: "Non-Returnable Challan", icon: "truck", group: "Inventory" },
+    { id: "manufacturers", label: "Manufacturers", icon: "database", group: "Masters" },
+    { id: "bom", label: "Bill of Materials", icon: "flow", group: "Masters" },
+    { id: "categories", label: "Categories", icon: "folder", group: "Masters" },
+    { id: "suppliers", label: "Supplier Master", icon: "handshake", group: "Masters" },
+    { id: "locations", label: "Locations", icon: "grid", group: "Masters" },
+    { id: "transfer", label: "Stock Transfer", icon: "truck", group: "Operations" },
+    { id: "returns", label: "Returns", icon: "chevronLeft", group: "Operations" },
+    { id: "scrap", label: "Scrap / Rejection", icon: "trash", group: "Operations" },
+    { id: "physical", label: "Physical Verification", icon: "check", group: "Operations" },
+    { id: "alerts", label: "Stock Alerts", icon: "alert", group: "Reports" },
+    { id: "batches", label: "Batch / Lot", icon: "box", group: "Reports" },
+    { id: "reports", label: "Reports", icon: "chart", group: "Reports" },
+  ];
+  if (VG.registerModuleSections) VG.registerModuleSections("inventory", SECTIONS);
+  function BomPage(props) {
+    return VG.BomListPage ? <VG.BomListPage {...props} mode="inventory" /> : <div className="opacity-60">BOM module not loaded.</div>;
+  }
+
+  const PAGES = {
+    dashboard: Dashboard, items: ItemsPage, manufacturers: ManufacturersPage, bom: BomPage, categories: CategoriesPage,
+    suppliers: SuppliersPage, locations: LocationsPage, ledger: LedgerPage, receipt: ReceiptPage, issue: IssuePage, requirements: MaterialReqPage,
+    "issue-ret": (p) => React.createElement(IssuePage, { ...p, defaultType: "Vendor Returnable Challan" }),
+    "issue-nr": (p) => React.createElement(IssuePage, { ...p, defaultType: "Vendor Non-Returnable Challan" }),
+    transfer: TransferPage, returns: ReturnsPage, scrap: ScrapPage, physical: PhysicalPage, alerts: AlertsPage, batches: BatchesPage, reports: ReportsPage,
+  };
+
+  VG.modules = VG.modules || {};
+  VG.modules.inventory = function InventoryModule({ mod, roleKey }) {
+    const can = (a) => VG.can(roleKey, a);
+    const [section, setSection] = useState("dashboard");
+    const Page = PAGES[section] || Dashboard;
+    return (
+      <VG.ModuleScaffold mod={mod} sections={SECTIONS} section={section} setSection={setSection} roleKey={roleKey}>
+        <Page roleKey={roleKey} can={can} go={setSection} mod={mod} />
+      </VG.ModuleScaffold>
+    );
+  };
+})(window.VG);

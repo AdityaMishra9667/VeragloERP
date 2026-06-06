@@ -1,0 +1,1743 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Veraglo Payroll</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app-shell logged-out">
+      <header class="app-header">
+        <div class="brand-mark" aria-label="Veraglo Payroll">
+          <img src="assets/veraglo-logo.png" alt="Veraglo Payroll">
+        </div>
+        <div class="header-actions" aria-label="App pages">
+          <button class="tab-button active" type="button" data-page="homePage">Home</button>
+          <button class="tab-button" type="button" data-page="adminPage">Admin</button>
+          <button class="tab-button logout-button" id="appLogout" type="button">Logout</button>
+        </div>
+      </header>
+
+      <section id="homePage" class="page active" aria-label="Employee home">
+        <section class="home-hero" aria-label="Employee welcome">
+          <img src="assets/happy-employees.png" alt="Happy employees collaborating with their employer in a modern office">
+          <div class="hero-logo">
+            <img src="assets/veraglo-logo.png" alt="Veraglo Payroll">
+          </div>
+          <div class="hero-copy">
+            <p class="eyebrow">Welcome</p>
+            <h2>Veraglo Payroll System</h2>
+            <p class="hero-subtitle">Empowering every employee with clarity, trust, and timely payroll care.</p>
+            <p id="dailyMessage" class="daily-message"></p>
+          </div>
+          <div class="home-login-card" aria-label="Veraglo Payroll login">
+            <form id="homeLoginForm" autocomplete="off">
+              <div>
+                <p class="eyebrow">Veraglo Payroll</p>
+                <h3>Login</h3>
+              </div>
+              <label>
+                Login as
+                <select id="homeLoginRole" name="homeLoginRole">
+                  <option value="admin">Admin</option>
+                  <option value="hr">HR</option>
+                  <option value="employee">Employee</option>
+                </select>
+              </label>
+              <label>
+                User ID / Mobile / Email
+                <input id="homeLoginUser" name="homeLoginUser" required placeholder="Registered mobile or email">
+              </label>
+              <label>
+                Password
+                <input id="homeLoginPassword" name="homeLoginPassword" required type="password" placeholder="Password">
+              </label>
+              <div class="login-actions">
+                <button class="primary-button" type="submit">Sign in</button>
+                <button class="link-button" id="showForgotPassword" type="button">Forgot password?</button>
+              </div>
+              <p id="homeLoginMessage" class="login-message"></p>
+            </form>
+            <form id="forgotPasswordForm" class="forgot-password-form hidden" autocomplete="off">
+              <h3>Reset password</h3>
+              <label>
+                Registered mobile or email
+                <input id="forgotPasswordContact" name="forgotPasswordContact" required placeholder="Mobile or email">
+              </label>
+              <div class="login-actions">
+                <button class="primary-button" type="submit">Send reset link</button>
+                <button class="link-button" id="backToLogin" type="button">Back to login</button>
+              </div>
+              <p id="forgotPasswordMessage" class="login-message"></p>
+            </form>
+          </div>
+        </section>
+        <section class="stats" aria-label="Payroll dashboard actions">
+          <button class="stat stat-action run-payroll-card" type="button" data-page="payrollRunPage">
+            <span>Run Payroll</span>
+          </button>
+          <button class="stat stat-action" type="button" data-page="payrollPage">
+            <span>Employees</span>
+          </button>
+          <button class="stat stat-action" type="button" data-page="attendancePage">
+            <span>Record Attendance</span>
+          </button>
+          <button class="stat stat-action" type="button" data-page="newEmployeePage">
+            <span>Add Employee</span>
+          </button>
+          <button class="stat stat-action" type="button" data-page="leaveRegisterPage">
+            <span>Leave Register</span>
+          </button>
+          <button class="stat stat-action" type="button" data-page="advancePage">
+            <span>Advance Payment</span>
+          </button>
+          <button class="stat stat-action" type="button" data-page="employeePortalPage">
+            <span>Employee Portal</span>
+          </button>
+          <button class="stat stat-action" type="button" data-page="approvalsPage">
+            <span>Approvals</span>
+          </button>
+          <button class="stat stat-action" type="button" data-page="historyPage">
+            <span>Payroll History</span>
+          </button>
+          <button class="stat stat-action" type="button" data-page="holidaysPage">
+            <span>Holidays</span>
+          </button>
+          <button class="stat stat-action" type="button" data-page="compliancePage">
+            <span>PF & ESI</span>
+          </button>
+          <button class="stat stat-action" type="button" data-page="adminPage">
+            <span>Admin</span>
+          </button>
+          <div class="stat metric-card">
+            <span id="totalEmployees">0</span>
+            <small>Employees</small>
+          </div>
+          <div class="stat metric-card">
+            <span id="grossPayroll">₹0</span>
+            <small>Gross pay</small>
+          </div>
+          <div class="stat metric-card">
+            <span id="netPayroll">₹0</span>
+            <small>Net pay</small>
+          </div>
+          <div class="stat metric-card">
+            <span id="totalStatutory">₹0</span>
+            <small>PF + ESI</small>
+          </div>
+        </section>
+      </section>
+
+      <section id="holidaysPage" class="page" aria-label="Upcoming holidays">
+        <div class="page-heading">
+          <div>
+            <p class="eyebrow">First page</p>
+            <h2>Upcoming all-India holidays in 2026</h2>
+          </div>
+          <p id="todayLabel" class="soft-note"></p>
+        </div>
+        <div id="holidayList" class="holiday-grid"></div>
+      </section>
+
+      <section id="newEmployeePage" class="page" aria-label="New employee">
+        <form id="employeeForm" class="employee-form" autocomplete="off" novalidate>
+          <div class="form-page-heading">
+            <div>
+              <p class="eyebrow">Add employee</p>
+              <h2 id="formTitle">Add employee</h2>
+            </div>
+            <div class="generated-code">
+              <span>Employee code</span>
+              <strong id="employeeCodePreview">GLS2627001</strong>
+            </div>
+          </div>
+
+          <div class="section-tabs" aria-label="Add employee sections">
+            <button class="section-tab personal active" type="button" data-section="employeeDetailsSection">Employee Details</button>
+            <button class="section-tab identity" type="button" data-section="identitySection">Identity & Address</button>
+            <button class="section-tab salary" type="button" data-section="salarySection">Salary Details</button>
+          </div>
+
+          <section id="employeeDetailsSection" class="form-section personal active">
+            <h3>1. Employee details</h3>
+            <div class="section-grid">
+              <label>
+                Employee name
+                <input id="name" name="name" required maxlength="80" placeholder="Maya Iyer">
+              </label>
+              <label>
+                Date of birth
+                <input id="dob" name="dob" required type="date">
+              </label>
+              <label>
+                Joining date
+                <input id="joiningDate" name="joiningDate" required type="date">
+              </label>
+              <label>
+                Gender
+                <select id="gender" name="gender">
+                  <option>Female</option>
+                  <option>Male</option>
+                  <option>Other</option>
+                </select>
+              </label>
+              <label>
+                Marital status
+                <select id="maritalStatus" name="maritalStatus">
+                  <option>Single</option>
+                  <option>Married</option>
+                  <option>Other</option>
+                </select>
+              </label>
+              <label>
+                Father / husband name
+                <input id="fatherOrSpouseName" name="fatherOrSpouseName" required maxlength="80" placeholder="Parent or spouse name">
+              </label>
+              <label>
+                Blood group
+                <select id="bloodGroup" name="bloodGroup">
+                  <option>A+</option>
+                  <option>A-</option>
+                  <option>B+</option>
+                  <option>B-</option>
+                  <option>AB+</option>
+                  <option>AB-</option>
+                  <option>O+</option>
+                  <option>O-</option>
+                </select>
+              </label>
+              <label>
+                Mobile number
+                <input id="mobile" name="mobile" required type="tel" maxlength="10" pattern="[0-9]{10}" placeholder="9876543210">
+              </label>
+              <label>
+                Additional contact
+                <input id="additionalContact" name="additionalContact" type="tel" maxlength="10" pattern="[0-9]{10}" placeholder="Spouse / father / mother">
+              </label>
+              <label>
+                Additional contact relation
+                <select id="additionalRelation" name="additionalRelation">
+                  <option>Spouse</option>
+                  <option>Father</option>
+                  <option>Mother</option>
+                  <option>Other</option>
+                </select>
+              </label>
+              <label>
+                Email ID
+                <input id="email" name="email" required type="email" placeholder="employee@veraglo.com">
+              </label>
+              <label>
+                Photo
+                <input id="photo" name="photo" type="file" accept="image/*">
+              </label>
+            </div>
+            <div class="section-save">
+              <button class="primary-button section-save-button" type="button" data-section-save="employeeDetailsSection" data-next-section="identitySection">Save section</button>
+            </div>
+          </section>
+
+          <section id="identitySection" class="form-section identity">
+            <h3>2. Identity and address</h3>
+            <div class="section-grid">
+              <label>
+                Aadhaar number
+                <input id="aadhaar" name="aadhaar" required inputmode="numeric" maxlength="12" pattern="[0-9]{12}" placeholder="12 digit Aadhaar">
+              </label>
+              <label>
+                PAN card number
+                <input id="pan" name="pan" required maxlength="10" pattern="[A-Za-z]{5}[0-9]{4}[A-Za-z]{1}" placeholder="ABCDE1234F">
+              </label>
+              <label>
+                UAN
+                <input id="uan" name="uan" inputmode="numeric" maxlength="12" pattern="[0-9]{12}" placeholder="12 digit UAN">
+              </label>
+              <label>
+                ESIC IP number
+                <input id="esicIpNumber" name="esicIpNumber" inputmode="numeric" maxlength="17" placeholder="If applicable">
+              </label>
+              <label>
+                Nominee name
+                <input id="nomineeName" name="nomineeName" required maxlength="80" placeholder="Nominee for statutory records">
+              </label>
+              <label>
+                Nominee relation
+                <select id="nomineeRelation" name="nomineeRelation">
+                  <option>Spouse</option>
+                  <option>Father</option>
+                  <option>Mother</option>
+                  <option>Child</option>
+                  <option>Other</option>
+                </select>
+              </label>
+              <input id="presentAddress" name="presentAddress" type="hidden">
+              <input id="permanentAddress" name="permanentAddress" type="hidden">
+              <fieldset class="address-fieldset wide-field">
+                <legend>Present address</legend>
+                <label>
+                  Address line 1
+                  <input id="presentAddressLine1" name="presentAddressLine1" required maxlength="120" placeholder="House / flat / building">
+                </label>
+                <label>
+                  Address line 2
+                  <input id="presentAddressLine2" name="presentAddressLine2" maxlength="120" placeholder="Street / area / landmark">
+                </label>
+                <label>
+                  City
+                  <input id="presentCity" name="presentCity" required list="cityMaster" placeholder="Search city">
+                </label>
+                <label>
+                  State
+                  <input id="presentState" name="presentState" required list="stateMaster" placeholder="Search state">
+                </label>
+                <label>
+                  Country
+                  <input id="presentCountry" name="presentCountry" required list="countryMaster" value="India" placeholder="Search country">
+                </label>
+                <label>
+                  PIN code
+                  <input id="presentPinCode" name="presentPinCode" required inputmode="numeric" maxlength="6" pattern="[0-9]{6}" placeholder="400069">
+                </label>
+              </fieldset>
+              <div class="same-address">
+                <input id="sameAddress" type="checkbox">
+                <label for="sameAddress">Present address is same as permanent address</label>
+              </div>
+              <fieldset class="address-fieldset wide-field">
+                <legend>Permanent address</legend>
+                <label>
+                  Address line 1
+                  <input id="permanentAddressLine1" name="permanentAddressLine1" required maxlength="120" placeholder="House / flat / building">
+                </label>
+                <label>
+                  Address line 2
+                  <input id="permanentAddressLine2" name="permanentAddressLine2" maxlength="120" placeholder="Street / area / landmark">
+                </label>
+                <label>
+                  City
+                  <input id="permanentCity" name="permanentCity" required list="cityMaster" placeholder="Search city">
+                </label>
+                <label>
+                  State
+                  <input id="permanentState" name="permanentState" required list="stateMaster" placeholder="Search state">
+                </label>
+                <label>
+                  Country
+                  <input id="permanentCountry" name="permanentCountry" required list="countryMaster" value="India" placeholder="Search country">
+                </label>
+                <label>
+                  PIN code
+                  <input id="permanentPinCode" name="permanentPinCode" required inputmode="numeric" maxlength="6" pattern="[0-9]{6}" placeholder="400069">
+                </label>
+              </fieldset>
+            </div>
+            <div class="section-save">
+              <button class="primary-button section-save-button" type="button" data-section-save="identitySection" data-next-section="salarySection">Save section</button>
+            </div>
+          </section>
+
+          <section id="salarySection" class="form-section salary">
+            <h3>3. Salary description</h3>
+            <div class="section-grid salary-grid">
+              <label>
+                Department
+                <select id="department" name="department">
+                  <option>Administration</option>
+                  <option>Accounts</option>
+                  <option>Accounts & Finance</option>
+                  <option>Audit</option>
+                  <option>Compliance</option>
+                  <option>Customer Support</option>
+                  <option>Engineering</option>
+                  <option>Facilities</option>
+                  <option>Finance</option>
+                  <option>HR</option>
+                  <option>IT</option>
+                  <option>Legal</option>
+                  <option>Logistics</option>
+                  <option>Maintenance</option>
+                  <option>Management</option>
+                  <option>Marketing</option>
+                  <option>Operations</option>
+                  <option>Payroll</option>
+                  <option>Procurement</option>
+                  <option>Production</option>
+                  <option>Quality</option>
+                  <option>Research & Development</option>
+                  <option>Sales</option>
+                  <option>Security</option>
+                  <option>Stores & Inventory</option>
+                  <option>Support</option>
+                  <option>Training</option>
+                </select>
+              </label>
+              <label>
+                Designation
+                <input id="designation" name="designation" required maxlength="64" placeholder="Payroll Executive">
+              </label>
+              <label>
+                Gross pay
+                <input id="grossPay" name="grossPay" required type="number" min="0" step="1" value="50000">
+              </label>
+              <label class="inline-check salary-auto-check">
+                <input id="autoSalaryBreakup" name="autoSalaryBreakup" type="checkbox" checked>
+                Auto salary breakup
+              </label>
+              <label>
+                Basic + DA
+                <input id="basicPay" name="basicPay" required type="number" min="0" step="1" value="30000">
+              </label>
+              <label>
+                HRA
+                <input id="hra" name="hra" required type="number" min="0" step="1" value="12000">
+              </label>
+              <label>
+                Conveyance allowance
+                <input id="conveyanceAllowance" name="conveyanceAllowance" required type="number" min="0" step="1" value="0">
+              </label>
+              <label>
+                Special allowance
+                <input id="allowance" name="allowance" required type="number" min="0" step="1" value="8000">
+              </label>
+              <label>
+                Bonus
+                <input id="bonus" name="bonus" required type="number" min="0" step="1" value="0">
+              </label>
+              <label>
+                Other deductions
+                <input id="otherDeductions" name="otherDeductions" required type="number" min="0" step="1" value="0">
+              </label>
+              <label>
+                Opening leave balance
+                <input id="leaveOpeningBalance" name="leaveOpeningBalance" required type="number" min="0" step="0.25" value="0">
+              </label>
+              <label>
+                EPF applicable
+                <select id="pfApplicable" name="pfApplicable">
+                  <option>Yes</option>
+                  <option>No</option>
+                </select>
+              </label>
+              <label>
+                ESI applicable
+                <select id="esiApplicable" name="esiApplicable">
+                  <option>Yes</option>
+                  <option>No</option>
+                </select>
+              </label>
+              <label>
+                Employee PF
+                <input id="employeePf" name="employeePf" type="number" min="0" step="1" readonly>
+              </label>
+              <label>
+                Employer PF
+                <input id="employerPf" name="employerPf" type="number" min="0" step="1" readonly>
+              </label>
+              <label>
+                Employee ESI
+                <input id="employeeEsi" name="employeeEsi" type="number" min="0" step="1" readonly>
+              </label>
+              <label>
+                Employer ESI
+                <input id="employerEsi" name="employerEsi" type="number" min="0" step="1" readonly>
+              </label>
+              <label>
+                Net salary
+                <input id="netSalary" name="netSalary" type="number" min="0" step="1" readonly>
+              </label>
+              <fieldset class="statutory-fieldset">
+                <legend>Employer statutory selection</legend>
+                <label><input id="ptApplicable" name="ptApplicable" type="checkbox" checked> Professional Tax</label>
+                <label><input id="tdsApplicable" name="tdsApplicable" type="checkbox" checked> TDS</label>
+                <label><input id="lwfApplicable" name="lwfApplicable" type="checkbox" checked> Labour Welfare Fund</label>
+                <label><input id="gratuityApplicable" name="gratuityApplicable" type="checkbox" checked> Gratuity</label>
+                <label><input id="bonusActApplicable" name="bonusActApplicable" type="checkbox" checked> Bonus Act tracking</label>
+              </fieldset>
+              <div class="statutory-guidance" id="statutoryGuidance" aria-live="polite"></div>
+              <label>
+                Payment mode
+                <select id="paymentMode" name="paymentMode">
+                  <option>Bank transfer</option>
+                  <option>Cheque</option>
+                  <option>Cash</option>
+                </select>
+              </label>
+              <label>
+                Bank name
+                <input id="bankName" name="bankName" required maxlength="80" placeholder="Bank name">
+              </label>
+              <label>
+                Bank account number
+                <input id="bankAccount" name="bankAccount" required inputmode="numeric" maxlength="20" placeholder="Account number">
+              </label>
+              <label>
+                IFSC code
+                <input id="ifsc" name="ifsc" required maxlength="11" pattern="[A-Za-z]{4}0[A-Za-z0-9]{6}" placeholder="HDFC0001234">
+              </label>
+            </div>
+            <div class="section-save">
+              <button class="primary-button section-save-button" type="submit" id="submitButton">Add employee</button>
+            </div>
+          </section>
+
+          <div class="form-actions">
+            <button class="secondary-button hidden" id="cancelEdit" type="button">Cancel edit</button>
+          </div>
+        </form>
+      </section>
+
+      <section id="payrollPage" class="page" aria-label="Payroll records">
+        <section class="panel list-panel" aria-label="Payroll list">
+          <div class="toolbar">
+            <div class="search-box">
+              <span class="search-icon" aria-hidden="true"></span>
+              <input id="search" type="search" placeholder="Search by name, ID, or department">
+            </div>
+            <select id="departmentFilter" aria-label="Filter by department">
+              <option value="all">All teams</option>
+              <option>Administration</option>
+              <option>Accounts</option>
+              <option>Accounts & Finance</option>
+              <option>Audit</option>
+              <option>Compliance</option>
+              <option>Customer Support</option>
+              <option>Engineering</option>
+              <option>Facilities</option>
+              <option>Finance</option>
+              <option>HR</option>
+              <option>IT</option>
+              <option>Legal</option>
+              <option>Logistics</option>
+              <option>Maintenance</option>
+              <option>Management</option>
+              <option>Marketing</option>
+              <option>Operations</option>
+              <option>Payroll</option>
+              <option>Procurement</option>
+              <option>Production</option>
+              <option>Quality</option>
+              <option>Research & Development</option>
+              <option>Sales</option>
+              <option>Security</option>
+              <option>Stores & Inventory</option>
+              <option>Support</option>
+              <option>Training</option>
+            </select>
+            <select id="employeeStatusFilter" aria-label="Filter by status">
+              <option value="all">All status</option>
+              <option>Active</option>
+              <option>Disabled</option>
+            </select>
+            <select id="employeeSort" aria-label="Sort employees">
+              <option value="name">Sort by name</option>
+              <option value="code">Sort by code</option>
+              <option value="department">Sort by department</option>
+              <option value="gross">Sort by gross pay</option>
+            </select>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Employee</th>
+                  <th>Code</th>
+                  <th>Department</th>
+                  <th class="number">Gross</th>
+                  <th class="number">PF</th>
+                  <th class="number">ESI</th>
+                  <th class="number">Net</th>
+                  <th>Status</th>
+                  <th class="actions">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="payrollRows"></tbody>
+            </table>
+            <div id="emptyState" class="empty-state hidden">
+              <h2>No matching employees</h2>
+              <p>Adjust the search or add a payroll record.</p>
+            </div>
+          </div>
+          <div class="pagination-bar">
+            <button class="secondary-button" id="employeePrevPage" type="button">Previous</button>
+            <span id="employeePageInfo">Page 1</span>
+            <button class="secondary-button" id="employeeNextPage" type="button">Next</button>
+          </div>
+        </section>
+      </section>
+
+      <section id="employeeProfilePage" class="page" aria-label="Employee profile">
+        <div class="page-heading compact-heading">
+          <div>
+            <p class="eyebrow">Employee profile</p>
+            <h2 id="profileTitle">Select an employee</h2>
+          </div>
+          <div class="month-tools">
+            <label>
+              View by employee name
+              <select id="profileEmployeeSelect"></select>
+            </label>
+          </div>
+        </div>
+        <section class="profile-layout">
+          <section class="panel profile-card">
+            <div class="employee-cell profile-head">
+              <div id="profileAvatar" class="avatar"></div>
+              <div>
+                <h3 id="profileName">Employee</h3>
+                <p id="profileMeta" class="muted"></p>
+              </div>
+            </div>
+            <div id="profileDetails" class="profile-details"></div>
+          </section>
+          <section class="panel profile-card">
+            <h3>Leave activity</h3>
+            <div id="profileLeaveList" class="profile-list"></div>
+          </section>
+          <section class="panel profile-card">
+            <h3>Advance activity</h3>
+            <div id="profileAdvanceList" class="profile-list"></div>
+          </section>
+          <section class="panel profile-card">
+            <h3>Payroll and attendance activity</h3>
+            <div id="profilePayrollList" class="profile-list"></div>
+          </section>
+        </section>
+      </section>
+
+      <section id="advancePage" class="page" aria-label="Advance payment">
+        <div class="page-heading compact-heading">
+          <div>
+            <p class="eyebrow">Advance payment</p>
+            <h2>Employee advance and recovery</h2>
+          </div>
+        </div>
+        <section class="advance-layout">
+          <form id="advanceForm" class="panel advance-form" autocomplete="off">
+            <label>
+              Employee
+              <select id="advanceEmployee" name="advanceEmployee" required></select>
+            </label>
+            <label>
+              Advance amount
+              <input id="advanceAmount" name="advanceAmount" required type="number" min="1" step="1" placeholder="25000">
+            </label>
+            <label>
+              Date of advance
+              <input id="advanceDate" name="advanceDate" required type="date">
+            </label>
+            <label>
+              Payment method
+              <select id="advancePaymentMethod" name="advancePaymentMethod">
+                <option>Bank transfer</option>
+                <option>Cheque</option>
+                <option>Cash</option>
+                <option>UPI</option>
+              </select>
+            </label>
+            <label>
+              Deduction per month
+              <input id="advanceMonthlyDeduction" name="advanceMonthlyDeduction" required type="number" min="1" step="1" placeholder="5000">
+            </label>
+            <button class="primary-button" type="submit">Save advance</button>
+          </form>
+          <section class="panel list-panel" aria-label="Advance payment list">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Employee</th>
+                    <th class="number">Advance</th>
+                    <th class="number">Monthly deduction</th>
+                    <th class="number">Outstanding</th>
+                    <th>Payment</th>
+                    <th>Deduction history</th>
+                  </tr>
+                </thead>
+                <tbody id="advanceRows"></tbody>
+              </table>
+              <div id="advanceEmpty" class="empty-state hidden">
+                <h2>No advances yet</h2>
+                <p>Add an advance payment to track monthly recovery.</p>
+              </div>
+            </div>
+          </section>
+        </section>
+      </section>
+
+      <section id="attendancePage" class="page" aria-label="Attendance and monthly payroll">
+        <div class="page-heading compact-heading">
+          <div>
+            <p class="eyebrow">Attendance</p>
+            <h2>Record attendance</h2>
+          </div>
+          <div class="month-tools">
+            <label>
+              Month
+              <input id="attendanceMonth" type="month">
+            </label>
+            <label>
+              Working days
+              <input id="workingDays" type="number" min="1" max="31" step="1" value="26">
+            </label>
+            <button class="primary-button" id="saveAttendanceMonth" type="button">Save attendance</button>
+          </div>
+        </div>
+        <section class="panel list-panel attendance-panel" aria-label="Attendance list">
+          <div class="secondary-tabs" aria-label="Attendance views">
+            <button class="secondary-tab active" type="button" data-attendance-tab="attendanceDailyPanel">Daily Attendance Marking</button>
+            <button class="secondary-tab" type="button" data-attendance-tab="attendanceSummaryPanel">Consolidated Attendance Sheet</button>
+          </div>
+          <div class="attendance-policy">
+            <span>Approved leave is marked automatically</span>
+            <span>HR marks Present or Absent day-wise</span>
+            <span>Consolidated sheet feeds payroll</span>
+          </div>
+          <div id="attendanceDailyPanel" class="attendance-tab-panel active">
+            <div class="table-wrap attendance-daily-wrap">
+              <table>
+                <thead id="attendanceDailyHead"></thead>
+                <tbody id="attendanceRows"></tbody>
+              </table>
+            </div>
+          </div>
+          <div id="attendanceSummaryPanel" class="attendance-tab-panel">
+            <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Employee</th>
+                  <th class="number">Working days</th>
+                  <th class="number">Present</th>
+                  <th class="number">Absent</th>
+                  <th class="number">Approved leave</th>
+                  <th class="number">Short leaves</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="attendanceSummaryRows"></tbody>
+            </table>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <section id="leaveRegisterPage" class="page" aria-label="Leave register">
+        <div class="page-heading compact-heading">
+          <div>
+            <p class="eyebrow">Leave register</p>
+            <h2>Employee leave account</h2>
+          </div>
+          <div class="month-tools">
+            <label>
+              Month
+              <input id="leaveRegisterMonth" type="month">
+            </label>
+          </div>
+        </div>
+        <section class="panel list-panel" aria-label="Leave register list">
+          <div class="attendance-policy">
+            <span>Monthly credit: 1.25 days</span>
+            <span>Leave taken reduces balance</span>
+            <span>Short leaves tracked separately</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Employee</th>
+                  <th class="number">Opening</th>
+                  <th class="number">Credit</th>
+                  <th class="number">Leave taken</th>
+                  <th class="number">Paid leave used</th>
+                  <th class="number">Unpaid leave</th>
+                  <th class="number">Short leaves</th>
+                  <th class="number">Closing</th>
+                </tr>
+              </thead>
+              <tbody id="leaveRegisterRows"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <section id="employeePortalPage" class="page" aria-label="Employee portal">
+        <div class="page-heading compact-heading">
+          <div>
+            <p class="eyebrow">Employee self-service</p>
+            <h2>My dashboard</h2>
+          </div>
+        </div>
+        <section class="portal-layout">
+          <form id="otpForm" class="panel portal-card" autocomplete="off">
+            <h3>Employee login</h3>
+            <label>
+              Mobile number
+              <input id="portalMobile" type="tel" maxlength="10" pattern="[0-9]{10}" placeholder="Registered mobile number">
+            </label>
+            <div class="inline-actions">
+              <button class="secondary-button" id="sendOtp" type="button">Send OTP</button>
+              <input id="portalOtp" type="text" maxlength="6" placeholder="Enter OTP">
+            </div>
+            <button class="primary-button" type="submit">Verify and login</button>
+            <p id="otpMessage" class="soft-note"></p>
+          </form>
+
+          <section id="portalWorkspace" class="panel portal-card hidden" aria-label="Employee dashboard">
+            <div class="portal-user">
+              <div class="portal-identity">
+                <div id="portalProfileAvatar" class="avatar portal-avatar"></div>
+                <div>
+                <span class="eyebrow">Logged in</span>
+                <h3 id="portalEmployeeName">Employee</h3>
+                </div>
+              </div>
+              <button class="secondary-button" id="portalLogout" type="button">Logout</button>
+            </div>
+            <div id="portalProfileDetails" class="portal-profile-details"></div>
+            <div id="portalEssCards" class="ess-card-grid" aria-label="Employee dashboard summary"></div>
+            <div class="ess-quick-actions" aria-label="Employee quick actions">
+              <button type="button" data-portal-action="applyLeave">Apply Leave</button>
+              <button type="button" data-portal-action="payslip">View Payslip</button>
+              <button type="button" data-portal-action="form16">Download Form 16</button>
+              <button type="button" data-portal-action="attendance">Mark/View Attendance</button>
+              <button type="button" data-portal-action="profileUpdate">Update Profile Request</button>
+              <button type="button" data-portal-action="documents">View Documents</button>
+            </div>
+            <form id="leaveRequestForm" class="leave-request-form" autocomplete="off">
+              <label>
+                Request type
+                <select id="leaveType" name="leaveType">
+                  <option value="leave">Leave</option>
+                  <option value="short">Short leave - 2 hours</option>
+                </select>
+              </label>
+              <label>
+                <span id="leaveFromDateLabel">From date</span>
+                <input id="leaveFromDate" name="leaveFromDate" type="date" required>
+              </label>
+              <label id="leaveToDateField">
+                Upto date
+                <input id="leaveToDate" name="leaveToDate" type="date" required>
+              </label>
+              <label id="leaveDaysField">
+                Total days
+                <input id="leaveDays" name="leaveDays" type="number" min="0" step="0.5" value="1" readonly>
+              </label>
+              <label class="wide-field">
+                Reason
+                <textarea id="leaveReason" name="leaveReason" rows="3" required placeholder="Reason for leave"></textarea>
+              </label>
+              <button class="primary-button" type="submit">Submit request</button>
+            </form>
+          </section>
+        </section>
+        <section class="panel list-panel portal-requests" aria-label="Employee leave requests">
+          <div class="portal-tabs" role="tablist" aria-label="Employee portal ledgers">
+            <button class="portal-tab active" type="button" data-portal-tab="portalOverviewPanel">Overview</button>
+            <button class="portal-tab" type="button" data-portal-tab="portalRequestPanel">Leave history</button>
+            <button class="portal-tab" type="button" data-portal-tab="portalSalaryLedgerPanel">Salary ledger</button>
+            <button class="portal-tab" type="button" data-portal-tab="portalLeaveLedgerPanel">Leave ledger</button>
+            <button class="portal-tab" type="button" data-portal-tab="portalShortLeaveLedgerPanel">Short leave ledger</button>
+            <button class="portal-tab" type="button" data-portal-tab="portalAttendancePanel">Attendance</button>
+            <button class="portal-tab" type="button" data-portal-tab="portalCompliancePanel">PF & ESI</button>
+            <button class="portal-tab" type="button" data-portal-tab="portalDocumentsPanel">Documents</button>
+          </div>
+          <section id="portalOverviewPanel" class="portal-tab-panel active" data-portal-panel="portalOverviewPanel" aria-label="Employee overview">
+            <div id="portalOverviewGrid" class="ess-info-grid"></div>
+          </section>
+          <div class="table-wrap portal-tab-panel" data-portal-panel="portalRequestPanel">
+            <table>
+              <thead>
+                <tr>
+                  <th>From</th>
+                  <th>Upto</th>
+                  <th>Type</th>
+                  <th>Days</th>
+                  <th>Status</th>
+                  <th>Approvals</th>
+                  <th>Reason</th>
+                </tr>
+              </thead>
+              <tbody id="portalRequestRows"></tbody>
+            </table>
+            <div id="portalRequestEmpty" class="empty-state hidden">
+              <h2>No leave requests</h2>
+              <p>Login and submit a leave request to see it here.</p>
+            </div>
+          </div>
+          <section id="portalSalaryLedgerPanel" class="portal-tab-panel" data-portal-panel="portalSalaryLedgerPanel" aria-label="Salary ledger">
+            <div class="table-wrap portal-ledger-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Year</th>
+                    <th>Month</th>
+                    <th class="number">Gross</th>
+                    <th class="number">Perf. Inc.</th>
+                    <th class="number">Deductions</th>
+                    <th class="number">Payable</th>
+                  </tr>
+                </thead>
+                <tbody id="portalSalaryLedgerRows"></tbody>
+              </table>
+              <div id="portalSalaryLedgerEmpty" class="empty-state hidden">
+                <h2>No salary ledger</h2>
+                <p>Monthly payroll history will appear here after payroll is saved.</p>
+              </div>
+            </div>
+          </section>
+          <section id="portalLeaveLedgerPanel" class="portal-tab-panel" data-portal-panel="portalLeaveLedgerPanel" aria-label="Leave ledger">
+            <div class="table-wrap portal-ledger-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Month / Date</th>
+                    <th class="number">Opening</th>
+                    <th class="number">Credit</th>
+                    <th class="number">Leave</th>
+                    <th>Status</th>
+                    <th>Reason</th>
+                  </tr>
+                </thead>
+                <tbody id="portalLeaveLedgerRows"></tbody>
+              </table>
+              <div id="portalLeaveLedgerEmpty" class="empty-state hidden">
+                <h2>No leave ledger</h2>
+                <p>Leave requests and saved monthly leave balances will appear here.</p>
+              </div>
+            </div>
+          </section>
+          <section id="portalAttendancePanel" class="portal-tab-panel" data-portal-panel="portalAttendancePanel" aria-label="Attendance summary">
+            <div id="portalAttendanceGrid" class="ess-info-grid"></div>
+          </section>
+          <section id="portalCompliancePanel" class="portal-tab-panel" data-portal-panel="portalCompliancePanel" aria-label="PF and ESI details">
+            <div id="portalComplianceGrid" class="ess-info-grid"></div>
+          </section>
+          <section id="portalDocumentsPanel" class="portal-tab-panel" data-portal-panel="portalDocumentsPanel" aria-label="Employee documents">
+            <div id="portalDocumentsGrid" class="ess-info-grid"></div>
+          </section>
+          <section id="portalShortLeaveLedgerPanel" class="portal-tab-panel" data-portal-panel="portalShortLeaveLedgerPanel" aria-label="Short leave ledger">
+            <div class="table-wrap portal-ledger-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Date / Month</th>
+                    <th>Type</th>
+                    <th class="number">Count</th>
+                    <th>Status</th>
+                    <th>Reason</th>
+                  </tr>
+                </thead>
+                <tbody id="portalShortLeaveLedgerRows"></tbody>
+              </table>
+              <div id="portalShortLeaveLedgerEmpty" class="empty-state hidden">
+                <h2>No short leave ledger</h2>
+                <p>Short leave requests and monthly short-leave counts will appear here.</p>
+              </div>
+            </div>
+          </section>
+        </section>
+      </section>
+
+      <section id="approvalsPage" class="page" aria-label="Leave approvals">
+        <div class="page-heading compact-heading">
+          <div>
+            <p class="eyebrow">Leave approvals</p>
+            <h2>Leave request register and authorization</h2>
+          </div>
+          <div class="month-tools">
+            <label>
+              Approval role
+              <select id="approvalRole">
+                <option>Supervisor</option>
+                <option>Engineer</option>
+                <option>Manager</option>
+                <option>Director</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <section class="approval-layout" aria-label="Approval register">
+        <section class="panel list-panel approval-card" aria-label="Pending for approvals">
+          <h3>Pending for Approvals</h3>
+          <div class="attendance-policy">
+            <span>Step 1: Supervisor / Engineer / Manager</span>
+            <span>Step 2: Director</span>
+            <span>Approved requests update Attendance automatically</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Employee</th>
+                  <th>From</th>
+                  <th>Upto</th>
+                  <th>Type</th>
+                  <th>Days</th>
+                  <th>Status</th>
+                  <th>Reason</th>
+                  <th class="actions">Action</th>
+                </tr>
+              </thead>
+              <tbody id="approvalRows"></tbody>
+            </table>
+            <div id="approvalEmpty" class="empty-state hidden">
+              <h2>No pending requests</h2>
+              <p>Pending requests will appear here for approval.</p>
+            </div>
+          </div>
+        </section>
+        <section class="panel list-panel approval-card" aria-label="Approved leave">
+          <h3>Approved Leave</h3>
+          <div class="table-wrap">
+            <table class="approval-register-table">
+              <thead>
+                <tr>
+                  <th>Employee</th>
+                  <th>Leave type</th>
+                  <th>Dates</th>
+                  <th>Reason</th>
+                  <th>Status</th>
+                  <th>Approvals</th>
+                </tr>
+              </thead>
+              <tbody id="approvedLeaveRows"></tbody>
+            </table>
+            <div id="approvedLeaveEmpty" class="empty-state hidden">
+              <h2>No approved leave</h2>
+              <p>Approved employee leave requests will appear here.</p>
+            </div>
+          </div>
+        </section>
+        <section class="panel list-panel approval-card" aria-label="Rejected leave">
+          <h3>Rejected Leave</h3>
+          <div class="table-wrap">
+            <table class="approval-register-table">
+              <thead>
+                <tr>
+                  <th>Employee</th>
+                  <th>Leave type</th>
+                  <th>Dates</th>
+                  <th>Reason</th>
+                  <th>Status</th>
+                  <th>Approvals</th>
+                </tr>
+              </thead>
+              <tbody id="rejectedLeaveRows"></tbody>
+            </table>
+            <div id="rejectedLeaveEmpty" class="empty-state hidden">
+              <h2>No rejected leave</h2>
+              <p>Rejected employee leave requests will appear here.</p>
+            </div>
+          </div>
+        </section>
+        </section>
+      </section>
+
+      <section id="payrollRunPage" class="page" aria-label="Payroll run">
+        <div class="page-heading compact-heading">
+          <div>
+            <p class="eyebrow">Payroll run</p>
+            <h2>Finalize monthly salary</h2>
+          </div>
+          <div class="month-tools">
+            <label>
+              Month
+              <input id="runMonth" type="month">
+            </label>
+            <label>
+              Working days
+              <input id="runWorkingDays" type="number" min="1" max="31" step="1" value="26">
+            </label>
+            <button class="primary-button" id="savePayrollRun" type="button">Save payroll run</button>
+          </div>
+        </div>
+        <section class="panel list-panel" aria-label="Payroll run calculation">
+          <div class="attendance-policy">
+            <span>PF/ESI auto as configured</span>
+            <span>TDS and PT entered per employee</span>
+            <span>Loan/advance recovery deducted from payable salary</span>
+          </div>
+          <div class="payroll-review-strip" aria-label="Payroll run review totals">
+            <div>
+              <span id="runSummaryEmployees">0</span>
+              <small>Employees</small>
+            </div>
+            <div>
+              <span id="runSummaryGross">₹0</span>
+              <small>Gross</small>
+            </div>
+            <div>
+              <span id="runSummaryIncentives">₹0</span>
+              <small>Perf. Inc.</small>
+            </div>
+            <div>
+              <span id="runSummaryDeductions">₹0</span>
+              <small>Deductions</small>
+            </div>
+            <div>
+              <span id="runSummaryPayable">₹0</span>
+              <small>Payable</small>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Employee</th>
+                  <th class="number">Net before attendance</th>
+                  <th>Leave deduction</th>
+                  <th>Advance deduction</th>
+                  <th class="number pt-column">Professional tax</th>
+                  <th class="number">TDS</th>
+                  <th class="number">Other statutory</th>
+                  <th class="number">Perf. Inc.</th>
+                  <th class="number">Final payable</th>
+                </tr>
+              </thead>
+              <tbody id="payrollRunRows"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <section id="historyPage" class="page" aria-label="Payroll history">
+        <div class="page-heading compact-heading">
+          <div>
+            <p class="eyebrow">History payroll</p>
+            <h2>Saved monthly payroll</h2>
+          </div>
+          <p id="historySummary" class="soft-note"></p>
+        </div>
+        <section class="panel list-panel" aria-label="Monthly payroll history">
+          <div class="toolbar report-toolbar">
+            <div class="search-box">
+              <span class="search-icon" aria-hidden="true"></span>
+              <input id="reportSearch" type="search" placeholder="Search reports, employees, months, departments">
+            </div>
+            <select id="reportTypeFilter" aria-label="Report type">
+              <option value="all">All reports</option>
+              <option value="employee">Employee master</option>
+              <option value="payroll">Monthly payroll</option>
+              <option value="salarySlip">Salary slip</option>
+              <option value="attendance">Attendance</option>
+              <option value="leave">Leave</option>
+              <option value="pf">PF</option>
+              <option value="esi">ESI</option>
+              <option value="department">Department-wise</option>
+              <option value="custom">Custom</option>
+            </select>
+            <input id="reportFromDate" type="date" aria-label="Report from date">
+            <input id="reportToDate" type="date" aria-label="Report to date">
+            <button class="secondary-button" id="generateReport" type="button">Generate</button>
+          </div>
+          <div id="reportCards" class="report-card-grid" aria-label="Report generation"></div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Month</th>
+                  <th class="number">Employees</th>
+                  <th class="number">Gross</th>
+                  <th class="number">Perf. Inc.</th>
+                  <th class="number">Deductions</th>
+                  <th class="number">Payable</th>
+                  <th>Saved on</th>
+                  <th class="actions">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="historyRows"></tbody>
+            </table>
+            <div id="historyEmpty" class="empty-state hidden">
+              <h2>No payroll history yet</h2>
+              <p>Save a month from Attendance to create history.</p>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <section id="adminPage" class="page" aria-label="Admin panel">
+        <div class="page-heading compact-heading">
+          <div>
+            <p class="eyebrow">Admin panel</p>
+            <h2>Organization, users, roles, and payroll settings</h2>
+          </div>
+          <p id="adminMessage" class="soft-note"></p>
+        </div>
+
+        <nav class="admin-section-tabs" aria-label="Admin tools">
+          <button class="admin-section-tab active" type="button" data-admin-section="company">Company Profile</button>
+          <button class="admin-section-tab" type="button" data-admin-section="users">User Profile & Roles</button>
+          <button class="admin-section-tab" type="button" data-admin-section="settings">Settings</button>
+          <button class="admin-section-tab" type="button" data-admin-section="changes">Approvals</button>
+        </nav>
+
+        <section class="admin-layout">
+          <form id="organizationForm" class="panel admin-card" data-admin-panel="company" autocomplete="off">
+            <div class="admin-card-heading">
+              <h3>Organization profile</h3>
+              <button class="secondary-button" id="generateOrgCode" type="button">Generate code</button>
+            </div>
+            <section id="orgProfilePreview" class="org-profile-preview hidden" aria-label="Generated company profile"></section>
+            <div id="orgProfileFields" class="admin-form-fields">
+            <div class="admin-logo-row">
+              <div id="orgLogoPreview" class="org-logo-preview">Logo</div>
+              <label>
+                Logo
+                <input id="orgLogo" name="orgLogo" type="file" accept="image/*">
+              </label>
+              <label>
+                Organization code
+                <input id="orgCode" name="orgCode" readonly placeholder="ORG26001">
+              </label>
+            </div>
+            <div class="form-grid">
+              <label>
+                Organization name
+                <input id="orgName" name="orgName" required maxlength="100" placeholder="Veraglo Private Limited">
+              </label>
+              <label>
+                Legal name
+                <input id="orgLegalName" name="orgLegalName" required maxlength="120" placeholder="Registered legal entity name">
+              </label>
+              <label>
+                Organization type
+                <select id="orgType" name="orgType">
+                  <option>Private Limited</option>
+                  <option>LLP</option>
+                  <option>Partnership</option>
+                  <option>Proprietorship</option>
+                  <option>Trust / Society</option>
+                  <option>Public Limited</option>
+                </select>
+              </label>
+              <label>
+                Industry
+                <input id="orgIndustry" name="orgIndustry" maxlength="80" placeholder="Technology / Manufacturing / Services">
+              </label>
+              <label>
+                CIN / LLPIN / registration no.
+                <input id="orgRegistration" name="orgRegistration" maxlength="30" placeholder="Company registration number">
+              </label>
+              <label>
+                GSTIN
+                <input id="orgGstin" name="orgGstin" maxlength="15" placeholder="15 digit GSTIN">
+              </label>
+              <label>
+                PAN
+                <input id="orgPan" name="orgPan" maxlength="10" placeholder="ABCDE1234F">
+              </label>
+              <label>
+                TAN
+                <input id="orgTan" name="orgTan" maxlength="10" placeholder="ABCD12345E">
+              </label>
+              <label>
+                EPF establishment code
+                <input id="orgPfCode" name="orgPfCode" maxlength="30" placeholder="PF registration code">
+              </label>
+              <label>
+                ESIC employer code
+                <input id="orgEsiCode" name="orgEsiCode" maxlength="30" placeholder="ESI registration code">
+              </label>
+              <label>
+                Professional tax no.
+                <input id="orgPtCode" name="orgPtCode" maxlength="30" placeholder="State PT registration">
+              </label>
+              <label>
+                Website
+                <input id="orgWebsite" name="orgWebsite" type="url" placeholder="https://veraglo.com">
+              </label>
+              <label>
+                Address line 1
+                <input id="orgAddressLine1" name="orgAddressLine1" required maxlength="120" placeholder="Registered office">
+              </label>
+              <label>
+                Address line 2
+                <input id="orgAddressLine2" name="orgAddressLine2" maxlength="120" placeholder="Area / landmark">
+              </label>
+              <label>
+                City
+                <input id="orgCity" name="orgCity" required list="cityMaster" placeholder="Search city">
+              </label>
+              <label>
+                State
+                <input id="orgState" name="orgState" required list="stateMaster" placeholder="Search state">
+              </label>
+              <label>
+                Country
+                <input id="orgCountry" name="orgCountry" required list="countryMaster" value="India" placeholder="Search country">
+              </label>
+              <label>
+                PIN code
+                <input id="orgPinCode" name="orgPinCode" required inputmode="numeric" maxlength="6" pattern="[0-9]{6}" placeholder="400001">
+              </label>
+              <label>
+                Office phone
+                <input id="orgPhone" name="orgPhone" type="tel" maxlength="15" placeholder="02212345678">
+              </label>
+              <label>
+                Official email
+                <input id="orgEmail" name="orgEmail" required type="email" placeholder="admin@veraglo.com">
+              </label>
+              <label>
+                HR contact email
+                <input id="orgHrEmail" name="orgHrEmail" type="email" placeholder="hr@veraglo.com">
+              </label>
+              <label>
+                Payroll contact person
+                <input id="orgPayrollContact" name="orgPayrollContact" maxlength="80" placeholder="Payroll officer">
+              </label>
+            </div>
+            <button class="primary-button" type="submit">Save organization</button>
+            </div>
+          </form>
+
+          <form id="adminSettingsForm" class="panel admin-card" data-admin-panel="settings" autocomplete="off">
+            <h3>Payroll defaults</h3>
+            <div class="form-grid compact-admin-grid">
+              <label>
+                Financial year start
+                <select id="settingFyStart" name="settingFyStart">
+                  <option>April</option>
+                  <option>January</option>
+                </select>
+              </label>
+              <label>
+                Currency
+                <select id="settingCurrency" name="settingCurrency">
+                  <option>INR</option>
+                </select>
+              </label>
+              <label>
+                Time zone
+                <select id="settingTimezone" name="settingTimezone">
+                  <option>Asia/Kolkata</option>
+                </select>
+              </label>
+              <label>
+                Weekly off
+                <select id="settingWeeklyOff" name="settingWeeklyOff">
+                  <option>Sunday</option>
+                  <option>Saturday and Sunday</option>
+                  <option>Rotational</option>
+                </select>
+              </label>
+              <label>
+                Default working days
+                <input id="settingWorkingDays" name="settingWorkingDays" type="number" min="1" max="31" value="26">
+              </label>
+              <label>
+                Monthly leave credit
+                <input id="settingLeaveCredit" name="settingLeaveCredit" type="number" min="0" step="0.25" value="1.25">
+              </label>
+              <label>
+                Payslip prefix
+                <input id="settingPayslipPrefix" name="settingPayslipPrefix" maxlength="12" value="PAY">
+              </label>
+              <label>
+                Salary rounding
+                <select id="settingSalaryRounding" name="settingSalaryRounding">
+                  <option>Nearest rupee</option>
+                  <option>Floor rupee</option>
+                  <option>No rounding</option>
+                </select>
+              </label>
+            </div>
+            <fieldset class="visibility-settings appearance-settings">
+              <legend>Appearance customization</legend>
+              <label>
+                Color theme
+                <select id="settingTheme" name="settingTheme">
+                  <option value="emerald">Emerald</option>
+                  <option value="indigo">Indigo</option>
+                  <option value="rose">Rose</option>
+                  <option value="graphite">Graphite</option>
+                </select>
+              </label>
+              <label>
+                Font style
+                <select id="settingFont" name="settingFont">
+                  <option value="inter">Inter / Clean</option>
+                  <option value="system">System</option>
+                  <option value="serif">Serif</option>
+                  <option value="rounded">Rounded</option>
+                  <option value="mono">Mono</option>
+                </select>
+              </label>
+              <label>
+                Background image
+                <input id="settingBackgroundImage" name="settingBackgroundImage" type="file" accept="image/*">
+              </label>
+              <label class="inline-check">
+                <input id="settingTransparency" name="settingTransparency" type="checkbox">
+                Transparency mode
+              </label>
+              <label class="inline-check">
+                <input id="settingClearBackground" name="settingClearBackground" type="checkbox">
+                Remove background image
+              </label>
+              <div id="backgroundImagePreview" class="background-image-preview">No background image</div>
+            </fieldset>
+            <fieldset class="visibility-settings">
+              <legend>Module visibility</legend>
+              <label><input type="checkbox" name="visibleTabs" value="holidaysPage" checked> Holidays</label>
+              <label><input type="checkbox" name="visibleTabs" value="payrollPage" checked> Employees</label>
+              <label><input type="checkbox" name="visibleTabs" value="leaveRegisterPage" checked> Leave Register</label>
+              <label><input type="checkbox" name="visibleTabs" value="employeePortalPage" checked> Employee Portal</label>
+              <label><input type="checkbox" name="visibleTabs" value="approvalsPage" checked> Approvals</label>
+              <label><input type="checkbox" name="visibleTabs" value="historyPage" checked> History</label>
+              <label><input type="checkbox" name="visibleTabs" value="compliancePage" checked> Rules</label>
+            </fieldset>
+            <fieldset class="visibility-settings">
+              <legend>Home page buttons</legend>
+              <label><input type="checkbox" name="visibleActions" value="payrollRunPage" checked> Run Payroll</label>
+              <label><input type="checkbox" name="visibleActions" value="newEmployeePage" checked> Add Employee</label>
+              <label><input type="checkbox" name="visibleActions" value="attendancePage" checked> Record Attendence</label>
+              <label><input type="checkbox" name="visibleActions" value="advancePage" checked> Advance Payment</label>
+            </fieldset>
+            <fieldset class="visibility-settings role-access-settings">
+              <legend>Role based access control</legend>
+              <div class="role-access-grid">
+                <div>
+                  <strong>HR modules</strong>
+                  <label><input type="checkbox" name="roleAccessModules" data-role="hr" value="holidaysPage" checked> Holidays</label>
+                  <label><input type="checkbox" name="roleAccessModules" data-role="hr" value="payrollPage" checked> Employees</label>
+                  <label><input type="checkbox" name="roleAccessModules" data-role="hr" value="employeeProfilePage" checked> Employee Profile</label>
+                  <label><input type="checkbox" name="roleAccessModules" data-role="hr" value="newEmployeePage" checked> Add Employee</label>
+                  <label><input type="checkbox" name="roleAccessModules" data-role="hr" value="attendancePage" checked> Attendance</label>
+                  <label><input type="checkbox" name="roleAccessModules" data-role="hr" value="leaveRegisterPage" checked> Leave Register</label>
+                  <label><input type="checkbox" name="roleAccessModules" data-role="hr" value="employeePortalPage" checked> Employee Portal</label>
+                  <label><input type="checkbox" name="roleAccessModules" data-role="hr" value="approvalsPage" checked> Approvals</label>
+                  <label><input type="checkbox" name="roleAccessModules" data-role="hr" value="payrollRunPage" checked> Run Payroll</label>
+                  <label><input type="checkbox" name="roleAccessModules" data-role="hr" value="advancePage" checked> Advances</label>
+                  <label><input type="checkbox" name="roleAccessModules" data-role="hr" value="historyPage" checked> Reports / History</label>
+                  <label><input type="checkbox" name="roleAccessModules" data-role="hr" value="compliancePage" checked> Rules</label>
+                  <label><input type="checkbox" name="roleAccessModules" data-role="hr" value="inventory"> Inventory</label>
+                  <label><input type="checkbox" name="roleAccessModules" data-role="hr" value="purchase"> Purchase</label>
+                  <label><input type="checkbox" name="roleAccessModules" data-role="hr" value="sales"> Sales</label>
+                  <label><input type="checkbox" name="roleAccessModules" data-role="hr" value="accounts" checked> Accounts</label>
+                  <label><input type="checkbox" name="roleAccessModules" data-role="hr" value="production"> Production</label>
+                </div>
+                <div>
+                  <strong>Employee modules</strong>
+                  <label><input type="checkbox" name="roleAccessModules" data-role="employee" value="holidaysPage" checked> Holidays</label>
+                  <label><input type="checkbox" name="roleAccessModules" data-role="employee" value="payrollPage"> Employees</label>
+                  <label><input type="checkbox" name="roleAccessModules" data-role="employee" value="employeeProfilePage"> Employee Profile</label>
+                  <label><input type="checkbox" name="roleAccessModules" data-role="employee" value="newEmployeePage"> Add Employee</label>
+                  <label><input type="checkbox" name="roleAccessModules" data-role="employee" value="attendancePage"> Attendance</label>
+                  <label><input type="checkbox" name="roleAccessModules" data-role="employee" value="leaveRegisterPage"> Leave Register</label>
+                  <label><input type="checkbox" name="roleAccessModules" data-role="employee" value="employeePortalPage" checked> Employee Portal</label>
+                  <label><input type="checkbox" name="roleAccessModules" data-role="employee" value="approvalsPage"> Approvals</label>
+                  <label><input type="checkbox" name="roleAccessModules" data-role="employee" value="payrollRunPage"> Run Payroll</label>
+                  <label><input type="checkbox" name="roleAccessModules" data-role="employee" value="advancePage"> Advances</label>
+                  <label><input type="checkbox" name="roleAccessModules" data-role="employee" value="historyPage"> Reports / History</label>
+                  <label><input type="checkbox" name="roleAccessModules" data-role="employee" value="compliancePage"> Rules</label>
+                  <label><input type="checkbox" name="roleAccessModules" data-role="employee" value="inventory"> Inventory</label>
+                  <label><input type="checkbox" name="roleAccessModules" data-role="employee" value="purchase"> Purchase</label>
+                  <label><input type="checkbox" name="roleAccessModules" data-role="employee" value="sales"> Sales</label>
+                  <label><input type="checkbox" name="roleAccessModules" data-role="employee" value="accounts"> Accounts</label>
+                  <label><input type="checkbox" name="roleAccessModules" data-role="employee" value="production"> Production</label>
+                </div>
+                <div>
+                  <strong>HR actions</strong>
+                  <label><input type="checkbox" name="roleAccessActions" data-role="hr" value="view" checked> View</label>
+                  <label><input type="checkbox" name="roleAccessActions" data-role="hr" value="add" checked> Add</label>
+                  <label><input type="checkbox" name="roleAccessActions" data-role="hr" value="edit" checked> Edit</label>
+                  <label><input type="checkbox" name="roleAccessActions" data-role="hr" value="delete"> Delete</label>
+                  <label><input type="checkbox" name="roleAccessActions" data-role="hr" value="approve"> Approve</label>
+                  <label><input type="checkbox" name="roleAccessActions" data-role="hr" value="export" checked> Export</label>
+                  <label><input type="checkbox" name="roleAccessActions" data-role="hr" value="print" checked> Print</label>
+                </div>
+                <div>
+                  <strong>Employee actions</strong>
+                  <label><input type="checkbox" name="roleAccessActions" data-role="employee" value="view" checked> View</label>
+                  <label><input type="checkbox" name="roleAccessActions" data-role="employee" value="add"> Add</label>
+                  <label><input type="checkbox" name="roleAccessActions" data-role="employee" value="edit"> Edit</label>
+                  <label><input type="checkbox" name="roleAccessActions" data-role="employee" value="delete"> Delete</label>
+                  <label><input type="checkbox" name="roleAccessActions" data-role="employee" value="approve"> Approve</label>
+                  <label><input type="checkbox" name="roleAccessActions" data-role="employee" value="export"> Export</label>
+                  <label><input type="checkbox" name="roleAccessActions" data-role="employee" value="print"> Print</label>
+                </div>
+              </div>
+            </fieldset>
+            <fieldset class="visibility-settings">
+              <legend>Payroll run columns</legend>
+              <label><input type="checkbox" name="payrollRunColumns" value="professionalTax"> Professional tax</label>
+            </fieldset>
+            <button class="primary-button" type="submit">Save settings</button>
+          </form>
+
+          <form id="adminUserForm" class="panel admin-card" data-admin-panel="users" autocomplete="off">
+            <h3>User Profile & Roles</h3>
+            <div class="form-grid compact-admin-grid">
+              <label>
+                User name
+                <input id="adminUserName" name="adminUserName" required maxlength="80" placeholder="User full name">
+              </label>
+              <label>
+                Mobile
+                <input id="adminUserMobile" name="adminUserMobile" required maxlength="10" pattern="[0-9]{10}" placeholder="9876543210">
+              </label>
+              <label>
+                Email
+                <input id="adminUserEmail" name="adminUserEmail" required type="email" placeholder="user@veraglo.com">
+              </label>
+              <label>
+                Role
+                <select id="adminUserRole" name="adminUserRole"></select>
+              </label>
+              <label>
+                Department
+                <input id="adminUserDepartment" name="adminUserDepartment" list="departmentMaster" placeholder="Search department">
+              </label>
+              <label>
+                Status
+                <select id="adminUserStatus" name="adminUserStatus">
+                  <option>Active</option>
+                  <option>Inactive</option>
+                </select>
+              </label>
+            </div>
+            <button class="primary-button" type="submit">Save user</button>
+          </form>
+
+          <form id="adminRoleForm" class="panel admin-card" data-admin-panel="users" autocomplete="off">
+            <h3>Role definition</h3>
+            <div class="form-grid compact-admin-grid">
+              <label>
+                Role name
+                <select id="adminRoleName" name="adminRoleName">
+                  <option>Admin</option>
+                  <option>HR</option>
+                  <option>Employee</option>
+                </select>
+              </label>
+              <label>
+                User access level
+                <select id="adminRoleLevel" name="adminRoleLevel">
+                  <option>Admin</option>
+                  <option>HR</option>
+                  <option>Employee</option>
+                </select>
+              </label>
+              <label class="wide-field">
+                Permissions
+                <select id="adminRolePermissions" name="adminRolePermissions" multiple size="8">
+                  <option>Manage organization profile</option>
+                  <option>Manage employees</option>
+                  <option>Record attendance</option>
+                  <option>Approve leave</option>
+                  <option>Run payroll</option>
+                  <option>View payroll history</option>
+                  <option>Manage advances</option>
+                  <option>Manage users and roles</option>
+                  <option>Inventory</option>
+                  <option>Purchase</option>
+                  <option>Sales</option>
+                  <option>Accounts</option>
+                  <option>Reports</option>
+                  <option>Production</option>
+                  <option>View</option>
+                  <option>Add</option>
+                  <option>Edit</option>
+                  <option>Delete</option>
+                  <option>Export</option>
+                  <option>Print</option>
+                </select>
+              </label>
+            </div>
+            <button class="primary-button" type="submit">Save role</button>
+          </form>
+
+          <section class="panel admin-card admin-list-card" data-admin-panel="company" aria-label="Saved organizations">
+            <h3>Saved organizations</h3>
+            <div id="organizationList" class="admin-list"></div>
+          </section>
+
+          <section class="panel admin-card admin-list-card admin-wide-card" data-admin-panel="users" aria-label="Saved users and roles">
+            <h3>Users and roles</h3>
+            <div id="adminUserList" class="admin-list"></div>
+            <div id="adminRoleList" class="admin-list role-list"></div>
+          </section>
+
+          <section class="panel admin-card admin-list-card admin-wide-card" data-admin-panel="changes" aria-label="Employee change approvals">
+            <h3>Employee change approvals</h3>
+            <div class="table-wrap">
+              <table class="admin-employee-change-table">
+                <thead>
+                  <tr>
+                    <th>Employee</th>
+                    <th>Requested by</th>
+                    <th>Requested on</th>
+                    <th>Changes</th>
+                    <th>Status</th>
+                    <th class="actions">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="adminEmployeeChangeRows"></tbody>
+              </table>
+              <div id="adminEmployeeChangeEmpty" class="empty-state hidden">
+                <h2>No employee change requests</h2>
+                <p>HR edits to saved employee records will wait here for Admin authorization.</p>
+              </div>
+            </div>
+          </section>
+
+        </section>
+      </section>
+
+      <section id="compliancePage" class="page" aria-label="India payroll rules">
+        <div class="rules-grid">
+          <article class="rule-card">
+            <span>EPF</span>
+            <h2>12% employee PF</h2>
+            <p>Calculated on Basic + DA. Employer PF is also tracked at 12% for statutory cost view.</p>
+          </article>
+          <article class="rule-card">
+            <span>ESI</span>
+            <h2>0.75% employee ESI</h2>
+            <p>Applied when gross wages are up to ₹21,000. Employer ESI cost is tracked at 3.25%.</p>
+          </article>
+          <article class="rule-card">
+            <span>Configurable</span>
+            <h2>TDS/PT kept manual</h2>
+            <p>Professional tax and TDS vary by state, salary structure, declarations, and employee regime.</p>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <datalist id="cityMaster">
+      <option value="Ahmedabad"></option>
+      <option value="Bengaluru"></option>
+      <option value="Bhopal"></option>
+      <option value="Bhubaneswar"></option>
+      <option value="Chandigarh"></option>
+      <option value="Chennai"></option>
+      <option value="Coimbatore"></option>
+      <option value="Delhi"></option>
+      <option value="Faridabad"></option>
+      <option value="Ghaziabad"></option>
+      <option value="Gurugram"></option>
+      <option value="Guwahati"></option>
+      <option value="Hyderabad"></option>
+      <option value="Indore"></option>
+      <option value="Jaipur"></option>
+      <option value="Kanpur"></option>
+      <option value="Kochi"></option>
+      <option value="Kolkata"></option>
+      <option value="Lucknow"></option>
+      <option value="Ludhiana"></option>
+      <option value="Mumbai"></option>
+      <option value="Nagpur"></option>
+      <option value="Noida"></option>
+      <option value="Patna"></option>
+      <option value="Pune"></option>
+      <option value="Surat"></option>
+      <option value="Thane"></option>
+      <option value="Vadodara"></option>
+      <option value="Visakhapatnam"></option>
+    </datalist>
+
+    <datalist id="stateMaster">
+      <option value="Andaman and Nicobar Islands"></option>
+      <option value="Andhra Pradesh"></option>
+      <option value="Arunachal Pradesh"></option>
+      <option value="Assam"></option>
+      <option value="Bihar"></option>
+      <option value="Chandigarh"></option>
+      <option value="Chhattisgarh"></option>
+      <option value="Delhi"></option>
+      <option value="Goa"></option>
+      <option value="Gujarat"></option>
+      <option value="Haryana"></option>
+      <option value="Himachal Pradesh"></option>
+      <option value="Jammu and Kashmir"></option>
+      <option value="Jharkhand"></option>
+      <option value="Karnataka"></option>
+      <option value="Kerala"></option>
+      <option value="Ladakh"></option>
+      <option value="Madhya Pradesh"></option>
+      <option value="Maharashtra"></option>
+      <option value="Manipur"></option>
+      <option value="Meghalaya"></option>
+      <option value="Mizoram"></option>
+      <option value="Nagaland"></option>
+      <option value="Odisha"></option>
+      <option value="Puducherry"></option>
+      <option value="Punjab"></option>
+      <option value="Rajasthan"></option>
+      <option value="Sikkim"></option>
+      <option value="Tamil Nadu"></option>
+      <option value="Telangana"></option>
+      <option value="Tripura"></option>
+      <option value="Uttar Pradesh"></option>
+      <option value="Uttarakhand"></option>
+      <option value="West Bengal"></option>
+    </datalist>
+
+    <datalist id="countryMaster">
+      <option value="India"></option>
+      <option value="Bangladesh"></option>
+      <option value="Bhutan"></option>
+      <option value="Nepal"></option>
+      <option value="Sri Lanka"></option>
+      <option value="United Arab Emirates"></option>
+      <option value="United Kingdom"></option>
+      <option value="United States"></option>
+    </datalist>
+
+    <datalist id="departmentMaster">
+      <option value="Administration"></option>
+      <option value="Accounts"></option>
+      <option value="Accounts & Finance"></option>
+      <option value="Audit"></option>
+      <option value="Compliance"></option>
+      <option value="Customer Support"></option>
+      <option value="Engineering"></option>
+      <option value="Facilities"></option>
+      <option value="Finance"></option>
+      <option value="HR"></option>
+      <option value="IT"></option>
+      <option value="Legal"></option>
+      <option value="Logistics"></option>
+      <option value="Maintenance"></option>
+      <option value="Management"></option>
+      <option value="Marketing"></option>
+      <option value="Operations"></option>
+      <option value="Payroll"></option>
+      <option value="Procurement"></option>
+      <option value="Production"></option>
+      <option value="Quality"></option>
+      <option value="Research & Development"></option>
+      <option value="Sales"></option>
+      <option value="Security"></option>
+      <option value="Stores & Inventory"></option>
+      <option value="Support"></option>
+      <option value="Training"></option>
+    </datalist>
+
+    <div id="reportModal" class="modal-shell hidden" role="dialog" aria-modal="true" aria-labelledby="reportModalTitle">
+      <section class="modal-card">
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">Report</p>
+            <h2 id="reportModalTitle">Report</h2>
+          </div>
+          <button class="row-button" id="closeReportModal" type="button">Close</button>
+        </div>
+        <div class="modal-actions">
+          <button class="secondary-button" id="modalSavePdf" type="button">Save as PDF</button>
+          <button class="secondary-button" id="modalPrint" type="button">Print</button>
+          <button class="secondary-button" id="modalExportExcel" type="button">Export to Excel</button>
+          <button class="secondary-button" id="modalDownload" type="button">Download</button>
+        </div>
+        <div id="reportModalBody" class="modal-body"></div>
+      </section>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
