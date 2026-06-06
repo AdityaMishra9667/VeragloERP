@@ -315,6 +315,23 @@
         accent: "#6366f1", defaultMode: "dark", sidebarCollapsed: false, fontSize: "medium",
         loginBackground: "assets/happy-employees.png",
       },
+      weatherLogin: {
+        enabled: true,
+        locationSource: "company",
+        manualCity: "",
+        refreshIntervalMins: 30,
+        openWeatherApiKey: "",
+        defaultWallpaper: "assets/happy-employees.png",
+        wallpapers: {
+          clear: "",
+          cloudy: "",
+          rain: "",
+          fog: "",
+          storm: "",
+          night: "",
+          snow: "",
+        },
+      },
       typography: {
         fontFamily: "inter", headingSize: "medium", tableSize: "medium", formSize: "medium",
         pdfFontFamily: "inter", fontWeight: "medium", lineSpacing: "comfortable", density: "comfortable",
@@ -373,6 +390,8 @@
     else db.settings.skuNumbering = { ...defaultSettings().skuNumbering, ...db.settings.skuNumbering, categoryPrefixes: { ...defaultSettings().skuNumbering.categoryPrefixes, ...(db.settings.skuNumbering.categoryPrefixes || {}) } };
     if (!db.settings.activation) db.settings.activation = defaultSettings().activation;
     if (!db.settings.dataPath) db.settings.dataPath = defaultSettings().dataPath;
+    if (!db.settings.weatherLogin) db.settings.weatherLogin = defaultSettings().weatherLogin;
+    else db.settings.weatherLogin = { ...defaultSettings().weatherLogin, ...db.settings.weatherLogin, wallpapers: { ...defaultSettings().weatherLogin.wallpapers, ...(db.settings.weatherLogin.wallpapers || {}) } };
     migrateLicense(db);
     db.seq = db.seq || {};
     ["PR", "PO", "QC", "QCI", "NCR", "BOM", "WO", "MR", "FG", "SH", "INV", "LP", "PAY", "USR"].forEach((k) => { if (db.seq[k] == null) db.seq[k] = 0; });
@@ -2618,7 +2637,17 @@
         pinnedModules: perUser.pinnedModules || all.pinnedModules || [],
         hiddenModules: perUser.hiddenModules || [],
         moduleOrder: perUser.moduleOrder || all.moduleOrder || [],
+        recentModules: perUser.recentModules || all.recentModules || [],
+        lastModuleId: perUser.lastModuleId || all.lastModuleId || "",
       };
+    },
+    recordModuleOpen(roleKey, moduleId, actor) {
+      if (!roleKey || !moduleId) return;
+      const prefs = this.dashboardPrefs(roleKey);
+      let recent = (prefs.recentModules || []).filter((id) => id !== moduleId);
+      recent.unshift(moduleId);
+      recent = recent.slice(0, 6);
+      this.saveDashboardPrefs(roleKey, { recentModules: recent, lastModuleId: moduleId }, actor || roleKey);
     },
     saveDashboardPrefs(roleKey, patch, actor) {
       const dash = { ...(DB.settings.dashboard || {}), byRole: { ...((DB.settings.dashboard || {}).byRole || {}) } };
@@ -2650,8 +2679,37 @@
       return null;
     },
 
+    startEvaluationTrial(actor) {
+      const act = (DB.settings && DB.settings.activation) || {};
+      const trialEnd = new Date();
+      trialEnd.setDate(trialEnd.getDate() + 14);
+      DB.settings.activation = {
+        ...act,
+        status: "Trial",
+        licenseKeyId: "",
+        serial: "",
+        trialEndsAt: act.trialEndsAt && act.trialEndsAt >= todayISO()
+          ? act.trialEndsAt
+          : trialEnd.toISOString().slice(0, 10),
+      };
+      this.audit(actor || "installer", "update", "license", "trial", "Evaluation trial started");
+      notify();
+      return { ok: true, trialEndsAt: DB.settings.activation.trialEndsAt };
+    },
+
     isLicensed() {
       const act = (DB.settings && DB.settings.activation) || {};
+      const trialEnd = act.trialEndsAt;
+      const trialValid = trialEnd && trialEnd >= todayISO();
+      if (!act.licenseKeyId && trialValid) {
+        return { ok: true, trial: true, trialEndsAt: trialEnd };
+      }
+      if (act.status === "Trial") {
+        if (trialEnd && trialEnd < todayISO()) {
+          return { ok: false, reason: "Trial expired — activate with a license", expired: true };
+        }
+        return { ok: true, trial: true, trialEndsAt: trialEnd };
+      }
       if (act.status === "Active" && act.licenseKeyId) {
         const lic = this.get("licenseKeys", act.licenseKeyId);
         if (lic && lic.status === "Blocked") return { ok: false, reason: "License is blocked" };

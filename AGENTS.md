@@ -54,6 +54,13 @@ If login fails with *"Role is inactive or missing"*, wait a few seconds for the 
 
 This repo has **no** ESLint, test runner, or frontend bundler. There is nothing to `npm test` or `npm run lint` at the root. Validation is manual (API health + browser smoke test). Windows installer build: `npm run build:win` (optional; requires `desktop/` deps).
 
+### Login weather theme
+
+- Client: `src/weather-login.jsx` (loaded before `src/admin.jsx` in `index.html`)
+- API: `GET /api/weather/settings`, `GET /api/weather/current` (public, cached; uses Open-Meteo, no API key)
+- Admin: **Admin → Login Weather** (`settings.weatherLogin`)
+- Weather loads **asynchronously** on the login screen; login is never blocked if the API is down
+
 ### Key paths
 
 - API entry: `server/index.js`

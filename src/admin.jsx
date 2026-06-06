@@ -1146,6 +1146,154 @@
     );
   }
 
+  const WEATHER_CONDITIONS = [
+    { id: "clear", label: "Clear / sunny" },
+    { id: "cloudy", label: "Cloudy" },
+    { id: "rain", label: "Rain" },
+    { id: "fog", label: "Fog / haze" },
+    { id: "storm", label: "Storm / thunder" },
+    { id: "night", label: "Night" },
+    { id: "snow", label: "Snow" },
+  ];
+
+  /* ================= Login weather theme ================= */
+  function WeatherLoginPage({ roleKey, can }) {
+    VG.useDB();
+    const live = store.settings().weatherLogin || {};
+    const companyCity = (store.company() || {}).city
+      || ((store.company() || {}).registeredAddress || {}).city
+      || ((store.company() || {}).officeAddress || {}).city
+      || "";
+    const [w, setW] = useState(() => clone({ ...store.settings().weatherLogin }));
+    const [preview, setPreview] = useState(null);
+    const [previewBusy, setPreviewBusy] = useState(false);
+    const set = (k, v) => setW((p) => ({ ...p, [k]: v }));
+    const setWall = (cond, v) => setW((p) => ({ ...p, wallpapers: { ...(p.wallpapers || {}), [cond]: v } }));
+
+    async function fetchPreview() {
+      if (previewBusy) return;
+      setPreviewBusy(true);
+      try {
+        const params = new URLSearchParams({ source: w.locationSource || "company" });
+        if (w.locationSource === "manual" && w.manualCity) params.set("city", w.manualCity);
+        const res = await fetch((VG.apiBase || "") + "/api/weather/current?" + params.toString());
+        const data = await res.json();
+        setPreview(data);
+        if (data.ok) VG.toast("Weather preview loaded");
+        else VG.toast(data.error || "Weather unavailable", "warn");
+      } catch (e) {
+        VG.toast("Could not reach weather service", "error");
+      } finally {
+        setPreviewBusy(false);
+      }
+    }
+
+    function save() {
+      store.saveAdminSettings({ weatherLogin: w }, roleKey);
+      try { localStorage.removeItem("veraglo-weather-login-cache"); } catch (e) {}
+      VG.toast("Login weather settings saved");
+    }
+
+    const stock = (VG.WEATHER_LOGIN_WALLPAPERS || {});
+
+    return (
+      <div className="space-y-4">
+        <PageHead
+          title="Login Weather Theme"
+          desc="Dynamic login wallpaper and colours from live weather. Loads asynchronously — never blocks sign-in."
+        >
+          {can("edit") && (
+            <div className="flex flex-wrap gap-2">
+              <Button variant="soft" icon="refresh" onClick={fetchPreview} disabled={previewBusy || !w.enabled}>
+                {previewBusy ? "Loading…" : "Preview weather"}
+              </Button>
+              <Button icon="check" onClick={save}>Save settings</Button>
+            </div>
+          )}
+        </PageHead>
+
+        <Card className="p-4">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="sm:col-span-2 lg:col-span-3">
+              <Checkbox checked={w.enabled !== false} onChange={(v) => set("enabled", v)} label="Enable weather-based login theme" />
+            </div>
+            <Field label="Location source" hint="Where to fetch weather for the login page">
+              <Select
+                value={w.locationSource || "company"}
+                onChange={(v) => set("locationSource", v)}
+                options={[
+                  { value: "company", label: "Company city (Admin → Company Profile)" },
+                  { value: "browser", label: "Visitor current location (browser permission)" },
+                  { value: "manual", label: "Manual city" },
+                ]}
+              />
+            </Field>
+            {w.locationSource === "manual" ? (
+              <Field label="Manual city" hint="City name for geocoding, e.g. Mumbai, India">
+                <Text value={w.manualCity || ""} onChange={(v) => set("manualCity", v)} placeholder="Mumbai" />
+              </Field>
+            ) : (
+              <Field label="Company city (reference)" hint={companyCity ? "Using: " + companyCity : "Set city in Company Profile → Addresses"}>
+                <Text value={companyCity || "— not set —"} readOnly />
+              </Field>
+            )}
+            <Field label="Refresh interval (minutes)" hint="Client cache + background refresh">
+              <Num value={w.refreshIntervalMins || 30} onChange={(v) => set("refreshIntervalMins", Math.max(5, Number(v) || 30))} min={5} max={180} />
+            </Field>
+            <Field label="OpenWeather API key (optional)" hint="Open-Meteo is used by default (no key). Reserve for future fallback." className="lg:col-span-2">
+              <Text type="password" value={w.openWeatherApiKey || ""} onChange={(v) => set("openWeatherApiKey", v)} placeholder="Leave blank to use Open-Meteo" />
+            </Field>
+          </div>
+        </Card>
+
+        <Card className="p-4">
+          <h3 className="font-semibold text-sm mb-1">Wallpapers</h3>
+          <p className="text-xs opacity-60 mb-4">Upload an image or paste a URL/path. Empty fields use curated stock photos per condition.</p>
+          <Field label="Default fallback wallpaper" className="mb-4">
+            <div className="grid sm:grid-cols-2 gap-3 items-start">
+              <Text value={w.defaultWallpaper || "assets/happy-employees.png"} onChange={(v) => set("defaultWallpaper", v)} />
+              <ImageUploadField label="Upload default" value={w.defaultWallpaper} onChange={(v) => set("defaultWallpaper", v)} />
+            </div>
+          </Field>
+          <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
+            {WEATHER_CONDITIONS.map((c) => (
+              <div key={c.id} className="rounded-xl border border-white/10 p-3 space-y-2">
+                <div className="text-xs font-medium">{c.label}</div>
+                <div className="vg-weather-preview">
+                  <img src={(w.wallpapers || {})[c.id] || stock[c.id] || w.defaultWallpaper} alt="" />
+                </div>
+                <Text
+                  value={((w.wallpapers || {})[c.id]) || ""}
+                  onChange={(v) => setWall(c.id, v)}
+                  placeholder={stock[c.id] ? "Stock photo (leave empty)" : "URL or assets/…"}
+                />
+                <ImageUploadField label={"Upload " + c.label} value={(w.wallpapers || {})[c.id]} onChange={(v) => setWall(c.id, v)} />
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        {preview && (
+          <Card className="p-4">
+            <div className="text-[11px] uppercase tracking-wider opacity-55 mb-2">Live preview</div>
+            {preview.ok ? (
+              <div className="flex flex-wrap items-center gap-4 text-sm">
+                <span className="text-2xl font-display font-bold">{preview.temperature}°C</span>
+                <div>
+                  <div className="font-medium">{preview.location}</div>
+                  <div className="text-xs opacity-70">{preview.conditionLabel} · Theme: {preview.condition}</div>
+                  {preview.forecastSummary && <div className="text-xs opacity-55 mt-1">{preview.forecastSummary}</div>}
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm opacity-60">{preview.error || preview.reason || "Weather unavailable"}</p>
+            )}
+          </Card>
+        )}
+      </div>
+    );
+  }
+
   /* ================= Theme ================= */
   function ThemePage({ roleKey, can }) {
     VG.useDB();
@@ -1339,6 +1487,7 @@
     { id: "notifications", label: "Notifications", icon: "bell", group: "System" },
     { id: "uiSettings", label: "UI Settings", icon: "settings", group: "System" },
     { id: "theme", label: "Theme", icon: "sparkle", group: "System" },
+    { id: "weatherLogin", label: "Login Weather", icon: "cloud", group: "System" },
     { id: "backup", label: "Backup & Restore", icon: "cloud", group: "System" },
     { id: "audit", label: "Audit Trail", icon: "activity", group: "System" },
     { id: "licDashboard", label: "License Dashboard", icon: "shield", group: "Licensing & Data" },
@@ -1361,7 +1510,7 @@
     masterData: MasterDataPage, importExport: ImportExportPage, templates: DocumentTemplatesPage,
     numberSeries: NumberSeriesPage, skuNumbering: (p) => VG.SkuNumberingPage ? React.createElement(VG.SkuNumberingPage, p) : null,
     security: SecurityPage, notifications: NotificationsPage,
-    uiSettings: UiSettingsPage, theme: ThemePage, backup: BackupRestore, audit: AuditTrail,
+    uiSettings: UiSettingsPage, theme: ThemePage, weatherLogin: WeatherLoginPage, backup: BackupRestore, audit: AuditTrail,
     licDashboard: licensePages.licDashboard, licGenerate: licensePages.licGenerate,
     licActivate: licensePages.licActivate, licRenew: licensePages.licRenew,
     licTransfer: licensePages.licTransfer, licDeactivate: licensePages.licDeactivate,

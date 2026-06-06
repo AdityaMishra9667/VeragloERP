@@ -358,11 +358,35 @@
     reports: { c1: "#2563eb", c2: "#3b82f6", desc: "Cross-module analytics, scheduled reports and exportable insights." },
     admin: { c1: "#475569", c2: "#64748b", desc: "Users, roles, company profile, backups and the full system audit trail." },
   };
+  function isDashboardSection(sectionId) {
+    return sectionId === "dashboard";
+  }
+  VG.isDashboardSection = isDashboardSection;
+
+  function ModuleBreadcrumb({ mod, sectionLabel, groupLabel, onHome }) {
+    return (
+      <nav className="vg-module-crumb flex flex-wrap items-center gap-1.5 text-[11px] mb-2 opacity-60" aria-label="Breadcrumb">
+        <button type="button" onClick={onHome} className="hover:opacity-100 transition font-medium" style={{ color: "var(--accent)" }}>
+          {mod.name}
+        </button>
+        <Icon name="chevronRight" size={12} className="opacity-35 shrink-0" />
+        {groupLabel && groupLabel !== "Overview" && (
+          <>
+            <span>{groupLabel}</span>
+            <Icon name="chevronRight" size={12} className="opacity-35 shrink-0" />
+          </>
+        )}
+        <span className="font-semibold opacity-90">{sectionLabel}</span>
+      </nav>
+    );
+  }
+  VG.ModuleBreadcrumb = ModuleBreadcrumb;
+
   function ModuleBanner({ mod, actions }) {
     const b = BANNERS[mod.id] || { c1: mod.accent, c2: "#22d3ee", desc: mod.tagline };
     const img = (VG.MODULE_BANNER_IMG && VG.MODULE_BANNER_IMG[mod.id]) || null;
     return (
-      <div className="vg-module-banner relative overflow-hidden rounded-2xl mb-4 shadow-glass animate-fade-up min-h-[132px] sm:min-h-[148px]">
+      <div className="vg-module-banner relative overflow-hidden rounded-2xl mb-4 shadow-glass animate-fade-up min-h-[112px] sm:min-h-[128px]">
         {img && <img src={img} alt="" className="absolute inset-0 w-full h-full object-cover" loading="lazy" decoding="async" />}
         <div className="absolute inset-0" style={{ background: `linear-gradient(105deg, ${b.c1}e6 0%, ${b.c2}bb 45%, rgba(8,13,24,.88) 100%)` }} />
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/20" />
@@ -468,16 +492,19 @@
     }, [mod.id, section, setSection]);
 
     const current = visibleSections.find((s) => s.id === section);
+    const isDashboard = isDashboardSection(section);
     return (
-      <div className="animate-fade-up">
-        <ModuleBanner mod={mod} actions={actions} />
-        {section !== "dashboard" && current && (
-          <div className="mb-3 px-1 flex items-center gap-2 text-xs opacity-55">
-            <Icon name="grid" size={14} />
-            <span>{current.label}</span>
-            <span className="opacity-40">· use left menu to switch</span>
-          </div>
-        )}
+      <div className={"animate-fade-up" + (isDashboard ? "" : " vg-internal-workspace")}>
+        {isDashboard ? (
+          <ModuleBanner mod={mod} actions={actions} />
+        ) : current ? (
+          <ModuleBreadcrumb
+            mod={mod}
+            sectionLabel={current.label}
+            groupLabel={current.group}
+            onHome={() => setSection("dashboard")}
+          />
+        ) : null}
         {children}
       </div>
     );
@@ -544,11 +571,20 @@
     const isAnalytics = /analytic/i.test(tab);
 
     return (
-      <div className="animate-fade-up">
-        <ModuleBanner mod={mod} actions={[
-          ...(can("add") && mod.shortcuts ? [{ label: mod.shortcuts[0], icon: "plus", primary: true, onClick: () => setTab(mod.tabs[1] || mod.tabs[0]) }] : []),
-          { label: "Reports", icon: "chart", onClick: () => setTab(mod.tabs.find((t) => /report/i.test(t)) || mod.tabs[0]) },
-        ]} />
+      <div className={"animate-fade-up" + (isOverview ? "" : " vg-internal-workspace")}>
+        {isOverview ? (
+          <ModuleBanner mod={mod} actions={[
+            ...(can("add") && mod.shortcuts ? [{ label: mod.shortcuts[0], icon: "plus", primary: true, onClick: () => setTab(mod.tabs[1] || mod.tabs[0]) }] : []),
+            { label: "Reports", icon: "chart", onClick: () => setTab(mod.tabs.find((t) => /report/i.test(t)) || mod.tabs[0]) },
+          ]} />
+        ) : (
+          <ModuleBreadcrumb
+            mod={mod}
+            sectionLabel={tab}
+            groupLabel="Views"
+            onHome={() => setTab(mod.tabs[0])}
+          />
+        )}
 
         {isOverview && (
           <div className="space-y-6 max-w-[1600px]">

@@ -584,6 +584,94 @@
       .light .vg-tab:hover {
         background: rgba(15, 23, 42, 0.05);
       }
+      /* Module banner — dashboard only; internal pages use compact chrome */
+      .vg-module-banner img {
+        object-position: center 35%;
+      }
+      .vg-internal-workspace {
+        max-width: 1600px;
+      }
+      .vg-internal-workspace .vg-page-head {
+        margin-bottom: 0.75rem;
+      }
+      .vg-internal-workspace .vg-module-crumb + .vg-page-head h2 {
+        font-size: 1rem;
+      }
+      .vg-module-dashboard .vg-module-nav {
+        margin-top: 0;
+      }
+      /* Post-login module home — responsive card grid */
+      .vg-home-module-grid {
+        display: grid;
+        grid-template-columns: repeat(1, minmax(0, 1fr));
+        gap: 1rem;
+      }
+      @media (min-width: 640px) {
+        .vg-home-module-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 1.125rem;
+        }
+      }
+      @media (min-width: 1024px) {
+        .vg-home-module-grid {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+      }
+      @media (min-width: 1280px) {
+        .vg-home-module-grid {
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+      }
+      .vg-home-module-card {
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 4px 24px rgba(2, 8, 23, 0.25);
+      }
+      .vg-home-module-card:hover {
+        border-color: rgba(255, 255, 255, 0.18);
+        box-shadow: 0 12px 40px rgba(2, 8, 23, 0.35);
+      }
+      html.light .vg-module-home {
+        color: #1e293b;
+      }
+      html.light .vg-home-module-card {
+        background: rgba(255, 255, 255, 0.92);
+        border-color: rgba(15, 23, 42, 0.08);
+        color: #0f172a;
+      }
+      /* Weather-aware login */
+      .vg-login-weather .vg-weather-widget {
+        color: #f8fafc;
+        background: rgba(15, 23, 42, 0.42);
+        border-color: rgba(255, 255, 255, 0.14);
+        box-shadow: 0 12px 40px rgba(2, 8, 23, 0.35);
+      }
+      .vg-login-weather[data-weather="clear"] .vg-weather-widget {
+        border-color: rgba(56, 189, 248, 0.25);
+      }
+      .vg-login-weather[data-weather="rain"] .vg-weather-widget,
+      .vg-login-weather[data-weather="cloudy"] .vg-weather-widget {
+        border-color: rgba(148, 163, 184, 0.22);
+      }
+      .vg-login-weather[data-weather="night"] .vg-weather-widget,
+      .vg-login-weather[data-weather="storm"] .vg-weather-widget {
+        border-color: rgba(129, 140, 248, 0.22);
+      }
+      .vg-login-weather img {
+        transition: opacity 0.7s ease, transform 8s ease;
+      }
+      .vg-weather-preview {
+        aspect-ratio: 16 / 9;
+        border-radius: 0.75rem;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(15, 23, 42, 0.5);
+      }
+      .vg-weather-preview img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
     </style>
   </head>
   <body>
@@ -606,7 +694,7 @@
           "src/data.jsx", "src/typography.jsx", "src/ui.jsx", "src/store.jsx", "src/sku-engine.jsx", "src/item-mfr.jsx", "src/admin-config.jsx", "src/doc-designer.jsx", "src/forms.jsx", "src/doc-template-designer.jsx", "src/customer.jsx",
           "src/module-dashboard.jsx", "src/modules.jsx", "src/shell-ui.jsx", "src/enquiry.jsx", "src/sales.jsx", "src/bom.jsx", "src/inventory.jsx", "src/purchase.jsx", "src/quality.jsx",
           "src/production.jsx", "src/dispatch.jsx", "src/accounts.jsx", "src/hr.jsx", "src/attendance.jsx",
-          "src/licensing-core.jsx", "src/admin-licensing.jsx", "src/admin-permissions.jsx", "src/admin.jsx", "src/search.jsx", "src/welcome-home.jsx", "src/app.jsx",
+          "src/licensing-core.jsx", "src/admin-licensing.jsx", "src/admin-permissions.jsx", "src/weather-login.jsx", "src/admin.jsx", "src/search.jsx", "src/welcome-home.jsx", "src/app.jsx",
         ];
         try {
           for (var i = 0; i < files.length; i++) {

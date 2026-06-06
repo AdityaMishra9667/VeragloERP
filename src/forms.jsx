@@ -698,12 +698,12 @@
   }
   function PageHead({ title, desc, children }) {
     return (
-      <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
-        <div>
-          <h2 className="text-xl font-semibold font-display">{title}</h2>
-          {desc && <p className="text-sm opacity-60">{desc}</p>}
+      <div className="vg-page-head flex flex-wrap items-center justify-between gap-2 mb-3">
+        <div className="min-w-0">
+          <h2 className="text-base sm:text-lg font-semibold font-display leading-tight">{title}</h2>
+          {desc && <p className="text-xs opacity-55 mt-0.5 leading-snug">{desc}</p>}
         </div>
-        <div className="flex items-center gap-2">{children}</div>
+        {children ? <div className="flex items-center gap-2 shrink-0">{children}</div> : null}
       </div>
     );
   }
