@@ -310,6 +310,11 @@
         minPasswordLength: 8, passwordExpiryDays: 90, sessionTimeoutMins: 60, maxLoginAttempts: 5,
         lockoutMins: 30, twoFactorRequired: false, loginOtp: false, ipRestriction: false, allowedIps: "",
         exportRestricted: false, auditRetentionDays: 365, forceLogoutAll: false,
+        forgotPasswordEnabled: true,
+        forgotPasswordOtpExpiryMins: 10,
+        forgotPasswordLinkExpiryMins: 60,
+        forgotPasswordMaxAttemptsPerHour: 5,
+        forgotPasswordDelivery: "both",
       },
       theme: {
         accent: "#6366f1", defaultMode: "dark", sidebarCollapsed: false, fontSize: "medium",
@@ -340,6 +345,8 @@
       notifications: {
         smtpHost: "", smtpPort: 587, smtpUser: "", smtpPass: "", smtpFrom: "noreply@veraglo.in",
         smtpTls: true, lowStockAlert: true, approvalAlerts: true, paymentReminders: true, followupReminders: true,
+        smsEnabled: false, smsProvider: "Twilio", smsApiKey: "", smsFrom: "",
+        passwordResetAlerts: true,
       },
       license: { plan: "Enterprise Manufacturing", seats: 50, validUntil: "2027-03-31", status: "Active" },
       activation: { status: "Trial", trialEndsAt: null, serial: "", licenseKeyId: "", machineId: "" },
@@ -375,6 +382,7 @@
     ["purchaseRequests", "purchaseOrders", "qcInspections", "qcIssues", "ncrs", "boms", "workOrders", "materialRequirements", "finishedGoodsTransfers", "dispatchQueue", "orderHistory", "shipments", "invoices", "payments", "employees", "leaveRequests", "attendanceRecords", "payrollRuns", "salarySlips",
       "erpUsers", "customRoles", "loginLog", "approvalWorkflows", "documentTemplates", "numberSeries", "fieldPermissions", "departments", "designations"].forEach((k) => { if (!Array.isArray(db[k])) db[k] = []; });
     if (!db.settings.security) db.settings.security = defaultSettings().security;
+    else db.settings.security = { ...defaultSettings().security, ...db.settings.security };
     if (!db.settings.theme) db.settings.theme = defaultSettings().theme;
     if (!db.settings.typography) {
       db.settings.typography = typeof VG !== "undefined" && VG.defaultTypography
@@ -384,6 +392,7 @@
       db.settings.typography = { ...defaultSettings().typography, ...db.settings.typography };
     }
     if (!db.settings.notifications) db.settings.notifications = defaultSettings().notifications;
+    else db.settings.notifications = { ...defaultSettings().notifications, ...db.settings.notifications };
     if (!db.settings.license) db.settings.license = defaultSettings().license;
     if (!db.settings.dashboard) db.settings.dashboard = defaultSettings().dashboard;
     if (!db.settings.skuNumbering) db.settings.skuNumbering = defaultSettings().skuNumbering;
@@ -795,6 +804,8 @@
 
   function migrateAuth(db) {
     if (!Array.isArray(db.revokedSessions)) db.revokedSessions = [];
+    if (!Array.isArray(db.passwordResetRequests)) db.passwordResetRequests = [];
+    if (!Array.isArray(db.passwordResetLog)) db.passwordResetLog = [];
     (db.erpUsers || []).forEach((u) => {
       if (u.isDeleted == null) u.isDeleted = false;
       if (u.isDeleted) {

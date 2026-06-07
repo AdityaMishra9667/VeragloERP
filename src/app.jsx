@@ -100,13 +100,18 @@
   }
 
   /* ---------------- Login ---------------- */
-  function Login({ onLogin, theme, setTheme, needsSetup }) {
+  function Login({ onLogin, theme, setTheme, needsSetup, onForgotPassword }) {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [busy, setBusy] = useState(false);
     const [authHint, setAuthHint] = useState("");
+    const [forgotEnabled, setForgotEnabled] = useState(true);
 
     useEffect(() => {
+      fetch((VG.apiBase || "") + "/api/auth/forgot-password/settings")
+        .then((r) => r.ok ? r.json() : null)
+        .then((data) => { if (data) setForgotEnabled(data.enabled !== false); })
+        .catch(() => {});
       fetch((VG.apiBase || "") + "/api/auth/status")
         .then((r) => r.ok ? r.json() : null)
         .then((data) => {
@@ -185,6 +190,17 @@
                 placeholder="Enter password"
                 className="login-input mt-1.5 w-full rounded-xl px-3.5 py-3 text-sm focus:ring-2"
                 style={{ "--tw-ring-color": "var(--login-accent, var(--accent))" }} />
+              {onForgotPassword && forgotEnabled && (
+                <div className="mt-2 text-right">
+                  <button
+                    type="button"
+                    onClick={onForgotPassword}
+                    className="text-xs font-medium text-indigo-600 hover:text-indigo-800 underline underline-offset-2 transition"
+                  >
+                    Forgot password?
+                  </button>
+                </div>
+              )}
             </div>
 
             <Button type="submit" icon="logout" className="w-full !py-3" disabled={busy}>{busy ? "Signing in…" : "Sign in to workspace"}</Button>
@@ -735,6 +751,28 @@
     const [searchOpen, setSearchOpen] = useState(false);
     const [licensed, setLicensed] = useState(true);
     const [needsSetup, setNeedsSetup] = useState(false);
+    const [forgotPassword, setForgotPassword] = useState(false);
+    const [resetToken, setResetToken] = useState(() => {
+      try {
+        const p = new URLSearchParams(window.location.search);
+        return p.get("reset") || "";
+      } catch (e) { return ""; }
+    });
+
+    useEffect(() => {
+      if (!resetToken) return;
+      setForgotPassword(true);
+    }, [resetToken]);
+
+    function closeForgotPassword() {
+      setForgotPassword(false);
+      setResetToken("");
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("reset");
+        window.history.replaceState({}, "", url.pathname + url.search + url.hash);
+      } catch (e) {}
+    }
 
     useEffect(() => {
       if (!VG.store) return;
@@ -845,7 +883,25 @@
     let screen;
     if (!licensed) screen = <ActivationScreen onActivated={() => setLicensed(true)} />;
     else if (!session && needsSetup) screen = <InitialSetup onComplete={login} theme={theme} setTheme={setTheme} />;
-    else if (!session) screen = <Login onLogin={login} theme={theme} setTheme={setTheme} needsSetup={needsSetup} />;
+    else if (!session && forgotPassword && VG.ForgotPasswordFlow) {
+      screen = (
+        <VG.ForgotPasswordFlow
+          theme={theme}
+          setTheme={setTheme}
+          onBack={closeForgotPassword}
+          initialToken={resetToken}
+        />
+      );
+    }
+    else if (!session) screen = (
+      <Login
+        onLogin={login}
+        theme={theme}
+        setTheme={setTheme}
+        needsSetup={needsSetup}
+        onForgotPassword={() => setForgotPassword(true)}
+      />
+    );
     else if (!moduleId) screen = (VG.WelcomeHome ? <VG.WelcomeHome roleKey={session.roleKey} email={session.email} onOpen={openModule} onLogout={logout} theme={theme} setTheme={setTheme} onOpenSearch={openSearch} /> : <Launcher roleKey={session.roleKey} email={session.email} onOpen={openModule} onLogout={logout} theme={theme} setTheme={setTheme} onOpenSearch={openSearch} />);
     else screen = <Workspace roleKey={session.roleKey} email={session.email} moduleId={moduleId} onOpen={openModule} onHome={goHome} onLogout={logout} theme={theme} setTheme={setTheme} onOpenSearch={openSearch} />;
     const SearchModal = VG.UniversalSearch;

@@ -996,17 +996,41 @@
   }
 
   /* ================= Security ================= */
-  function SecurityPage({ roleKey, can }) {
+  function SecurityPage({ roleKey, can, go }) {
     VG.useDB();
     const live = store.settings().security;
+    const resetLogs = (store.db().passwordResetLog || []).slice().reverse().slice(0, 50);
     const [s, setS] = useState(() => clone(live));
     const set = (k, v) => setS((p) => ({ ...p, [k]: v }));
     function save() { store.saveAdminSettings({ security: s }, roleKey); VG.toast("Security settings saved"); }
     return (
-      <div>
-        <PageHead title="Security Settings" desc="Password policy, session timeout, login lockout and audit retention">
+      <div className="space-y-4">
+        <PageHead title="Security Settings" desc="Password policy, session timeout, login lockout, forgot password and audit retention">
           {can("edit") && <Button icon="check" onClick={save}>Save settings</Button>}
         </PageHead>
+        <Card className="p-4">
+          <h3 className="text-sm font-semibold mb-3">Forgot password (self-service)</h3>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+            <div className="lg:col-span-3">
+              <Checkbox checked={s.forgotPasswordEnabled !== false} onChange={(v) => set("forgotPasswordEnabled", v)} label="Enable forgot password on login screen" />
+            </div>
+            <Field label="OTP expiry (minutes)"><Num value={s.forgotPasswordOtpExpiryMins || 10} onChange={(v) => set("forgotPasswordOtpExpiryMins", v)} min={5} max={60} /></Field>
+            <Field label="Reset link expiry (minutes)"><Num value={s.forgotPasswordLinkExpiryMins || 60} onChange={(v) => set("forgotPasswordLinkExpiryMins", v)} min={15} max={1440} /></Field>
+            <Field label="Max attempts per hour"><Num value={s.forgotPasswordMaxAttemptsPerHour || 5} onChange={(v) => set("forgotPasswordMaxAttemptsPerHour", v)} min={3} max={20} /></Field>
+            <Field label="Delivery method" className="lg:col-span-2">
+              <Select
+                value={s.forgotPasswordDelivery || "both"}
+                onChange={(v) => set("forgotPasswordDelivery", v)}
+                options={[
+                  { value: "email", label: "Email only" },
+                  { value: "sms", label: "SMS only" },
+                  { value: "both", label: "Email and SMS" },
+                ]}
+              />
+            </Field>
+          </div>
+          <p className="text-xs opacity-55">Configure SMTP and SMS under Notifications. Set VERAGLO_DEBUG_RESET=1 on the server to log OTP/link to console during development.</p>
+        </Card>
         <Card className="p-4">
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
             <Field label="Min password length"><Num value={s.minPasswordLength} onChange={(v) => set("minPasswordLength", v)} /></Field>
@@ -1024,6 +1048,25 @@
               <Checkbox checked={!!s.forceLogoutAll} onChange={(v) => set("forceLogoutAll", v)} label="Force logout all sessions on save" />
             </div>
           </div>
+        </Card>
+        <RecordTable
+          title="Password reset activity log"
+          columns={[
+            { key: "ts", label: "When", render: (r) => fmtTime(r.ts) },
+            { key: "action", label: "Action", render: (r) => r.action || "—" },
+            { key: "email", label: "User", render: (r) => r.email || "—" },
+            { key: "ip", label: "IP", render: (r) => (r.ip || "—").slice(0, 24) },
+            { key: "detail", label: "Detail", render: (r) => (r.detail || "").slice(0, 60) },
+          ]}
+          rows={resetLogs}
+          can={can}
+          empty="No password reset activity yet"
+          searchKeys={["email", "action", "detail"]}
+        />
+        <Card className="p-4 flex flex-wrap items-center gap-3">
+          <Icon name="users" size={20} style={{ color: "var(--accent)" }} />
+          <span className="text-sm flex-1">Manual password reset: open Admin → Users, edit a user, and set a new password.</span>
+          {go && <Button variant="soft" onClick={() => go("users")}>Open Users</Button>}
         </Card>
       </div>
     );
@@ -1051,6 +1094,16 @@
             <Field label="Password"><Text type="password" value={n.smtpPass} onChange={(v) => set("smtpPass", v)} /></Field>
             <div className="flex items-end pb-1"><Checkbox checked={n.smtpTls !== false} onChange={(v) => set("smtpTls", v)} label="Use TLS" /></div>
           </div>
+        </Card>
+        <Card className="p-4 mb-4">
+          <h3 className="text-sm font-semibold mb-3">SMS (password reset & alerts)</h3>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="lg:col-span-3"><Checkbox checked={!!n.smsEnabled} onChange={(v) => set("smsEnabled", v)} label="Enable SMS delivery" /></div>
+            <Field label="Provider"><Select value={n.smsProvider || "Twilio"} onChange={(v) => set("smsProvider", v)} options={["Twilio", "MSG91", "AWS SNS", "Other"].map((x) => ({ value: x, label: x }))} /></Field>
+            <Field label="API key"><Text type="password" value={n.smsApiKey || ""} onChange={(v) => set("smsApiKey", v)} /></Field>
+            <Field label="Sender ID"><Text value={n.smsFrom || ""} onChange={(v) => set("smsFrom", v)} placeholder="VERAGLO" /></Field>
+          </div>
+          <p className="text-xs opacity-55 mt-2">SMS requires provider configuration. Without it, reset codes are sent by email when SMTP is configured.</p>
         </Card>
         <Card className="p-4">
           <h3 className="text-sm font-semibold mb-3">Alert toggles</h3>

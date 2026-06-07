@@ -54,6 +54,13 @@ If login fails with *"Role is inactive or missing"*, wait a few seconds for the 
 
 This repo has **no** ESLint, test runner, or frontend bundler. There is nothing to `npm test` or `npm run lint` at the root. Validation is manual (API health + browser smoke test). Windows installer build: `npm run build:win` (optional; requires `desktop/` deps).
 
+### Forgot password
+
+- Client: `src/forgot-password.jsx` — multi-step flow on login screen
+- API: `POST /api/auth/forgot-password/request|verify-otp|verify-link|reset`, `GET /api/auth/forgot-password/settings`
+- Admin: **Admin → Security** (enable, expiry, rate limits) + **Notifications** (SMTP/SMS)
+- Dev: set `VERAGLO_DEBUG_RESET=1` in `server/.env` to log OTP/link to console when SMTP is not configured
+
 ### Login weather theme
 
 - Client: `src/weather-login.jsx` (loaded before `src/admin.jsx` in `index.html`)
