@@ -934,12 +934,22 @@
       if (i < 0 || i >= ORDER_FLOW.length - 1) return;
       const next = ORDER_FLOW[i + 1];
       await VG.forwardStatus({
+        action: "sales_order:stage",
         fromType: "Sales Order", fromNo: r.no, fromId: r.id,
         toType: "Sales Order", statusChange: next, actor: roleKey,
         confirmMessage: "Are you sure you want to advance Sales Order " + r.no + " to \"" + next + "\"?",
         run: () => {
-          store.update("salesOrders", r.id, { status: next, stage: next }, roleKey);
-          store._soTimeline && store._soTimeline(r.id, "stage", roleKey, "Manual stage advance to " + next);
+          if (next === "Sent to Production") {
+            const wo = store.sendSalesOrderToProduction(r.id, roleKey);
+            return wo ? store.get("salesOrders", r.id) : null;
+          }
+          if (next === "Accepted by Production") {
+            const wo = store.ensureWorkOrderForSalesOrder(r.id, roleKey);
+            if (!wo) return null;
+            store.acceptWorkOrder(wo.id, roleKey);
+            return store.get("salesOrders", r.id);
+          }
+          store._setSOStage(r.id, next, roleKey, "Manual stage advance to " + next);
           return store.get("salesOrders", r.id);
         },
         onDone: () => setView((v) => v && ({ ...store.get("salesOrders", r.id) })),

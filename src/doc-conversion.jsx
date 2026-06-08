@@ -149,13 +149,14 @@
       if (opts.failMessage) VG.toast(opts.failMessage, "error");
       return null;
     }
+    const store = VG.store;
+    if (store && store.flushPersist) await store.flushPersist();
     const docNo = result.no || result.docNo || result.salesOrderNo || "";
     const successMsg = typeof opts.successMessage === "function"
       ? opts.successMessage(result)
       : (opts.successMessage
         || (labels && labels.success(docNo, opts.successExtra))
         || ((opts.toType || "Document") + " " + docNo + " generated successfully."));
-    const store = VG.store;
     if (store && store.recordDocumentConversion) {
       store.recordDocumentConversion({
         fromType: opts.fromType,
@@ -190,6 +191,12 @@
       VG.toast((e && e.message) || "Update failed", "error");
       return null;
     }
+    if (!result) {
+      if (opts.failMessage) VG.toast(opts.failMessage, "error");
+      return null;
+    }
+    const store = VG.store;
+    if (store && store.flushPersist) await store.flushPersist();
     if (VG.store && VG.store.recordDocumentConversion) {
       VG.store.recordDocumentConversion({
         fromType: opts.fromType,

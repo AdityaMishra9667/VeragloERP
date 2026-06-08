@@ -863,6 +863,13 @@
   }
   function notify() { persist(); listeners.forEach((fn) => fn()); }
 
+  const SO_PRODUCTION_STAGES = new Set([
+    "Sent to Production", "Accepted by Production", "BOM Finalized", "Material Requirement Generated",
+    "Material Shortage Pending", "Material Required", "Material Partially Issued", "Material Fully Issued",
+    "Production In Progress", "Production Completed", "Sent to Finished Goods Store", "Sent to Quality",
+    "QC Pending", "QC Accepted", "Ready for Dispatch", "Partially Dispatched", "Fully Dispatched",
+  ]);
+
   let counter = Date.now();
   const uid = (p) => (p || "x") + (++counter).toString(36);
 
@@ -1316,10 +1323,40 @@
       this.update("salesOrders", soId, { timeline }, by);
     },
     _setSOStage(soId, stage, actor, note) {
+      if (SO_PRODUCTION_STAGES.has(stage)) this.ensureWorkOrderForSalesOrder(soId, actor);
       const patch = { stage };
       if (stage === "Invoiced") patch.status = "Invoiced";
+      else patch.status = stage;
       this.update("salesOrders", soId, patch, actor);
       if (note) this._soTimeline(soId, "stage", actor, stage + " — " + note);
+    },
+    ensureWorkOrderForSalesOrder(soId, actor) {
+      const so = this.get("salesOrders", soId);
+      if (!so) return null;
+      const existing = (DB.workOrders || []).find((w) => w.salesOrderId === soId && w.status !== "Cancelled");
+      if (existing) return existing;
+      return this.createProductionRequestFromSO(soId, actor);
+    },
+    backfillMissingWorkOrders(actor) {
+      const act = actor || "system";
+      let created = 0;
+      (DB.salesOrders || []).forEach((so) => {
+        const st = so.stage || so.status || "";
+        if (!SO_PRODUCTION_STAGES.has(st)) return;
+        let wo = (DB.workOrders || []).find((w) => w.salesOrderId === so.id && w.status !== "Cancelled");
+        if (!wo) {
+          wo = this.createProductionRequestFromSO(so.id, act);
+          if (wo) created++;
+        }
+        if (!wo) return;
+        if (st === "Accepted by Production" && (wo.status === "Received from Sales" || wo.status === "BOM Pending")) {
+          this.update("workOrders", wo.id, {
+            status: "Production Planned", productionStatus: "Planned",
+            acceptedAt: wo.acceptedAt || Date.now(), acceptedBy: wo.acceptedBy || act,
+          }, act);
+        }
+      });
+      if (created) console.info("[Veraglo] Backfilled " + created + " missing work order(s) from sales orders");
     },
     salesOrderStatuses() {
       return [
@@ -1391,9 +1428,12 @@
     sendSalesOrderToProduction(soId, actor) {
       const so = this.get("salesOrders", soId);
       if (!so) return null;
-      const wo = this.createProductionRequestFromSO(soId, actor);
+      const wo = this.ensureWorkOrderForSalesOrder(soId, actor);
       if (!wo) return null;
-      this._setSOStage(soId, "Sent to Production", actor, "Work order request " + wo.no + " generated");
+      const stage = so.stage || so.status || "";
+      if (stage !== "Sent to Production") {
+        this._setSOStage(soId, "Sent to Production", actor, "Work order request " + wo.no + " generated");
+      }
       return this.get("workOrders", wo.id);
     },
     approveSalesOrderRevision(soId, actor) {
@@ -2367,6 +2407,11 @@
     isReady: () => _ready,
     backend: () => (_usePostgres ? "postgresql" : "localStorage"),
 
+    async flushPersist() {
+      flushPersist();
+      if (_usePostgres) await pushStateToApi();
+    },
+
     async init() {
       const localState = readLocalState();
       const base = apiBase();
@@ -2398,9 +2443,11 @@
         DB = load();
         _usePostgres = false;
       }
+      this.backfillMissingWorkOrders();
       if (typeof VG !== "undefined" && VG.ROLES) this.syncAllRolesToRuntime();
       _ready = true;
       notify();
+      if (_usePostgres) await pushStateToApi();
       return { backend: this.backend() };
     },
 
