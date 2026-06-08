@@ -658,7 +658,7 @@
         <div className="flex-1 min-w-0 flex flex-col">
           <Topbar roleKey={roleKey} email={email} mod={mod} onHome={onHome} onToggleMobile={() => setMobileOpen(true)}
             theme={theme} setTheme={setTheme} onLogout={onLogout} onOpenSearch={onOpenSearch} />
-          <main id="vg-main-content" className="relative flex-1 p-3 sm:p-5 w-full min-w-0 max-w-none min-h-0">
+          <main id="vg-main-content" className="relative flex-1 w-full min-w-0 max-w-none min-h-0 vg-flat-workspace">
             {mod ? <VG.ModuleWorkspace key={moduleId} mod={mod} roleKey={roleKey} /> : <div className="opacity-60">Module not found.</div>}
           </main>
         </div>
@@ -950,8 +950,8 @@
   }
 
   VG.bootApp = function bootApp() {
-    if (VG._uiLayout !== "full-page") {
-      console.error("[Veraglo] Outdated floating-modal UI detected. Pull latest main and hard-refresh (Ctrl+Shift+R).");
+    if (VG._uiLayout !== "flat-full-page" && VG._uiLayout !== "full-page") {
+      console.error("[Veraglo] Outdated UI detected. Pull latest code and hard-refresh (Cmd+Shift+R). Expected VG._uiLayout flat-full-page.");
       if (VG.toast) VG.toast("Outdated UI scripts loaded — git pull origin main, restart server, hard refresh", "warn");
     }
     const el = document.getElementById("root");

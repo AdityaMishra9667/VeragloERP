@@ -70,7 +70,7 @@
         <div className="flex flex-wrap gap-2">
           {actions.map((a) => (
             <button key={a.label} type="button" disabled={a.perm && !can(a.perm)} onClick={a.onClick}
-              className={"inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition " + (a.primary ? "text-white shadow" : "glass chrome-hover") + (a.perm && !can(a.perm) ? " opacity-40 cursor-not-allowed" : "")}
+              className={"inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition " + (a.primary ? "text-white" : "glass chrome-hover") + (a.perm && !can(a.perm) ? " opacity-40 cursor-not-allowed" : "")}
               style={a.primary ? { background: "var(--accent)" } : undefined}>
               <Icon name={a.icon || "plus"} size={16} />
               {a.label}
@@ -1000,7 +1000,7 @@
     }
 
     return (
-      <nav className="vg-module-nav sticky top-0 z-30 mb-4 rounded-2xl glass-dark p-2 sm:p-2.5 border border-white/5" style={tabStyle}>
+      <nav className="vg-module-nav sticky top-0 z-30 mb-4 rounded-lg vg-panel p-2 sm:p-2.5" style={tabStyle}>
         <div className="flex items-center gap-2 min-w-0">
           {dash && (
             <button
