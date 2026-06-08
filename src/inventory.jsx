@@ -322,6 +322,9 @@
       { key: "items", label: "Items", render: (r) => store.list("items").filter((i) => i.manufacturerId === r.id).length },
       { key: "active", label: "Status", render: (r) => <Pill color={r.active !== false ? "#34d399" : "#94a3b8"}>{r.active !== false ? "Active" : "Inactive"}</Pill> },
     ];
+    if (edit !== null) {
+      return <ManufacturerForm open onClose={() => setEdit(null)} record={edit} roleKey={roleKey} can={can} onSaved={() => setEdit(null)} />;
+    }
     return (
       <div>
         <PageHead title="Manufacturer Master" desc="Canonical manufacturer list for Item Master and purchase traceability" />
@@ -332,7 +335,6 @@
             if (used) return VG.toast("Manufacturer is linked to items — cannot delete", "error");
             if (await VG.confirm({ title: "Delete " + r.name + "?", danger: true, confirmLabel: "Delete" })) { store.remove("manufacturers", r.id, roleKey); VG.toast("Deleted"); }
           } : null} />
-        {edit !== null && <ManufacturerForm open onClose={() => setEdit(null)} record={edit} roleKey={roleKey} can={can} onSaved={() => setEdit(null)} />}
       </div>
     );
   }
@@ -356,13 +358,15 @@
       { key: "qty", label: "On hand", render: (r) => <span className={r.below ? "text-rose-400 font-medium" : ""}>{r.qty}</span> },
       { key: "bom", label: "BOM", render: (r) => { const b = store.getDefaultBom && store.getDefaultBom(r.id); return b ? <span className="font-mono text-[10px] opacity-80">{b.no}</span> : "—"; } },
     ];
+    if (edit !== null) {
+      return <ItemForm open onClose={() => setEdit(null)} record={edit} roleKey={roleKey} can={can} onSaved={() => setEdit(null)} />;
+    }
     return (
       <div>
         <PageHead title="Item Master" desc="Central catalogue — SKU auto-generated · reference images supported" />
         <RecordTable title="Items" columns={cols} rows={rows} can={can} printTitle="Item Master" searchKeys={["sku", "name", "description", "hsn", "manufacturerName", "manufacturerPartNumber", "brandName"]}
           onNew={() => setEdit({ unit: "Nos", taxId: "gst18", batchTracked: "No" })} newLabel="New Item" onView={(r) => setEdit(r)} onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete " + r.sku + "?", danger: true, confirmLabel: "Delete" })) { store.remove("items", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-        {edit !== null && <ItemForm open onClose={() => setEdit(null)} record={edit} roleKey={roleKey} can={can} onSaved={() => setEdit(null)} />}
       </div>
     );
   }
@@ -403,7 +407,7 @@
       <Modal open={open} onClose={onClose} size="lg" dirty={dirty && !disabled}
         title={isEdit ? "Edit Category · " + (form.code || "") : "New Category"}
         subtitle={isEdit ? form.name : "Category code continues automatically (CAT-8 → CAT-9)"}
-        footer={<><Button variant="soft" onClick={onClose}>Close</Button>{!disabled && <Button icon="check" onClick={save}>{isEdit ? "Save changes" : "Create category"}</Button>}</>}>
+        footer={<><Button variant="soft" onClick={onClose}>Cancel</Button>{!disabled && <Button icon="check" onClick={save}>{isEdit ? "Save changes" : "Create category"}</Button>}</>}>
         <div className="grid sm:grid-cols-2 gap-3">
           <Field label="Category code" hint={isEdit ? "Master category code" : "Auto-assigned from last saved code"}>
             <Text value={form.code || (!isEdit ? store.nextCategoryCode() : "")} onChange={() => {}} disabled />
@@ -434,13 +438,15 @@
       { key: "name", label: "Category" },
       { key: "count", label: "Items" },
     ];
+    if (edit !== null) {
+      return <CategoryForm open onClose={() => setEdit(null)} record={edit} roleKey={roleKey} can={can} onSaved={() => setEdit(null)} />;
+    }
     return (
       <div>
         <PageHead title="Category Master" desc="Category code CAT-n auto · SKU type RWM, FNG, PKG…" />
         <RecordTable title="Categories" columns={cols} rows={rows} can={can} printTitle="Categories" searchKeys={["name", "code", "typeCode"]}
           onNew={() => setEdit({ typeCode: "RWM" })} newLabel="New Category" onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete category?", danger: true, confirmLabel: "Delete" })) { store.remove("categories", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-        {edit !== null && <CategoryForm open onClose={() => setEdit(null)} record={edit} roleKey={roleKey} can={can} onSaved={() => setEdit(null)} />}
       </div>
     );
   }
@@ -451,14 +457,16 @@
     const rows = store.list("suppliers");
     const cols = [{ key: "code", label: "Code", render: (r) => <span className="font-mono text-xs">{r.code}</span> }, { key: "name", label: "Supplier" }, { key: "contact", label: "Contact" }, { key: "gstin", label: "GSTIN", render: (r) => <span className="font-mono text-xs">{r.gstin}</span> }, { key: "category", label: "Grade", render: (r) => <Pill color="#14b8a6">{r.category}</Pill> }, { key: "rating", label: "Rating" }];
     function save(form) { if (!form.name || !form.gstin) return VG.toast("Name & GSTIN required", "error"); if (form.id) store.update("suppliers", form.id, form, roleKey); else store.create("suppliers", { ...form, code: store.nextNo("SUPP").replace(/\//g, "-") }, roleKey); VG.toast("Saved"); setEdit(null); }
+    const supplierFields = [{ k: "name", l: "Company name", req: true }, { k: "contact", l: "Contact person" }, { k: "phone", l: "Phone" }, { k: "email", l: "Email" }, { k: "gstin", l: "GSTIN", req: true }, { k: "category", l: "Grade", select: ["A-grade", "B-grade", "C-grade", "Watch"] }, { k: "rating", l: "Rating", num: true }, { k: "address", l: "Address", area: true, full: true }];
+    if (edit) {
+      return <MasterForm title="Supplier" open onClose={() => setEdit(null)} record={edit} onSave={save} roleKey={roleKey} can={can} fields={supplierFields} />;
+    }
     return (
       <div>
         <PageHead title="Supplier / Vendor Master" desc="Shared across Purchase, Inventory & Material Issue" />
         <RecordTable title="Suppliers" columns={cols} rows={rows} can={can} printTitle="Supplier Master" searchKeys={["name", "code", "gstin"]}
           onNew={() => setEdit({ category: "A-grade", rating: 4 })} newLabel="New Supplier" onView={(r) => setEdit(r)} onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete supplier?", danger: true, confirmLabel: "Delete" })) { store.remove("suppliers", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-        {edit && <MasterForm title="Supplier" open onClose={() => setEdit(null)} record={edit} onSave={save} roleKey={roleKey} can={can}
-          fields={[{ k: "name", l: "Company name", req: true }, { k: "contact", l: "Contact person" }, { k: "phone", l: "Phone" }, { k: "email", l: "Email" }, { k: "gstin", l: "GSTIN", req: true }, { k: "category", l: "Grade", select: ["A-grade", "B-grade", "C-grade", "Watch"] }, { k: "rating", l: "Rating", num: true }, { k: "address", l: "Address", area: true, full: true }]} />}
       </div>
     );
   }
@@ -469,13 +477,16 @@
     const rows = store.list("locations");
     const cols = [{ key: "code", label: "Code", render: (r) => <span className="font-mono text-xs">{r.code}</span> }, { key: "name", label: "Location / Rack / Bin" }];
     function save(form) { if (!form.name) return VG.toast("Name required", "error"); if (form.id) store.update("locations", form.id, form, roleKey); else store.create("locations", form, roleKey); VG.toast("Saved"); setEdit(null); }
+    const locFields = [{ k: "code", l: "Code", req: true }, { k: "name", l: "Name", req: true }];
+    if (edit) {
+      return <MasterForm title="Location" open onClose={() => setEdit(null)} record={edit} onSave={save} fields={locFields} roleKey={roleKey} can={can} />;
+    }
     return (
       <div>
         <PageHead title="Location / Rack / Bin Master" />
         <RecordTable title="Locations" columns={cols} rows={rows} can={can} printTitle="Locations" searchKeys={["name", "code"]}
           onNew={() => setEdit({})} newLabel="New Location" onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete location?", danger: true, confirmLabel: "Delete" })) { store.remove("locations", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-        {edit && <MasterForm title="Location" open onClose={() => setEdit(null)} record={edit} onSave={save} fields={[{ k: "code", l: "Code", req: true }, { k: "name", l: "Name", req: true }]} roleKey={roleKey} can={can} />}
       </div>
     );
   }

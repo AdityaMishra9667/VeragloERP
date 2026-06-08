@@ -847,6 +847,10 @@
       else { store.create("leads", { ...form, no: store.nextNo("LEAD", form.date || today()), owner: roleKey }, roleKey); VG.toast("Lead created"); }
       setEdit(null);
     }
+    const leadFields = [{ k: "customerId", l: "Customer", master: "customers", req: true }, { k: "title", l: "Title", req: true }, { k: "value", l: "Est. value (₹)", num: true }, { k: "date", l: "Date", date: true }, { k: "source", l: "Source", select: ["Website", "Referral", "Exhibition", "Cold call"] }, { k: "stage", l: "Stage", select: ["New", "Qualified", "Proposal", "Negotiation"] }, { k: "status", l: "Status", select: ["Open", "Won", "Lost"] }, { k: "remarks", l: "Remarks", area: true, full: true }];
+    if (edit) {
+      return <MasterForm title="Lead" open onClose={() => setEdit(null)} record={edit} onSave={save} fields={leadFields} roleKey={roleKey} can={can} />;
+    }
     return (
       <div>
         <PageHead title="Lead Management" desc="Capture, qualify, and progress leads to orders" />
@@ -854,9 +858,6 @@
           filters={[{ key: "status", label: "All status", options: ["Open", "Won", "Lost"] }, { key: "stage", label: "All stages", options: ["New", "Qualified", "Proposal", "Negotiation"] }]}
           onNew={() => setEdit({ date: today(), stage: "New", status: "Open" })} newLabel="New Lead" onView={(r) => setEdit(r)} onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete lead?", danger: true, confirmLabel: "Delete" })) { store.remove("leads", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-        {edit && <MasterForm title="Lead" open onClose={() => setEdit(null)} record={edit} onSave={save}
-          fields={[{ k: "customerId", l: "Customer", master: "customers", req: true }, { k: "title", l: "Title", req: true }, { k: "value", l: "Est. value (₹)", num: true }, { k: "date", l: "Date", date: true }, { k: "source", l: "Source", select: ["Website", "Referral", "Exhibition", "Cold call"] }, { k: "stage", l: "Stage", select: ["New", "Qualified", "Proposal", "Negotiation"] }, { k: "status", l: "Status", select: ["Open", "Won", "Lost"] }, { k: "remarks", l: "Remarks", area: true, full: true }]}
-          roleKey={roleKey} can={can} />}
       </div>
     );
   }
@@ -891,6 +892,10 @@
       }
       setEdit(null);
     }
+    const followFields = [{ k: "customerId", l: "Customer", master: "customers", req: true }, { k: "date", l: "Follow-up date", date: true, req: true }, { k: "time", l: "Time" }, { k: "mode", l: "Mode", select: ["Call", "Email", "WhatsApp", "Meeting", "Visit"] }, { k: "nextDate", l: "Next follow-up date", date: true }, { k: "status", l: "Status", select: ["Pending", "Done"] }, { k: "note", l: "Remarks", area: true, full: true, req: true }];
+    if (edit) {
+      return <MasterForm title="Follow-up" open onClose={() => setEdit(null)} record={edit} onSave={save} fields={followFields} roleKey={roleKey} can={can} />;
+    }
     return (
       <div>
         <PageHead title="Follow-up System" desc="Schedule calls, emails and meetings — linked to enquiries where applicable" />
@@ -903,9 +908,6 @@
           filters={[{ key: "status", label: "All status", options: ["Pending", "Done"] }, { key: "refType", label: "All types", options: ["Enquiry", ""] }]}
           onNew={() => setEdit({ date: today(), time: "10:00", mode: "Call", status: "Pending" })} newLabel="New Follow-up" onView={(r) => setEdit(r)} onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete follow-up?", danger: true, confirmLabel: "Delete" })) { store.remove("followups", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-        {edit && <MasterForm title="Follow-up" open onClose={() => setEdit(null)} record={edit} onSave={save}
-          fields={[{ k: "customerId", l: "Customer", master: "customers", req: true }, { k: "date", l: "Follow-up date", date: true, req: true }, { k: "time", l: "Time" }, { k: "mode", l: "Mode", select: ["Call", "Email", "WhatsApp", "Meeting", "Visit"] }, { k: "nextDate", l: "Next follow-up date", date: true }, { k: "status", l: "Status", select: ["Pending", "Done"] }, { k: "note", l: "Remarks", area: true, full: true, req: true }]}
-          roleKey={roleKey} can={can} />}
       </div>
     );
   }
@@ -1747,6 +1749,74 @@
     function stageRows(stage) {
       return orders.filter((o) => (o.stage || o.status) === stage);
     }
+    if (popup && popup.type === "stage") {
+      return (
+        <InternalScreen onBack={closePopup} backLabel="Back to tracking" title={"Stage · " + popup.stage} subtitle={(popup.rows || []).length + " order(s)"}
+          breadcrumbs={[{ label: "Order Tracking", onClick: closePopup }, { label: popup.stage }]}>
+          <div className="space-y-2">
+            {(popup.rows || []).map((o) => (
+              <div key={o.id} className="rounded-lg border border-white/10 p-3 text-sm flex flex-wrap items-center gap-3">
+                <button type="button" className="font-mono hover:underline" onClick={() => setPopup({ type: "order", order: o })}>{o.no}</button>
+                <button type="button" className="hover:underline opacity-75" onClick={() => setPopup({ type: "customer", order: o })}>{custName(o.customerId)}</button>
+                <button type="button" className="ml-auto hover:underline opacity-65" onClick={() => setPopup({ type: "value", order: o })}>{inr((o.totals || {}).grand || 0)}</button>
+              </div>
+            ))}
+            {!(popup.rows || []).length && <div className="text-sm opacity-60 text-center py-8">No orders in this stage.</div>}
+          </div>
+        </InternalScreen>
+      );
+    }
+    if (popup && popup.type === "order") {
+      const o = popup.order;
+      const wo = store.list("workOrders").find((w) => w.salesOrderId === o.id);
+      const mr = wo && wo.materialRequirementId ? store.get("materialRequirements", wo.materialRequirementId) : null;
+      const sh = store.list("shipments").filter((x) => x.salesOrderId === o.id);
+      return (
+        <InternalScreen onBack={closePopup} backLabel="Back to tracking" title={"Order · " + o.no} subtitle={custName(o.customerId)}
+          breadcrumbs={[{ label: "Order Tracking", onClick: closePopup }, { label: o.no }]}>
+          <div className="grid sm:grid-cols-2 gap-3 text-sm">
+            <Card className="p-3"><div className="opacity-55 uppercase text-[10px]">Current stage</div><div className="mt-1">{o.stage || o.status}</div></Card>
+            <Card className="p-3"><div className="opacity-55 uppercase text-[10px]">Order value</div><div className="mt-1">{inr((o.totals || {}).grand || 0)}</div></Card>
+            <Card className="p-3"><div className="opacity-55 uppercase text-[10px]">Work order</div><div className="mt-1">{wo ? wo.no + " · " + (wo.status || "") : "Not created"}</div></Card>
+            <Card className="p-3"><div className="opacity-55 uppercase text-[10px]">Material requirement</div><div className="mt-1">{mr ? mr.no + " · " + (mr.status || "") : "Not generated"}</div></Card>
+            <Card className="p-3"><div className="opacity-55 uppercase text-[10px]">Dispatch</div><div className="mt-1">{sh.length ? sh.map((x) => x.no + " (" + x.status + ")").join(", ") : "No shipment yet"}</div></Card>
+            <Card className="p-3"><div className="opacity-55 uppercase text-[10px]">Timeline events</div><div className="mt-1">{(o.timeline || []).length}</div></Card>
+          </div>
+        </InternalScreen>
+      );
+    }
+    if (popup && popup.type === "customer") {
+      const o = popup.order;
+      const c = store.get("customers", o.customerId) || {};
+      return (
+        <InternalScreen onBack={closePopup} backLabel="Back to tracking" title={"Customer · " + (c.name || c.legalName || "—")} subtitle={o.no}
+          breadcrumbs={[{ label: "Order Tracking", onClick: closePopup }, { label: o.no, onClick: () => setPopup({ type: "order", order: o }) }, { label: "Customer" }]}>
+          <div className="space-y-2 text-sm max-w-lg">
+            <div><b>Code:</b> {c.code || "—"}</div>
+            <div><b>Contact:</b> {c.contact || "—"}</div>
+            <div><b>Email:</b> {c.email || "—"}</div>
+            <div><b>GSTIN:</b> {c.gstin || "—"}</div>
+            <div><b>City/State:</b> {(c.city || "—") + " / " + (c.state || "—")}</div>
+          </div>
+        </InternalScreen>
+      );
+    }
+    if (popup && popup.type === "value") {
+      const o = popup.order;
+      const t = o.totals || {};
+      return (
+        <InternalScreen onBack={closePopup} backLabel="Back to tracking" title={"Order Value · " + o.no} subtitle={custName(o.customerId)}
+          breadcrumbs={[{ label: "Order Tracking", onClick: closePopup }, { label: o.no, onClick: () => setPopup({ type: "order", order: o }) }, { label: "Value" }]}>
+          <div className="space-y-2 text-sm max-w-md">
+            <div className="flex justify-between"><span>Taxable</span><b>{inr(t.taxable || 0)}</b></div>
+            <div className="flex justify-between"><span>Tax</span><b>{inr(t.tax || 0)}</b></div>
+            <div className="flex justify-between"><span>Discount</span><b>{inr(t.discount || 0)}</b></div>
+            <div className="flex justify-between"><span>Charges</span><b>{inr(t.charges || 0)}</b></div>
+            <div className="flex justify-between pt-2 border-t border-white/10"><span>Grand Total</span><b>{inr(t.grand || 0)}</b></div>
+          </div>
+        </InternalScreen>
+      );
+    }
     return (
       <div>
         <PageHead title="Order Tracking" desc="Live pipeline across the fulfilment workflow" />
@@ -1777,68 +1847,6 @@
             );
           })}
         </div>
-        {popup && popup.type === "stage" && (
-          <Modal open onClose={closePopup} size="xl" title={"Stage · " + popup.stage} subtitle={(popup.rows || []).length + " order(s)"}>
-            <div className="space-y-2 max-h-[60vh] overflow-auto pr-1">
-              {(popup.rows || []).map((o) => (
-                <div key={o.id} className="rounded-lg border border-white/10 p-2.5 text-xs flex items-center gap-3">
-                  <button type="button" className="font-mono hover:underline" onClick={() => setPopup({ type: "order", order: o })}>{o.no}</button>
-                  <button type="button" className="hover:underline opacity-75" onClick={() => setPopup({ type: "customer", order: o })}>{custName(o.customerId)}</button>
-                  <button type="button" className="ml-auto hover:underline opacity-65" onClick={() => setPopup({ type: "value", order: o })}>{inr((o.totals || {}).grand || 0)}</button>
-                </div>
-              ))}
-              {!(popup.rows || []).length && <div className="text-xs opacity-60">No orders in this stage.</div>}
-            </div>
-          </Modal>
-        )}
-        {popup && popup.type === "order" && (() => {
-          const o = popup.order;
-          const wo = store.list("workOrders").find((w) => w.salesOrderId === o.id);
-          const mr = wo && wo.materialRequirementId ? store.get("materialRequirements", wo.materialRequirementId) : null;
-          const sh = store.list("shipments").filter((x) => x.salesOrderId === o.id);
-          return (
-            <Modal open onClose={closePopup} size="xl" title={"Order · " + o.no} subtitle={custName(o.customerId)}>
-              <div className="grid sm:grid-cols-2 gap-3 text-xs">
-                <Card className="p-3"><div className="opacity-55 uppercase text-[10px]">Current stage</div><div className="mt-1">{o.stage || o.status}</div></Card>
-                <Card className="p-3"><div className="opacity-55 uppercase text-[10px]">Order value</div><div className="mt-1">{inr((o.totals || {}).grand || 0)}</div></Card>
-                <Card className="p-3"><div className="opacity-55 uppercase text-[10px]">Work order</div><div className="mt-1">{wo ? wo.no + " · " + (wo.status || "") : "Not created"}</div></Card>
-                <Card className="p-3"><div className="opacity-55 uppercase text-[10px]">Material requirement</div><div className="mt-1">{mr ? mr.no + " · " + (mr.status || "") : "Not generated"}</div></Card>
-                <Card className="p-3"><div className="opacity-55 uppercase text-[10px]">Dispatch</div><div className="mt-1">{sh.length ? sh.map((x) => x.no + " (" + x.status + ")").join(", ") : "No shipment yet"}</div></Card>
-                <Card className="p-3"><div className="opacity-55 uppercase text-[10px]">Timeline events</div><div className="mt-1">{(o.timeline || []).length}</div></Card>
-              </div>
-            </Modal>
-          );
-        })()}
-        {popup && popup.type === "customer" && (() => {
-          const o = popup.order;
-          const c = store.get("customers", o.customerId) || {};
-          return (
-            <Modal open onClose={closePopup} size="md" title={"Customer · " + (c.name || "—")} subtitle={o.no}>
-              <div className="space-y-2 text-xs">
-                <div><b>Code:</b> {c.code || "—"}</div>
-                <div><b>Contact:</b> {c.contact || "—"}</div>
-                <div><b>Email:</b> {c.email || "—"}</div>
-                <div><b>GSTIN:</b> {c.gstin || "—"}</div>
-                <div><b>City/State:</b> {(c.city || "—") + " / " + (c.state || "—")}</div>
-              </div>
-            </Modal>
-          );
-        })()}
-        {popup && popup.type === "value" && (() => {
-          const o = popup.order;
-          const t = o.totals || {};
-          return (
-            <Modal open onClose={closePopup} size="md" title={"Order Value · " + o.no} subtitle={custName(o.customerId)}>
-              <div className="space-y-2 text-xs">
-                <div className="flex justify-between"><span>Taxable</span><b>{inr(t.taxable || 0)}</b></div>
-                <div className="flex justify-between"><span>Tax</span><b>{inr(t.tax || 0)}</b></div>
-                <div className="flex justify-between"><span>Discount</span><b>{inr(t.discount || 0)}</b></div>
-                <div className="flex justify-between"><span>Charges</span><b>{inr(t.charges || 0)}</b></div>
-                <div className="flex justify-between pt-1 border-t border-white/10"><span>Grand Total</span><b>{inr(t.grand || 0)}</b></div>
-              </div>
-            </Modal>
-          );
-        })()}
       </div>
     );
   }
@@ -1884,14 +1892,16 @@
       else { store.create("priceList", { ...form, currency: "INR" }, roleKey); VG.toast("Price added"); }
       setEdit(null);
     }
+    const priceFields = [{ k: "itemId", l: "Item", master: "items", req: true }, { k: "listRate", l: "List rate (₹)", num: true, req: true }, { k: "minRate", l: "Floor rate (₹)", num: true }, { k: "effective", l: "Effective date", date: true }];
+    if (edit) {
+      return <MasterForm title="Price" open onClose={() => setEdit(null)} record={edit} onSave={save} fields={priceFields} roleKey={roleKey} can={can} />;
+    }
     return (
       <div>
         <PageHead title="Price List Management" desc="Approved list & floor rates per item" />
         <RecordTable title="Price list" columns={cols} rows={rows} can={can} printTitle="Price List" searchKeys={["item"]}
           onNew={() => setEdit({ effective: today() })} newLabel="New Price" onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete price?", danger: true, confirmLabel: "Delete" })) { store.remove("priceList", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-        {edit && <MasterForm title="Price" open onClose={() => setEdit(null)} record={edit} onSave={save}
-          fields={[{ k: "itemId", l: "Item", master: "items", req: true }, { k: "listRate", l: "List rate (₹)", num: true, req: true }, { k: "minRate", l: "Floor rate (₹)", num: true }, { k: "effective", l: "Effective date", date: true }]} roleKey={roleKey} can={can} />}
       </div>
     );
   }
@@ -1984,14 +1994,16 @@
       if (!form.customerId) return VG.toast("Select customer from master", "error");
       store.create("communications", { ...form, by: roleKey }, roleKey); VG.toast("Logged"); setEdit(null);
     }
+    const commFields = [{ k: "customerId", l: "Customer", master: "customers", req: true }, { k: "date", l: "Date", date: true }, { k: "mode", l: "Mode", select: ["Call", "Email", "Visit", "Meeting", "WhatsApp"] }, { k: "subject", l: "Subject", full: true }, { k: "note", l: "Note", area: true, full: true }];
+    if (edit) {
+      return <MasterForm title="Communication" open onClose={() => setEdit(null)} record={edit} onSave={save} fields={commFields} roleKey={roleKey} can={can} />;
+    }
     return (
       <div>
         <PageHead title="Communication History" desc="Every customer interaction, logged" />
         {VG.CustomerFilterBanner ? <VG.CustomerFilterBanner /> : null}
         <RecordTable title="Communications" columns={cols} rows={rows} can={can} printTitle="Communication History" searchKeys={["subject", "note", "mode"]}
           onNew={() => setEdit({ date: today(), mode: "Call" })} newLabel="Log communication" />
-        {edit && <MasterForm title="Communication" open onClose={() => setEdit(null)} record={edit} onSave={save}
-          fields={[{ k: "customerId", l: "Customer", master: "customers", req: true }, { k: "date", l: "Date", date: true }, { k: "mode", l: "Mode", select: ["Call", "Email", "Visit", "Meeting", "WhatsApp"] }, { k: "subject", l: "Subject", full: true }, { k: "note", l: "Note", area: true, full: true }]} roleKey={roleKey} can={can} />}
       </div>
     );
   }
@@ -2053,7 +2065,7 @@
     }
     return (
       <Modal open={open} onClose={onClose} size="md" dirty={dirty} title={(record && record.id ? "Edit " : "New ") + title}
-        footer={<><Button variant="soft" onClick={onClose}>Close</Button><Button icon="check" onClick={submit}>Save</Button></>}>
+        footer={<><Button variant="soft" onClick={onClose}>Cancel</Button><Button icon="check" onClick={submit}>Save</Button></>}>
         <div className="grid sm:grid-cols-2 gap-3">
           {fields.map((f) => (
             <Field key={f.k} label={f.l} required={f.req} error={err[f.k]} className={f.full || f.area ? "sm:col-span-2" : ""}>

@@ -48,6 +48,9 @@
     const [edit, setEdit] = useState(null);
     React.useEffect(() => { ensureRecords(month, roleKey); }, [month]);
     const rows = store.list("attendanceRecords").filter((a) => a.month === month);
+    if (edit) {
+      return <AttendanceEditModal record={edit} roleKey={roleKey} onClose={() => setEdit(null)} />;
+    }
     return (
       <div>
         <PageHead title="Monthly register" />
@@ -63,7 +66,6 @@
           { key: "otHours", label: "OT" },
           { key: "locked", label: "Status", render: (r) => <StatusTag value={r.locked ? "Locked" : "Open"} map={{ Locked: "#94a3b8", Open: "#34d399" }} /> },
         ]} rows={rows} can={can} printTitle="Attendance" onEdit={can("edit") ? (r) => !r.locked && setEdit(r) : null} />
-        {edit && <AttendanceEditModal record={edit} roleKey={roleKey} onClose={() => setEdit(null)} />}
       </div>
     );
   }

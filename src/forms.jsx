@@ -47,71 +47,119 @@
     const s = confirmState;
     const done = (val) => { const r = s.resolve; confirmState = null; set((v) => v + 1); r(val); };
     return (
-      <div className="fixed inset-0 z-[110] grid place-items-center p-4 bg-black/55 backdrop-blur-[2px]" onMouseDown={() => done(false)}>
-        <div className="glass-dark rounded-2xl shadow-glass p-5 w-[min(92vw,420px)] animate-scale-in border border-white/10" onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
-          <h3 className="text-lg font-semibold font-display">{s.title}</h3>
-          {s.message && <p className="text-sm opacity-75 mt-2 leading-relaxed">{s.message}</p>}
-          <div className="flex justify-end gap-2 mt-5">
-            <Button variant="soft" onClick={() => done(false)}>{s.cancelLabel || "Cancel"}</Button>
-            <button type="button" onClick={() => done(true)} className="inline-flex items-center gap-2 rounded-xl text-sm font-medium px-3.5 py-2 text-white" style={{ background: s.danger ? "#ef4444" : "var(--accent)" }}>{s.confirmLabel}</button>
+      <div className="fixed top-0 left-0 right-0 z-[120] animate-fade-up" role="dialog" aria-live="polite">
+        <div className={"border-b shadow-lg " + (s.danger ? "bg-rose-950/95 border-rose-500/30" : "bg-slate-900/95 border-indigo-500/25")} style={{ backdropFilter: "blur(10px)" }}>
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex flex-col sm:flex-row sm:items-center gap-4">
+            <div className="flex items-start gap-3 flex-1 min-w-0">
+              <span className="grid place-items-center w-9 h-9 rounded-xl shrink-0" style={{ background: s.danger ? "rgba(239,68,68,.2)" : "var(--accent-soft)" }}>
+                <Icon name={s.danger ? "alert" : "shield"} size={18} style={{ color: s.danger ? "#f87171" : "var(--accent)" }} />
+              </span>
+              <div className="min-w-0">
+                <h3 className="text-sm sm:text-base font-semibold font-display">{s.title}</h3>
+                {s.message && <p className="text-sm opacity-75 mt-1 leading-relaxed">{s.message}</p>}
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 shrink-0">
+              <Button variant="soft" onClick={() => done(false)}>{s.cancelLabel || "Cancel"}</Button>
+              <button type="button" onClick={() => done(true)} className="inline-flex items-center gap-2 rounded-xl text-sm font-medium px-3.5 py-2 text-white" style={{ background: s.danger ? "#ef4444" : "var(--accent)" }}>{s.confirmLabel}</button>
+            </div>
           </div>
         </div>
       </div>
     );
   }
 
-  /* ============ Modal ============
-     Standard ERP modal: sticky header + footer, scrollable body, optional
-     near-full-screen size, and an unsaved-changes guard. ESC behaviour:
-       • clean form  → ESC closes immediately
-       • dirty form  → 1st ESC arms a warning, 2nd ESC (or "Close without saving") closes
-  */
-  function Modal({ open, onClose, title, subtitle, children, footer, size = "lg", dirty = false }) {
-    const [guard, setGuard] = useState(false);
-    useEffect(() => { if (open) setGuard(false); }, [open]);
-    useEffect(() => {
-      if (!open) return;
-      const h = (e) => {
-        if (e.key !== "Escape") return;
-        e.preventDefault();
-        if (!dirty) { onClose(); return; }
-        setGuard((g) => { if (g) { onClose(); return false; } return true; });
+  /* ============ Success / info banner (non-modal) ============ */
+  let bannerState = null;
+  const bannerSubs = new Set();
+  VG.showBanner = function (opts) {
+    return new Promise((resolve) => {
+      bannerState = {
+        type: opts.type || "success",
+        title: opts.title || "",
+        message: opts.message || "",
+        duration: opts.duration != null ? opts.duration : 5000,
+        resolve,
       };
-      document.addEventListener("keydown", h);
-      return () => document.removeEventListener("keydown", h);
-    }, [open, dirty, onClose]);
-    if (!open) return null;
-    const requestClose = () => { if (dirty) setGuard(true); else onClose(); };
-    const w = { sm: "max-w-md", md: "max-w-2xl", lg: "max-w-4xl", xl: "max-w-6xl", full: "max-w-[1400px]" }[size] || "max-w-4xl";
-    const tall = size === "full";
-    const overlay = (
-      <div className="fixed inset-0 z-[90] flex items-stretch sm:items-center justify-center p-2 sm:p-4 bg-black/55" onMouseDown={requestClose}>
-        <div className={"glass-dark vg-app-shell rounded-2xl shadow-glass w-full flex flex-col max-h-[96vh] " + w + (tall ? " sm:h-[94vh]" : "") + " animate-scale-in relative"} onMouseDown={(e) => e.stopPropagation()}>
-          <div className="flex items-start justify-between gap-4 px-5 py-4 border-b border-white/10 shrink-0 rounded-t-2xl">
-            <div className="min-w-0">
-              <h3 className="text-lg font-semibold font-display truncate">{title}</h3>
-              {subtitle && <p className="text-xs opacity-60 mt-0.5">{subtitle}</p>}
-            </div>
-            <button onClick={requestClose} title="Close (Esc)" className="p-2 rounded-lg chrome-hover shrink-0"><Icon name="x" size={18} /></button>
+      bannerSubs.forEach((f) => { try { f(); } catch (e) {} });
+      if (opts.toast !== false && opts.message) VG.toast(opts.message, opts.type === "error" ? "error" : opts.type === "warn" ? "warn" : "success");
+      if (bannerState.duration > 0) {
+        setTimeout(() => {
+          if (bannerState && bannerState.resolve === resolve) {
+            const r = bannerState.resolve;
+            bannerState = null;
+            bannerSubs.forEach((f) => { try { f(); } catch (e) {} });
+            r(true);
+          }
+        }, bannerState.duration);
+      }
+    });
+  };
+  function BannerHost() {
+    const [, setTick] = useState(0);
+    useEffect(() => {
+      const bump = () => setTick((t) => t + 1);
+      bannerSubs.add(bump);
+      return () => bannerSubs.delete(bump);
+    }, []);
+    if (!bannerState) return null;
+    const s = bannerState;
+    const dismiss = () => {
+      const r = s.resolve;
+      bannerState = null;
+      setTick((t) => t + 1);
+      if (r) r(true);
+    };
+    const colors = { success: "bg-emerald-950/90 border-emerald-500/30 text-emerald-50", error: "bg-rose-950/90 border-rose-500/30 text-rose-50", warn: "bg-amber-950/90 border-amber-500/30 text-amber-50", info: "bg-slate-900/90 border-indigo-500/25" };
+    return (
+      <div className={"fixed top-0 left-0 right-0 z-[118] border-b animate-fade-up " + (colors[s.type] || colors.info)} style={{ backdropFilter: "blur(8px)" }}>
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-3">
+          <Icon name={s.type === "success" ? "check" : s.type === "error" ? "alert" : "info"} size={18} className="shrink-0" />
+          <div className="flex-1 min-w-0 text-sm">
+            {s.title && <div className="font-semibold">{s.title}</div>}
+            {s.message && <div className={s.title ? "opacity-85 mt-0.5" : ""}>{s.message}</div>}
           </div>
-          <div className="px-5 py-4 overflow-y-auto grow">{children}</div>
-          {footer && <div className="flex flex-wrap justify-end gap-2 px-5 py-3.5 border-t border-white/10 shrink-0 rounded-b-2xl bg-black/10">{footer}</div>}
-          {guard && (
-            <div className="absolute inset-0 z-20 grid place-items-center rounded-2xl bg-black/60" onMouseDown={(e) => e.stopPropagation()}>
-              <div className="glass-dark rounded-2xl shadow-glass p-5 w-[min(92%,420px)] animate-scale-in">
-                <div className="flex items-center gap-2 mb-2"><Icon name="alert" size={18} style={{ color: "#f59e0b" }} /><h4 className="font-semibold">Unsaved changes</h4></div>
-                <p className="text-sm opacity-70">You have unsaved changes. Do you want to close without saving? <span className="opacity-50">(Press Esc again to discard.)</span></p>
-                <div className="flex justify-end gap-2 mt-4">
-                  <Button variant="soft" onClick={() => setGuard(false)}>Keep editing</Button>
-                  <button onClick={onClose} className="inline-flex items-center gap-2 rounded-xl text-sm font-medium px-3.5 py-2 text-white" style={{ background: "#ef4444" }}>Close without saving</button>
-                </div>
-              </div>
-            </div>
-          )}
+          <button type="button" onClick={dismiss} className="p-1.5 rounded-lg opacity-70 hover:opacity-100 shrink-0" title="Dismiss"><Icon name="x" size={16} /></button>
         </div>
       </div>
     );
-    return (ReactDOM && ReactDOM.createPortal) ? ReactDOM.createPortal(overlay, document.body) : overlay;
+  }
+
+  /* ============ Modal (legacy name — renders full-page InternalScreen, never a floating card) ============ */
+  function Modal({ open, onClose, title, subtitle, children, footer, dirty = false, breadcrumbs, backLabel, size }) {
+    if (!open) return null;
+    const Screen = VG.InternalScreen;
+    const body = Screen ? (
+      <Screen
+        onBack={onClose}
+        backLabel={backLabel || "Cancel"}
+        title={title}
+        subtitle={subtitle}
+        footer={footer}
+        dirty={dirty}
+        breadcrumbs={breadcrumbs}
+        className="min-h-[calc(100dvh-4rem)]"
+      >
+        {children}
+      </Screen>
+    ) : (
+      <div className="vg-internal-screen w-full min-h-[60vh]">
+        <div className="flex items-center gap-3 mb-4 border-b border-white/10 pb-3">
+          <Button variant="soft" icon="chevronLeft" onClick={onClose}>{backLabel || "Cancel"}</Button>
+          <div><h2 className="text-lg font-semibold">{title}</h2>{subtitle && <p className="text-xs opacity-60">{subtitle}</p>}</div>
+        </div>
+        <div>{children}</div>
+        {footer && <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-white/10">{footer}</div>}
+      </div>
+    );
+    const target = VG.mainOverlayTarget ? VG.mainOverlayTarget() : (typeof document !== "undefined" ? document.getElementById("vg-main-content") : null);
+    const layer = (
+      <div className={(target ? "absolute" : "fixed") + " inset-0 z-30 overflow-y-auto bg-[var(--vg-bg)]"}>
+        <div className="w-full h-full p-3 sm:p-5">{body}</div>
+      </div>
+    );
+    if (target && ReactDOM && ReactDOM.createPortal) return ReactDOM.createPortal(layer, target);
+    return layer;
   }
 
   /* ============ Fields ============ */
@@ -835,7 +883,7 @@
   }
 
   VG.fx = {
-    Toaster, Confirmer, Modal, Field, Text, Area, Num, DateF, Select, Checkbox, MasterSelect, QuickCreate,
+    Toaster, Confirmer, BannerHost, Modal, Field, Text, Area, Num, DateF, Select, Checkbox, MasterSelect, QuickCreate,
     RecordTable, exportCSV, printDocument, printTable, StatusTag, PageHead, DocActions, labelOf,
     TransactionLinesShell, itemDropdownLine, itemSearchHaystack,
   };

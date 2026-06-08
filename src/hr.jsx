@@ -3,7 +3,7 @@
   const { useState } = React;
   const ui = VG.ui, fx = VG.fx, store = VG.store, inr = VG.fmt.inr, today = VG.fmt.todayISO;
   const { Icon, Button, Pill, Card } = ui;
-  const { Field, Text, Num, DateF, Select, Modal, RecordTable, PageHead, StatusTag, printDocument, DocActions } = fx;
+  const { Field, Text, Num, DateF, Select, Modal, InternalScreen, RecordTable, PageHead, StatusTag, printDocument, DocActions } = fx;
 
   const empName = (id) => (store.get("employees", id) || {}).name || "—";
   const LV_STATUS = { Pending: "#f59e0b", Approved: "#34d399", Rejected: "#ef4444" };
@@ -57,6 +57,21 @@
     const [edit, setEdit] = useState(null);
     const [view, setView] = useState(null);
     const rows = store.list("employees");
+    if (edit) {
+      return <EmployeeForm open record={edit.id ? edit : null} roleKey={roleKey} can={can} onClose={() => setEdit(null)} />;
+    }
+    if (view) {
+      return (
+        <InternalScreen onBack={() => setView(null)} backLabel="Back to employees" title={view.name} subtitle={view.code}
+          footer={<DocActions build={() => empDoc(view)} />}
+          breadcrumbs={[{ label: "Employees", onClick: () => setView(null) }, { label: view.name }]}>
+          <div className="text-sm grid sm:grid-cols-2 gap-3 max-w-2xl">
+            <Card className="p-3">{view.department} · {view.designation}</Card>
+            <Card className="p-3">CTC {inr(view.ctc)} · DOJ {view.doj}</Card>
+          </div>
+        </InternalScreen>
+      );
+    }
     return (
       <div>
         <PageHead title="Employees" />
@@ -69,15 +84,6 @@
           { key: "status", label: "Status", render: (r) => <StatusTag value={r.status} map={{ Active: "#34d399", Inactive: "#94a3b8" }} /> },
         ]} rows={rows} can={can} printTitle="Employees" searchKeys={["name", "code", "department"]}
           onNew={() => setEdit({})} newLabel="Add employee" onView={(r) => setView(r)} onEdit={can("edit") ? (r) => setEdit(r) : null} />
-        {edit && <EmployeeForm open record={edit.id ? edit : null} roleKey={roleKey} can={can} onClose={() => setEdit(null)} />}
-        {view && (
-          <Modal open onClose={() => setView(null)} title={view.name} subtitle={view.code} footer={<DocActions build={() => empDoc(view)} />}>
-            <div className="text-sm grid sm:grid-cols-2 gap-3">
-              <Card className="p-3">{view.department} · {view.designation}</Card>
-              <Card className="p-3">CTC {inr(view.ctc)} · DOJ {view.doj}</Card>
-            </div>
-          </Modal>
-        )}
       </div>
     );
   }

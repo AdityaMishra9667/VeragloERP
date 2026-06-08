@@ -88,13 +88,15 @@
         return <span className="opacity-40 text-xs">—</span>;
       } },
     ];
+    if (edit) {
+      return <PRForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} can={can} />;
+    }
     return (
       <div>
         <PageHead title="Purchase Requests" desc="Raise, approve and convert requisitions into purchase orders" />
         <RecordTable title="Requests" columns={cols} rows={rows} can={can} printTitle="Purchase Requests" searchKeys={["no"]}
           filters={[{ key: "status", label: "All status", options: ["Pending", "Approved", "Ordered", "Rejected"] }]}
           onNew={() => setEdit({})} newLabel="New Request" onEdit={(r) => setEdit(r)} empty="No purchase requests yet" />
-        {edit && <PRForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} can={can} />}
       </div>
     );
   }

@@ -499,13 +499,15 @@
       { key: "defaultWarehouse", label: "Default WH", render: (r) => r.defaultWarehouse ? <Pill color="#34d399">Yes</Pill> : "—" },
       { key: "status", label: "Status", render: (r) => <StatusTag value={r.status} map={{ Active: "#34d399", Inactive: "#94a3b8" }} /> },
     ];
+    if (edit) {
+      return <LocationForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} can={can} />;
+    }
     return (
       <div>
         <PageHead title="Locations" desc="Plants, branches, warehouses, stores and rack/bin locations" />
         <RecordTable title="Locations" columns={cols} rows={rows} can={can} printTitle="Locations" searchKeys={["name", "code", "city", "contact"]}
           onNew={can("add") ? () => setEdit({}) : null} newLabel="New Location" onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete " + r.name + "?", danger: true, confirmLabel: "Delete" })) { store.remove("locations", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-        {edit && <LocationForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} can={can} />}
       </div>
     );
   }
@@ -654,6 +656,9 @@
         </div>
       ) : null },
     ];
+    if (edit) {
+      return <UserForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} can={can} />;
+    }
     return (
       <div>
         <PageHead title="Users" desc="ERP user accounts — login requires active user, role and password in this database" />
@@ -670,7 +675,6 @@
               VG.toast("User deleted — login disabled");
             }
           } : null} />
-        {edit && <UserForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} can={can} />}
       </div>
     );
   }
@@ -735,12 +739,14 @@
         </div>
       ) },
     ];
+    if (edit) {
+      return <RoleForm open onClose={() => { setEdit(null); setDup(false); }} record={edit} roleKey={roleKey} duplicate={dup} />;
+    }
     return (
       <div>
         <PageHead title="Roles" desc="Custom roles with module access, actions and hierarchy" />
         <RecordTable title="Roles" columns={cols} rows={rows} can={can} printTitle="Roles" searchKeys={["label", "key", "tag"]} search={false}
           onNew={can("add") ? () => { setDup(false); setEdit({ key: "custom_" + Date.now().toString(36).slice(-4), label: "New Role", avatar: "NR", color: "#6366f1" }); } : null} newLabel="New Role" />
-        {edit && <RoleForm open onClose={() => { setEdit(null); setDup(false); }} record={edit} roleKey={roleKey} duplicate={dup} />}
       </div>
     );
   }
@@ -838,13 +844,15 @@
       { key: "mandatory", label: "Mandatory", render: (r) => r.mandatory ? "✓" : "—" },
       { key: "approvalRequired", label: "Approval", render: (r) => r.approvalRequired ? "✓" : "—" },
     ];
+    if (edit) {
+      return <FieldPermForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} />;
+    }
     return (
       <div>
         <PageHead title="Field Permissions" desc="Control visibility, editability and mandatory rules per module field" />
         <RecordTable title="Field rules" columns={cols} rows={rows} can={can} printTitle="Field Permissions" searchKeys={["module", "field"]}
           onNew={can("add") ? () => setEdit({}) : null} newLabel="Add rule" onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete this rule?", danger: true, confirmLabel: "Delete" })) { store.remove("fieldPermissions", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-        {edit && <FieldPermForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} />}
       </div>
     );
   }
@@ -897,13 +905,15 @@
       { key: "escalationHours", label: "Escalation (h)" },
       { key: "active", label: "Status", render: (r) => <StatusTag value={r.active !== false ? "Active" : "Inactive"} map={{ Active: "#34d399", Inactive: "#94a3b8" }} /> },
     ];
+    if (edit) {
+      return <ApprovalForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} />;
+    }
     return (
       <div>
         <PageHead title="Approval Workflows" desc="Multi-level approval rules by process type and amount" />
         <RecordTable title="Workflows" columns={cols} rows={rows} can={can} printTitle="Approval Workflows" searchKeys={["process"]}
           onNew={can("add") ? () => setEdit({}) : null} newLabel="New Workflow" onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete workflow?", danger: true, confirmLabel: "Delete" })) { store.remove("approvalWorkflows", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-        {edit && <ApprovalForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} />}
       </div>
     );
   }
@@ -984,13 +994,15 @@
       { key: "reset", label: "Reset" },
       { key: "active", label: "Status", render: (r) => <StatusTag value={r.active !== false ? "Active" : "Inactive"} map={{ Active: "#34d399", Inactive: "#94a3b8" }} /> },
     ];
+    if (edit) {
+      return <SeriesForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} />;
+    }
     return (
       <div>
         <PageHead title="Numbering Series" desc="Auto-number prefixes for quotations, orders, challans and invoices" />
         <RecordTable title="Series" columns={cols} rows={rows} can={can} printTitle="Number Series" searchKeys={["prefix", "docType"]}
           onNew={can("add") ? () => setEdit({}) : null} newLabel="New Series" onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete series?", danger: true, confirmLabel: "Delete" })) { store.remove("numberSeries", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-        {edit && <SeriesForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} />}
       </div>
     );
   }

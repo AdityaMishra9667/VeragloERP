@@ -83,12 +83,14 @@
     const [q, setQ] = useState("");
     const [hi, setHi] = useState(0);
     const inputRef = useRef(null);
+    const InternalScreen = VG.InternalScreen;
+    const MainFullPage = VG.MainFullPage;
 
     const index = useMemo(() => (open ? VG.buildSearchIndex(roleKey) : []), [open, roleKey]);
     const ql = q.trim().toLowerCase();
     const results = useMemo(() => {
       if (!ql) return index.filter((x) => x.isNav).slice(0, 8);
-      return index.filter((x) => x.haystack.includes(ql)).slice(0, 24);
+      return index.filter((x) => x.haystack.includes(ql)).slice(0, 48);
     }, [index, ql]);
 
     useEffect(() => {
@@ -98,6 +100,15 @@
         setTimeout(() => inputRef.current && inputRef.current.focus(), 50);
       }
     }, [open]);
+
+    function pick(r) {
+      onClose();
+      if (r.isNav) {
+        if (VG._openModule) VG._openModule(r.module);
+      } else {
+        VG.goTo(r.module, r.section);
+      }
+    }
 
     useEffect(() => {
       const onKey = (e) => {
@@ -116,43 +127,43 @@
       return () => window.removeEventListener("keydown", onKey);
     }, [open, results, hi]);
 
-    function pick(r) {
-      onClose();
-      if (r.isNav) {
-        if (VG._openModule) VG._openModule(r.module);
-      } else {
-        VG.goTo(r.module, r.section);
-      }
-    }
-
     if (!open) return null;
 
-    return (
-      <div className="fixed inset-0 z-[100] flex items-start justify-center pt-[12vh] px-4" onClick={onClose}>
-        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-        <div className="relative w-full max-w-xl glass-dark rounded-2xl shadow-glass overflow-hidden animate-scale-in" onClick={(e) => e.stopPropagation()}>
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10">
-            <Icon name="search" size={18} className="opacity-50" />
+    const body = (
+      <InternalScreen
+        onBack={onClose}
+        backLabel="Close"
+        title="Universal Search"
+        subtitle="Customers, orders, items, modules and more"
+        bodyClassName="!overflow-visible"
+      >
+        <div className="max-w-3xl mx-auto w-full">
+          <div className="flex items-center gap-2 px-4 py-3 rounded-xl border border-white/10 bg-white/[0.03] mb-4">
+            <Icon name="search" size={18} className="opacity-50 shrink-0" />
             <input
               ref={inputRef}
               value={q}
               onChange={(e) => { setQ(e.target.value); setHi(0); }}
               placeholder="Search customers, orders, items, modules…"
-              className="flex-1 bg-transparent outline-none text-sm"
+              className="flex-1 bg-transparent outline-none text-sm min-w-0"
             />
-            <kbd className="text-[10px] opacity-40 glass px-1.5 py-0.5 rounded">ESC</kbd>
+            <kbd className="text-[10px] opacity-40 glass px-1.5 py-0.5 rounded shrink-0 hidden sm:inline">ESC</kbd>
           </div>
-          <ul className="max-h-[50vh] overflow-y-auto py-2">
-            {results.length === 0 && <li className="px-4 py-8 text-center text-sm opacity-50">No matches for “{q}”</li>}
+          <ul className="space-y-1 max-h-[calc(100dvh-14rem)] overflow-y-auto">
+            {results.length === 0 && (
+              <li className="px-4 py-12 text-center text-sm opacity-50 rounded-xl border border-dashed border-white/10">
+                {ql ? <>No matches for &ldquo;{q}&rdquo;</> : "Type to search across your ERP data"}
+              </li>
+            )}
             {results.map((r, i) => (
               <li key={r.id}>
                 <button
                   type="button"
                   onClick={() => pick(r)}
                   onMouseEnter={() => setHi(i)}
-                  className={"w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm transition " + (i === hi ? "bg-white/10" : "hover:bg-white/5")}
+                  className={"w-full flex items-center gap-3 px-4 py-3 text-left text-sm rounded-xl border transition " + (i === hi ? "bg-white/10 border-white/15" : "border-transparent hover:bg-white/5 hover:border-white/10")}
                 >
-                  <span className="grid place-items-center w-9 h-9 rounded-lg glass shrink-0">
+                  <span className="grid place-items-center w-10 h-10 rounded-lg glass shrink-0">
                     <Icon name={r.icon} size={16} style={{ color: "var(--accent)" }} />
                   </span>
                   <span className="flex-1 min-w-0">
@@ -164,10 +175,19 @@
               </li>
             ))}
           </ul>
-          <div className="px-4 py-2 border-t border-white/10 text-[10px] opacity-45 flex gap-3">
+          <div className="mt-4 text-[10px] opacity-45 flex flex-wrap gap-3 justify-center">
             <span>↑↓ navigate</span><span>↵ open</span><span>⌘K toggle</span>
           </div>
         </div>
+      </InternalScreen>
+    );
+
+    if (MainFullPage) {
+      return <MainFullPage open onClose={onClose}>{body}</MainFullPage>;
+    }
+    return (
+      <div className="fixed inset-0 z-[100] overflow-y-auto bg-[var(--vg-bg)] p-3 sm:p-5 animate-fade-up">
+        {body}
       </div>
     );
   }

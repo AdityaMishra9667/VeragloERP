@@ -960,6 +960,9 @@
         <Customer360Page id={view} roleKey={roleKey} can={can} onBack={() => setView(null)} onEdit={(c) => { setView(null); setForm(c); }} />
       );
     }
+    if (form) {
+      return <CustomerForm open record={form.id ? form : null} roleKey={roleKey} can={can} onClose={() => setForm(null)} onSaved={() => {}} />;
+    }
     return (
       <div>
         <PageHead title="Customer Master" desc="Click any customer name for the full Customer 360° dashboard" />
@@ -978,7 +981,6 @@
             ))}</div>
           </Card>
         )}
-        {form && <CustomerForm open record={form.id ? form : null} roleKey={roleKey} can={can} onClose={() => setForm(null)} onSaved={() => {}} />}
       </div>
     );
   }
