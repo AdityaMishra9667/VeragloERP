@@ -380,9 +380,11 @@ async function start() {
   } catch (e) {
     console.error("Server startup failed:", e.message);
     if (db.storageMode() === "postgresql") {
-      console.error("  docker compose up -d");
-      console.error("  cp server/.env.example server/.env");
-      console.error("  Or set USE_FILE_STORAGE=1 for desktop / portable mode");
+      console.error("");
+      console.error("Fix options:");
+      console.error("  1. Start Postgres:  docker compose up -d");
+      console.error("  2. No Docker:       USE_FILE_STORAGE=1 ./start.sh");
+      console.error("  3. Diagnose:        ./scripts/check-localhost.sh");
     }
     process.exit(1);
   }
