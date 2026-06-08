@@ -272,187 +272,17 @@
     );
   }
 
-  function ModuleDashboard({ modId, mod, roleKey, can, go }) {
-    VG.useDB();
-    const tick = VG.useDB();
-    const builder = VG.dashboardBuilders && VG.dashboardBuilders[modId];
-    const cfg = useMemo(() => (builder ? builder({ roleKey, can, go, store, mod, inr, today }) : null), [modId, roleKey, tick]);
-    const prefs = moduleDashPrefs(roleKey, modId);
-    const [tab, setTab] = useState(prefs.tab);
-    const [collapsed, setCollapsed] = useState(prefs.collapsed || {});
-
-    useEffect(() => {
-      saveModuleDashPrefs(roleKey, modId, { tab });
-    }, [tab]);
-
-    if (!cfg) {
-      return <div className="opacity-60 p-8 text-center">Dashboard configuration not available.</div>;
-    }
-
-    const tabs = [
-      { id: "overview", label: "Overview", icon: "grid" },
-      { id: "operations", label: cfg.opsTabLabel || "Operations", icon: cfg.opsTabIcon || "activity" },
-      { id: "insights", label: "Insights", icon: "chart" },
-    ];
-
-    const togglePanel = (id) => setCollapsed((c) => {
-      const next = { ...c, [id]: !c[id] };
-      saveModuleDashPrefs(roleKey, modId, { collapsed: next });
-      return next;
-    });
-
-    const isHidden = (id) => (prefs.hiddenPanels || []).includes(id);
-
-    return (
-      <div className="space-y-4 w-full max-w-none vg-module-dashboard vg-full-width-workspace">
-        <div className="flex items-center justify-end gap-2 text-[11px] opacity-45 -mt-1">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          Live · refreshes automatically
-        </div>
-
-        <QuickActionsBar actions={cfg.quickActions} can={can} />
-
-        <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
-          {tabs.map((t) => (
-            <button key={t.id} type="button" onClick={() => setTab(t.id)}
-              className={"vg-tab shrink-0 " + (tab === t.id ? "is-active" : "")}
-              style={tab === t.id ? { "--tab-accent": mod?.accent || "var(--accent)" } : undefined}>
-              <Icon name={t.icon} size={15} />{t.label}
-            </button>
-          ))}
-        </div>
-
-        {tab === "overview" && (
-          <div className="space-y-6 animate-fade-up">
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-              {(cfg.kpis || []).map((k, i) => (
-                <KpiTile key={k.label} kpi={k} delay={i * 50} onClick={k.go ? () => go(k.go) : undefined} />
-              ))}
-            </div>
-            <div className="grid lg:grid-cols-3 gap-5">
-              <div className="lg:col-span-2 space-y-5">
-                {!isHidden("priority") && (
-                  <Panel id="priority" title={cfg.priorityTitle || "Priority queue"} icon="alert" collapsed={collapsed.priority} onToggle={() => togglePanel("priority")}>
-                    {cfg.priorityContent || <EmptyState icon="check" title="Nothing urgent" />}
-                  </Panel>
-                )}
-                {!isHidden("workflow") && cfg.workflowSteps && (
-                  <Card className="p-5">
-                    <SectionTitle icon="flow" title="Workflow status" />
-                    <div className="flex flex-wrap gap-2 mt-3">
-                      {cfg.workflowSteps.map((s, i) => (
-                        <div key={s} className="flex items-center gap-2">
-                          <span className="rounded-xl px-3 py-2 glass text-xs font-medium flex items-center gap-2">
-                            <span className="w-5 h-5 rounded-full text-[10px] grid place-items-center text-white" style={{ background: "var(--accent)" }}>{i + 1}</span>
-                            {s}
-                          </span>
-                          {i < cfg.workflowSteps.length - 1 && <Icon name="chevronRight" size={14} className="opacity-30" />}
-                        </div>
-                      ))}
-                    </div>
-                  </Card>
-                )}
-              </div>
-              <div className="space-y-5">
-                {!isHidden("tasks") && (
-                  <Panel id="tasks" title="Pending tasks" icon="check" action={<Pill color="var(--accent)">{(cfg.tasks || []).length}</Pill>} collapsed={collapsed.tasks} onToggle={() => togglePanel("tasks")}>
-                    <TaskPanel tasks={cfg.tasks} go={go} />
-                  </Panel>
-                )}
-                {!isHidden("approvals") && cfg.approvals && (
-                  <Panel id="approvals" title="Approvals" icon="shield" collapsed={collapsed.approvals} onToggle={() => togglePanel("approvals")}>
-                    {cfg.approvals.length === 0 ? <EmptyState title="No approvals waiting" /> : (
-                      <ul className="space-y-2">{cfg.approvals.map((a, i) => (
-                        <li key={i} className="glass rounded-xl p-3 text-sm">
-                          <div className="font-medium">{a.title}</div>
-                          <div className="text-[11px] opacity-55 mt-1">{a.meta}</div>
-                        </li>
-                      ))}</ul>
-                    )}
-                  </Panel>
-                )}
-              </div>
-            </div>
-            <SuggestedActions items={cfg.suggestions} go={go} />
-            {!isHidden("activity") && (
-              <Panel id="activity" title="Recent activity" icon="activity" collapsed={collapsed.activity} onToggle={() => togglePanel("activity")}>
-                <ActivityTimeline rows={cfg.activity} />
-              </Panel>
-            )}
-          </div>
-        )}
-
-        {tab === "operations" && (
-          <div className="space-y-6 animate-fade-up">
-            {cfg.stockItems ? (
-              <Card className="p-5 sm:p-6">
-                <SectionTitle icon="box" title={cfg.opsTitle || "Operational summary"} action={cfg.opsAction} />
-                <div className="mt-4">
-                  <StockHealthGrid items={cfg.stockItems} go={go} can={can} />
-                </div>
-              </Card>
-            ) : (
-              <Panel id="ops" title={cfg.opsTitle || "Operational summary"} icon="activity" collapsed={false}>
-                {cfg.opsContent || <EmptyState title="No operational data" />}
-              </Panel>
-            )}
-            {cfg.opsSecondary && (
-              <Card className="p-5">{cfg.opsSecondary}</Card>
-            )}
-          </div>
-        )}
-
-        {tab === "insights" && (
-          <div className="space-y-6 animate-fade-up">
-            {cfg.series && cfg.series.length > 0 && (
-              <Card className="p-5 sm:p-6">
-                <SectionTitle icon="chart" title="Trend" action={<Pill color="var(--accent)">12 periods</Pill>} />
-                <div className="mt-4">
-                  <Sparkline data={cfg.series} id={modId + "-dash"} height={100} />
-                </div>
-              </Card>
-            )}
-            <Card className="p-5 sm:p-6">
-              <SectionTitle icon="sparkle" title="Key observations" />
-              <div className="mt-4">
-                <InsightCards insights={cfg.insights} />
-              </div>
-            </Card>
-            {cfg.reports && cfg.reports.length > 0 && (
-              <Card className="p-5 sm:p-6">
-                <SectionTitle icon="chart" title="Reports & analytics" />
-                <div className="grid sm:grid-cols-2 gap-3 mt-4">
-                  {cfg.reports.map((r) => (
-                    <button key={r.label} type="button" onClick={r.onClick} className="flex items-center gap-4 rounded-xl glass p-4 text-left chrome-hover transition w-full">
-                      <span className="grid place-items-center w-11 h-11 rounded-xl text-white shrink-0" style={{ background: "var(--accent)" }}>
-                        <Icon name={r.icon || "chart"} size={18} />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="font-medium text-sm">{r.label}</div>
-                        <div className="text-[11px] opacity-55">{r.desc}</div>
-                      </div>
-                      <Icon name="chevronRight" size={16} className="opacity-40" />
-                    </button>
-                  ))}
-                </div>
-              </Card>
-            )}
-          </div>
-        )}
-      </div>
-    );
-  }
-
   /* ----- Per-module data builders ----- */
-  function auditRows(entities, limit) {
-    return store.list("auditLog").filter((a) => entities.includes(a.entity)).slice(-(limit || 8)).reverse()
-      .map((a) => ({
-        id: a.id,
-        action: a.action,
-        summary: a.summary,
-        time: new Date(a.ts).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }),
-      }));
-  }
+  const auditRows = (entities, limit) => store.list("auditLog")
+    .filter((a) => entities.includes(a.entity))
+    .slice(-(limit || 8))
+    .reverse()
+    .map((a) => ({
+      id: a.id,
+      action: a.action,
+      summary: a.summary,
+      time: new Date(a.ts).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }),
+    }));
 
   VG.dashboardBuilders = {
     inventory(ctx) {
@@ -958,6 +788,177 @@
       };
     },
   };
+
+  function ModuleDashboard({ modId, mod, roleKey, can, go }) {
+    VG.useDB();
+    const tick = VG.useDB();
+    const builder = VG.dashboardBuilders && VG.dashboardBuilders[modId];
+    const cfg = useMemo(() => (builder ? builder({ roleKey, can, go, store, mod, inr, today }) : null), [modId, roleKey, tick]);
+    const prefs = moduleDashPrefs(roleKey, modId);
+    const [tab, setTab] = useState(prefs.tab);
+    const [collapsed, setCollapsed] = useState(prefs.collapsed || {});
+
+    useEffect(() => {
+      saveModuleDashPrefs(roleKey, modId, { tab });
+    }, [tab]);
+
+    if (!cfg) {
+      return <div className="opacity-60 p-8 text-center">Dashboard configuration not available.</div>;
+    }
+
+    const tabs = [
+      { id: "overview", label: "Overview", icon: "grid" },
+      { id: "operations", label: cfg.opsTabLabel || "Operations", icon: cfg.opsTabIcon || "activity" },
+      { id: "insights", label: "Insights", icon: "chart" },
+    ];
+
+    const togglePanel = (id) => setCollapsed((c) => {
+      const next = { ...c, [id]: !c[id] };
+      saveModuleDashPrefs(roleKey, modId, { collapsed: next });
+      return next;
+    });
+
+    const isHidden = (id) => (prefs.hiddenPanels || []).includes(id);
+
+    return (
+      <div className="space-y-4 w-full max-w-none vg-module-dashboard vg-full-width-workspace">
+        <div className="flex items-center justify-end gap-2 text-[11px] opacity-45 -mt-1">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          Live · refreshes automatically
+        </div>
+
+        <QuickActionsBar actions={cfg.quickActions} can={can} />
+
+        <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
+          {tabs.map((t) => (
+            <button key={t.id} type="button" onClick={() => setTab(t.id)}
+              className={"vg-tab shrink-0 " + (tab === t.id ? "is-active" : "")}
+              style={tab === t.id ? { "--tab-accent": mod?.accent || "var(--accent)" } : undefined}>
+              <Icon name={t.icon} size={15} />{t.label}
+            </button>
+          ))}
+        </div>
+
+        {tab === "overview" && (
+          <div className="space-y-6 animate-fade-up">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+              {(cfg.kpis || []).map((k, i) => (
+                <KpiTile key={k.label} kpi={k} delay={i * 50} onClick={k.go ? () => go(k.go) : undefined} />
+              ))}
+            </div>
+            <div className="grid lg:grid-cols-3 gap-5">
+              <div className="lg:col-span-2 space-y-5">
+                {!isHidden("priority") && (
+                  <Panel id="priority" title={cfg.priorityTitle || "Priority queue"} icon="alert" collapsed={collapsed.priority} onToggle={() => togglePanel("priority")}>
+                    {cfg.priorityContent || <EmptyState icon="check" title="Nothing urgent" />}
+                  </Panel>
+                )}
+                {!isHidden("workflow") && cfg.workflowSteps && (
+                  <Card className="p-5">
+                    <SectionTitle icon="flow" title="Workflow status" />
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {cfg.workflowSteps.map((s, i) => (
+                        <div key={s} className="flex items-center gap-2">
+                          <span className="rounded-xl px-3 py-2 glass text-xs font-medium flex items-center gap-2">
+                            <span className="w-5 h-5 rounded-full text-[10px] grid place-items-center text-white" style={{ background: "var(--accent)" }}>{i + 1}</span>
+                            {s}
+                          </span>
+                          {i < cfg.workflowSteps.length - 1 && <Icon name="chevronRight" size={14} className="opacity-30" />}
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+                )}
+              </div>
+              <div className="space-y-5">
+                {!isHidden("tasks") && (
+                  <Panel id="tasks" title="Pending tasks" icon="check" action={<Pill color="var(--accent)">{(cfg.tasks || []).length}</Pill>} collapsed={collapsed.tasks} onToggle={() => togglePanel("tasks")}>
+                    <TaskPanel tasks={cfg.tasks} go={go} />
+                  </Panel>
+                )}
+                {!isHidden("approvals") && cfg.approvals && (
+                  <Panel id="approvals" title="Approvals" icon="shield" collapsed={collapsed.approvals} onToggle={() => togglePanel("approvals")}>
+                    {cfg.approvals.length === 0 ? <EmptyState title="No approvals waiting" /> : (
+                      <ul className="space-y-2">{cfg.approvals.map((a, i) => (
+                        <li key={i} className="glass rounded-xl p-3 text-sm">
+                          <div className="font-medium">{a.title}</div>
+                          <div className="text-[11px] opacity-55 mt-1">{a.meta}</div>
+                        </li>
+                      ))}</ul>
+                    )}
+                  </Panel>
+                )}
+              </div>
+            </div>
+            <SuggestedActions items={cfg.suggestions} go={go} />
+            {!isHidden("activity") && (
+              <Panel id="activity" title="Recent activity" icon="activity" collapsed={collapsed.activity} onToggle={() => togglePanel("activity")}>
+                <ActivityTimeline rows={cfg.activity} />
+              </Panel>
+            )}
+          </div>
+        )}
+
+        {tab === "operations" && (
+          <div className="space-y-6 animate-fade-up">
+            {cfg.stockItems ? (
+              <Card className="p-5 sm:p-6">
+                <SectionTitle icon="box" title={cfg.opsTitle || "Operational summary"} action={cfg.opsAction} />
+                <div className="mt-4">
+                  <StockHealthGrid items={cfg.stockItems} go={go} can={can} />
+                </div>
+              </Card>
+            ) : (
+              <Panel id="ops" title={cfg.opsTitle || "Operational summary"} icon="activity" collapsed={false}>
+                {cfg.opsContent || <EmptyState title="No operational data" />}
+              </Panel>
+            )}
+            {cfg.opsSecondary && (
+              <Card className="p-5">{cfg.opsSecondary}</Card>
+            )}
+          </div>
+        )}
+
+        {tab === "insights" && (
+          <div className="space-y-6 animate-fade-up">
+            {cfg.series && cfg.series.length > 0 && (
+              <Card className="p-5 sm:p-6">
+                <SectionTitle icon="chart" title="Trend" action={<Pill color="var(--accent)">12 periods</Pill>} />
+                <div className="mt-4">
+                  <Sparkline data={cfg.series} id={modId + "-dash"} height={100} />
+                </div>
+              </Card>
+            )}
+            <Card className="p-5 sm:p-6">
+              <SectionTitle icon="sparkle" title="Key observations" />
+              <div className="mt-4">
+                <InsightCards insights={cfg.insights} />
+              </div>
+            </Card>
+            {cfg.reports && cfg.reports.length > 0 && (
+              <Card className="p-5 sm:p-6">
+                <SectionTitle icon="chart" title="Reports & analytics" />
+                <div className="grid sm:grid-cols-2 gap-3 mt-4">
+                  {cfg.reports.map((r) => (
+                    <button key={r.label} type="button" onClick={r.onClick} className="flex items-center gap-4 rounded-xl glass p-4 text-left chrome-hover transition w-full">
+                      <span className="grid place-items-center w-11 h-11 rounded-xl text-white shrink-0" style={{ background: "var(--accent)" }}>
+                        <Icon name={r.icon || "chart"} size={18} />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium text-sm">{r.label}</div>
+                        <div className="text-[11px] opacity-55">{r.desc}</div>
+                      </div>
+                      <Icon name="chevronRight" size={16} className="opacity-40" />
+                    </button>
+                  ))}
+                </div>
+              </Card>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   /* ----- Sticky vibrant module tabs (compact, grouped) ----- */
   function ModuleNav({ sections, section, setSection, mod }) {
