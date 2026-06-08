@@ -494,6 +494,7 @@
     const current = visibleSections.find((s) => s.id === section);
     const isDashboard = isDashboardSection(section);
     return (
+      <div className={"animate-fade-up" + (isDashboard ? "" : " vg-internal-workspace")}>
       <div className={"animate-fade-up vg-full-width-workspace" + (isDashboard ? "" : " vg-internal-workspace")}>
         {isDashboard ? (
           <ModuleBanner mod={mod} actions={actions} />
@@ -571,6 +572,7 @@
     const isAnalytics = /analytic/i.test(tab);
 
     return (
+      <div className={"animate-fade-up" + (isOverview ? "" : " vg-internal-workspace")}>
       <div className={"animate-fade-up vg-full-width-workspace" + (isOverview ? "" : " vg-internal-workspace")}>
         {isOverview ? (
           <ModuleBanner mod={mod} actions={[

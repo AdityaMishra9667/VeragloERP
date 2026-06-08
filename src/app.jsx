@@ -100,11 +100,14 @@
   }
 
   /* ---------------- Login ---------------- */
+  function Login({ onLogin, theme, setTheme, needsSetup }) {
   function Login({ onLogin, theme, setTheme, needsSetup, onForgotPassword }) {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [busy, setBusy] = useState(false);
     const [authHint, setAuthHint] = useState("");
+
+    useEffect(() => {
     const [forgotEnabled, setForgotEnabled] = useState(true);
 
     useEffect(() => {
@@ -204,6 +207,34 @@
                     Forgot password?
                   </button>
                 </div>
+                <h2 className="text-2xl font-display font-semibold text-slate-900">Welcome back</h2>
+                <p className="text-sm login-muted mt-1">Sign in to your workspace</p>
+
+                <form onSubmit={submit} className="mt-6 space-y-4">
+                  <div>
+                    <label className="text-xs login-label">Email</label>
+                    <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="username" required
+                      placeholder="you@company.com"
+                      className="login-input mt-1.5 w-full rounded-xl px-3.5 py-3 text-sm focus:ring-2"
+                      style={{ "--tw-ring-color": "var(--accent)" }} />
+                  </div>
+                  <div>
+                    <label className="text-xs login-label">Password</label>
+                    <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password"
+                      placeholder="Enter password"
+                      className="login-input mt-1.5 w-full rounded-xl px-3.5 py-3 text-sm focus:ring-2"
+                      style={{ "--tw-ring-color": "var(--accent)" }} />
+                  </div>
+
+                  <Button type="submit" icon="logout" className="w-full !py-3" disabled={busy}>{busy ? "Signing in…" : "Sign in to workspace"}</Button>
+                  {needsSetup ? (
+                    <p className="text-[11px] text-center text-amber-700">No administrator exists yet — refresh the page to open <b>Create administrator</b>.</p>
+                  ) : (
+                    <p className="text-[11px] text-center login-muted">Use the email and password from your administrator setup. Dev credentials from other machines do not carry over after deploy.</p>
+                  )}
+                  {authHint && <p className="text-[11px] text-center text-amber-700 mt-2">{authHint}</p>}
+                </form>
+              </div>
               )}
             </div>
 
@@ -727,6 +758,18 @@
               <p className="text-xs opacity-45 mt-4 text-center">Evaluation trial available until {trialEnd}.</p>
             )}
           </div>
+          {lic.expired && <Card className="p-3 mb-4 border border-amber-500/40 text-sm text-amber-200">{lic.reason}</Card>}
+          <Card className="p-4 mb-4 border border-indigo-500/30 text-sm">
+            <p className="font-medium text-indigo-100">New installation?</p>
+            <p className="text-xs opacity-70 mt-1">Start the built-in evaluation trial to reach login and create your administrator account.</p>
+            <Button className="mt-3 !py-2" icon="check" onClick={beginTrial} disabled={startingTrial}>
+              {startingTrial ? "Starting…" : "Continue with 14-day evaluation trial"}
+            </Button>
+          </Card>
+          {VG.ActivationForm ? <VG.ActivationForm onDone={() => onActivated && onActivated()} compact /> : <p className="text-sm opacity-60">Loading activation…</p>}
+          {trialEnd && (
+            <p className="text-xs opacity-45 mt-4 text-center">Evaluation trial available until {trialEnd}.</p>
+          )}
         </div>
       </Shell>
     );
@@ -898,6 +941,7 @@
     let screen;
     if (!licensed) screen = <ActivationScreen onActivated={() => setLicensed(true)} />;
     else if (!session && needsSetup) screen = <InitialSetup onComplete={login} theme={theme} setTheme={setTheme} />;
+    else if (!session) screen = <Login onLogin={login} theme={theme} setTheme={setTheme} needsSetup={needsSetup} />;
     else if (!session && forgotPassword && VG.ForgotPasswordFlow) {
       screen = (
         <VG.ForgotPasswordFlow
