@@ -494,7 +494,7 @@
     const current = visibleSections.find((s) => s.id === section);
     const isDashboard = isDashboardSection(section);
     return (
-      <div className={"animate-fade-up" + (isDashboard ? "" : " vg-internal-workspace")}>
+      <div className={"animate-fade-up vg-full-width-workspace" + (isDashboard ? "" : " vg-internal-workspace")}>
         {isDashboard ? (
           <ModuleBanner mod={mod} actions={actions} />
         ) : current ? (
@@ -571,7 +571,7 @@
     const isAnalytics = /analytic/i.test(tab);
 
     return (
-      <div className={"animate-fade-up" + (isOverview ? "" : " vg-internal-workspace")}>
+      <div className={"animate-fade-up vg-full-width-workspace" + (isOverview ? "" : " vg-internal-workspace")}>
         {isOverview ? (
           <ModuleBanner mod={mod} actions={[
             ...(can("add") && mod.shortcuts ? [{ label: mod.shortcuts[0], icon: "plus", primary: true, onClick: () => setTab(mod.tabs[1] || mod.tabs[0]) }] : []),
@@ -587,7 +587,7 @@
         )}
 
         {isOverview && (
-          <div className="space-y-6 max-w-[1600px]">
+          <div className="space-y-6 w-full max-w-none">
             <div>
               <h2 className="text-xl font-display font-bold">{mod.name}</h2>
               <p className="text-sm opacity-55 mt-0.5">{mod.tagline}</p>

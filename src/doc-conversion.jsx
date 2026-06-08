@@ -1,8 +1,5 @@
-/* Veraglo ERP — Document conversion / status-forward confirmation & success popups. */
+/* Veraglo ERP — Document conversion / status-forward confirmation & success notifications. */
 (function (VG) {
-  const { useState, useEffect } = React;
-  const { Icon, Button } = VG.ui;
-
   const FORWARD_LABELS = {
     "quotation:proforma": {
       confirm: (no) => "Are you sure you want to convert this Quotation" + (no ? " (" + no + ")" : "") + " to Proforma Invoice?",
@@ -58,9 +55,6 @@
     },
   };
 
-  let successState = null;
-  const successSubs = new Set();
-
   VG.DOC_FORWARD_LABELS = FORWARD_LABELS;
 
   VG.confirmForward = function (opts) {
@@ -74,53 +68,16 @@
   };
 
   VG.showSuccess = function (opts) {
-    return new Promise((resolve) => {
-      successState = {
-        title: opts.title || "Success",
-        message: opts.message || "Operation completed successfully.",
-        resolve,
-      };
-      successSubs.forEach((f) => { try { f(); } catch (e) {} });
-    });
+    const message = opts.message || "Operation completed successfully.";
+    if (VG.showBanner) {
+      return VG.showBanner({ type: "success", title: opts.title || "Success", message, duration: 4500, toast: true });
+    }
+    VG.toast(message, "success");
+    return Promise.resolve(true);
   };
 
-  function SuccessPopup() {
-    const [, setTick] = useState(0);
-    useEffect(() => {
-      const bump = () => setTick((t) => t + 1);
-      successSubs.add(bump);
-      return () => successSubs.delete(bump);
-    }, []);
-    if (!successState) return null;
-    const s = successState;
-    const done = () => {
-      const r = s.resolve;
-      successState = null;
-      setTick((t) => t + 1);
-      r(true);
-    };
-    return (
-      <div className="fixed inset-0 z-[115] grid place-items-center p-4 bg-black/55 backdrop-blur-[2px]" onMouseDown={(e) => e.target === e.currentTarget && done()}>
-        <div className="glass-dark rounded-2xl shadow-glass p-6 w-[min(92vw,440px)] animate-scale-in text-center border border-white/10" onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
-          <div className="mx-auto mb-4 grid place-items-center w-14 h-14 rounded-full" style={{ background: "rgba(52, 211, 153, 0.15)" }}>
-            <Icon name="check" size={28} style={{ color: "#34d399" }} />
-          </div>
-          <h3 className="text-lg font-semibold font-display">{s.title}</h3>
-          <p className="text-sm opacity-80 mt-3 leading-relaxed px-1">{s.message}</p>
-          <div className="mt-6 flex justify-center">
-            <Button icon="check" onClick={done}>OK</Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  VG.DocSuccessPopup = function () { return null; };
 
-  VG.DocSuccessPopup = SuccessPopup;
-
-  /**
-   * Standard workflow: confirm → run conversion → audit → success popup.
-   * opts.duplicate: { exists, no, label, message } — blocks conversion if already linked.
-   */
   VG.forwardDocument = async function (opts) {
     if (!opts || typeof opts.run !== "function") return null;
     const dup = opts.duplicate;
@@ -175,7 +132,6 @@
     return result;
   };
 
-  /** Status-only forward (no new document) with confirm + success. */
   VG.forwardStatus = async function (opts) {
     if (!opts || typeof opts.run !== "function") return null;
     const ok = await VG.confirmForward({

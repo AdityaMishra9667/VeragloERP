@@ -47,71 +47,114 @@
     const s = confirmState;
     const done = (val) => { const r = s.resolve; confirmState = null; set((v) => v + 1); r(val); };
     return (
-      <div className="fixed inset-0 z-[110] grid place-items-center p-4 bg-black/55 backdrop-blur-[2px]" onMouseDown={() => done(false)}>
-        <div className="glass-dark rounded-2xl shadow-glass p-5 w-[min(92vw,420px)] animate-scale-in border border-white/10" onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
-          <h3 className="text-lg font-semibold font-display">{s.title}</h3>
-          {s.message && <p className="text-sm opacity-75 mt-2 leading-relaxed">{s.message}</p>}
-          <div className="flex justify-end gap-2 mt-5">
-            <Button variant="soft" onClick={() => done(false)}>{s.cancelLabel || "Cancel"}</Button>
-            <button type="button" onClick={() => done(true)} className="inline-flex items-center gap-2 rounded-xl text-sm font-medium px-3.5 py-2 text-white" style={{ background: s.danger ? "#ef4444" : "var(--accent)" }}>{s.confirmLabel}</button>
+      <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[120] w-[min(92vw,420px)] animate-fade-up" role="dialog" aria-live="polite">
+        <div className={"glass-dark rounded-xl shadow-glass border p-4 " + (s.danger ? "border-rose-500/35" : "border-white/10")}>
+          <div className="flex items-start gap-3">
+            <span className="grid place-items-center w-8 h-8 rounded-lg shrink-0" style={{ background: s.danger ? "rgba(239,68,68,.2)" : "var(--accent-soft)" }}>
+              <Icon name={s.danger ? "alert" : "shield"} size={16} style={{ color: s.danger ? "#f87171" : "var(--accent)" }} />
+            </span>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-sm font-semibold font-display">{s.title}</h3>
+              {s.message && <p className="text-xs opacity-75 mt-1 leading-relaxed">{s.message}</p>}
+              <div className="flex justify-end gap-2 mt-3">
+                <Button variant="soft" className="!py-1.5" onClick={() => done(false)}>{s.cancelLabel || "Cancel"}</Button>
+                <button type="button" onClick={() => done(true)} className="inline-flex items-center gap-2 rounded-xl text-xs font-medium px-3 py-1.5 text-white" style={{ background: s.danger ? "#ef4444" : "var(--accent)" }}>{s.confirmLabel}</button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
     );
   }
 
-  /* ============ Modal ============
-     Standard ERP modal: sticky header + footer, scrollable body, optional
-     near-full-screen size, and an unsaved-changes guard. ESC behaviour:
-       • clean form  → ESC closes immediately
-       • dirty form  → 1st ESC arms a warning, 2nd ESC (or "Close without saving") closes
-  */
-  function Modal({ open, onClose, title, subtitle, children, footer, size = "lg", dirty = false }) {
-    const [guard, setGuard] = useState(false);
-    useEffect(() => { if (open) setGuard(false); }, [open]);
-    useEffect(() => {
-      if (!open) return;
-      const h = (e) => {
-        if (e.key !== "Escape") return;
-        e.preventDefault();
-        if (!dirty) { onClose(); return; }
-        setGuard((g) => { if (g) { onClose(); return false; } return true; });
+  /* ============ Success / info banner (non-modal) ============ */
+  let bannerState = null;
+  const bannerSubs = new Set();
+  VG.showBanner = function (opts) {
+    return new Promise((resolve) => {
+      bannerState = {
+        type: opts.type || "success",
+        title: opts.title || "",
+        message: opts.message || "",
+        duration: opts.duration != null ? opts.duration : 5000,
+        resolve,
       };
-      document.addEventListener("keydown", h);
-      return () => document.removeEventListener("keydown", h);
-    }, [open, dirty, onClose]);
-    if (!open) return null;
-    const requestClose = () => { if (dirty) setGuard(true); else onClose(); };
-    const w = { sm: "max-w-md", md: "max-w-2xl", lg: "max-w-4xl", xl: "max-w-6xl", full: "max-w-[1400px]" }[size] || "max-w-4xl";
-    const tall = size === "full";
-    const overlay = (
-      <div className="fixed inset-0 z-[90] flex items-stretch sm:items-center justify-center p-2 sm:p-4 bg-black/55" onMouseDown={requestClose}>
-        <div className={"glass-dark vg-app-shell rounded-2xl shadow-glass w-full flex flex-col max-h-[96vh] " + w + (tall ? " sm:h-[94vh]" : "") + " animate-scale-in relative"} onMouseDown={(e) => e.stopPropagation()}>
-          <div className="flex items-start justify-between gap-4 px-5 py-4 border-b border-white/10 shrink-0 rounded-t-2xl">
-            <div className="min-w-0">
-              <h3 className="text-lg font-semibold font-display truncate">{title}</h3>
-              {subtitle && <p className="text-xs opacity-60 mt-0.5">{subtitle}</p>}
-            </div>
-            <button onClick={requestClose} title="Close (Esc)" className="p-2 rounded-lg chrome-hover shrink-0"><Icon name="x" size={18} /></button>
+      bannerSubs.forEach((f) => { try { f(); } catch (e) {} });
+      if (opts.toast !== false && opts.message) VG.toast(opts.message, opts.type === "error" ? "error" : opts.type === "warn" ? "warn" : "success");
+      if (bannerState.duration > 0) {
+        setTimeout(() => {
+          if (bannerState && bannerState.resolve === resolve) {
+            const r = bannerState.resolve;
+            bannerState = null;
+            bannerSubs.forEach((f) => { try { f(); } catch (e) {} });
+            r(true);
+          }
+        }, bannerState.duration);
+      }
+    });
+  };
+  function BannerHost() {
+    const [, setTick] = useState(0);
+    useEffect(() => {
+      const bump = () => setTick((t) => t + 1);
+      bannerSubs.add(bump);
+      return () => bannerSubs.delete(bump);
+    }, []);
+    if (!bannerState) return null;
+    const s = bannerState;
+    const dismiss = () => {
+      const r = s.resolve;
+      bannerState = null;
+      setTick((t) => t + 1);
+      if (r) r(true);
+    };
+    const colors = { success: "border-emerald-500/35", error: "border-rose-500/35", warn: "border-amber-500/35", info: "border-indigo-500/25" };
+    const iconColor = { success: "#34d399", error: "#f87171", warn: "#f59e0b", info: "#60a5fa" };
+    return (
+      <div className={"fixed top-5 right-5 z-[118] w-[min(92vw,380px)] animate-fade-up glass-dark rounded-xl shadow-glass border p-3 " + (colors[s.type] || colors.info)}>
+        <div className="flex items-start gap-2.5">
+          <Icon name={s.type === "success" ? "check" : s.type === "error" ? "alert" : "info"} size={16} style={{ color: iconColor[s.type] || iconColor.info }} className="shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0 text-sm">
+            {s.title && <div className="font-semibold text-xs">{s.title}</div>}
+            {s.message && <div className={"text-xs opacity-85 " + (s.title ? "mt-0.5" : "")}>{s.message}</div>}
           </div>
-          <div className="px-5 py-4 overflow-y-auto grow">{children}</div>
-          {footer && <div className="flex flex-wrap justify-end gap-2 px-5 py-3.5 border-t border-white/10 shrink-0 rounded-b-2xl bg-black/10">{footer}</div>}
-          {guard && (
-            <div className="absolute inset-0 z-20 grid place-items-center rounded-2xl bg-black/60" onMouseDown={(e) => e.stopPropagation()}>
-              <div className="glass-dark rounded-2xl shadow-glass p-5 w-[min(92%,420px)] animate-scale-in">
-                <div className="flex items-center gap-2 mb-2"><Icon name="alert" size={18} style={{ color: "#f59e0b" }} /><h4 className="font-semibold">Unsaved changes</h4></div>
-                <p className="text-sm opacity-70">You have unsaved changes. Do you want to close without saving? <span className="opacity-50">(Press Esc again to discard.)</span></p>
-                <div className="flex justify-end gap-2 mt-4">
-                  <Button variant="soft" onClick={() => setGuard(false)}>Keep editing</Button>
-                  <button onClick={onClose} className="inline-flex items-center gap-2 rounded-xl text-sm font-medium px-3.5 py-2 text-white" style={{ background: "#ef4444" }}>Close without saving</button>
-                </div>
-              </div>
-            </div>
-          )}
+          <button type="button" onClick={dismiss} className="p-1 rounded-lg opacity-70 hover:opacity-100 shrink-0" title="Dismiss"><Icon name="x" size={14} /></button>
         </div>
       </div>
     );
-    return (ReactDOM && ReactDOM.createPortal) ? ReactDOM.createPortal(overlay, document.body) : overlay;
+  }
+
+  /* ============ Modal (legacy name — inline full-width InternalScreen in main workspace) ============ */
+  function Modal({ open, onClose, title, subtitle, children, footer, dirty = false, breadcrumbs, backLabel }) {
+    if (!open) return null;
+    const Screen = VG.InternalScreen;
+    if (Screen) {
+      return (
+        <Screen
+          onBack={onClose}
+          backLabel={backLabel || "Cancel"}
+          title={title}
+          subtitle={subtitle}
+          footer={footer}
+          dirty={dirty}
+          breadcrumbs={breadcrumbs}
+          className="w-full min-h-0"
+          bodyClassName="w-full"
+        >
+          {children}
+        </Screen>
+      );
+    }
+    return (
+      <div className="vg-internal-screen w-full min-h-0">
+        <div className="flex items-center gap-3 mb-4 border-b border-white/10 pb-3">
+          <Button variant="soft" icon="chevronLeft" onClick={onClose}>{backLabel || "Cancel"}</Button>
+          <div><h2 className="text-lg font-semibold">{title}</h2>{subtitle && <p className="text-xs opacity-60">{subtitle}</p>}</div>
+        </div>
+        <div className="w-full">{children}</div>
+        {footer && <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-white/10">{footer}</div>}
+      </div>
+    );
   }
 
   /* ============ Fields ============ */
@@ -614,7 +657,7 @@
     }
 
     return (
-      <Card className="p-0 overflow-hidden vg-record-table">
+      <Card className="p-0 overflow-hidden vg-record-table w-full max-w-none">
         <div className="flex flex-wrap items-center gap-2 p-3 sm:p-4">
           {title && <div className="font-semibold text-sm mr-auto">{title}</div>}
           {search && (
@@ -835,7 +878,7 @@
   }
 
   VG.fx = {
-    Toaster, Confirmer, Modal, Field, Text, Area, Num, DateF, Select, Checkbox, MasterSelect, QuickCreate,
+    Toaster, Confirmer, BannerHost, Modal, Field, Text, Area, Num, DateF, Select, Checkbox, MasterSelect, QuickCreate,
     RecordTable, exportCSV, printDocument, printTable, StatusTag, PageHead, DocActions, labelOf,
     TransactionLinesShell, itemDropdownLine, itemSearchHaystack,
   };

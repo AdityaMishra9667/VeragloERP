@@ -95,6 +95,9 @@
     if (view) {
       return <ShipmentDetailPage view={view} onBack={() => setView(null)} roleKey={roleKey} can={can} />;
     }
+    if (createSO) {
+      return <ShipmentForm open so={createSO} roleKey={roleKey} onClose={() => setCreateSO(null)} />;
+    }
     return (
       <div>
         <PageHead title="Shipments" desc="Create from ready sales orders · dispatch · confirm delivery" />
@@ -112,7 +115,6 @@
         <RecordTable tableId="dispatch-shipments" title="Shipments" columns={cols} rows={rows} can={can} printTitle="Shipments" searchKeys={["no", "salesOrderNo", "destination"]}
           filters={[{ key: "status", label: "All status", options: ["Pending", "Packing", "In-transit", "Delivered"] }]}
           onView={(r) => setView(r)} empty="No shipments — create from a sales order ready to dispatch" />
-        {createSO && <ShipmentForm open={true} so={createSO} roleKey={roleKey} onClose={() => setCreateSO(null)} />}
       </div>
     );
   }

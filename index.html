@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0b1220" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
-    <meta name="vg-build" content="2026-06-so-wo-sync" />
+    <meta name="vg-build" content="2026-06-full-width-ui+so-wo" />
     <title>Veraglo ERP — Enterprise Workspace</title>
     <link rel="icon" type="image/png" href="assets/veraglo-logo.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -487,11 +487,78 @@
       .loader {
         position: fixed;
         inset: 0;
-        display: grid;
-        place-items: center;
-        color: #93a4c8;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1.5rem;
+        color: #cbd5e1;
         font-family: "Inter", sans-serif;
         letter-spacing: 0.02em;
+        background: radial-gradient(ellipse 120% 80% at 50% 0%, #1e293b 0%, #0b1120 55%, #080d18 100%);
+      }
+      .loader-logo {
+        width: 72px;
+        height: 72px;
+        object-fit: contain;
+        animation: vg-logo-pulse 2s ease-in-out infinite;
+      }
+      @keyframes vg-logo-pulse {
+        0%, 100% { opacity: 0.85; transform: scale(1); }
+        50% { opacity: 1; transform: scale(1.04); }
+      }
+      .loader-dots {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+      }
+      .loader-dots span {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--accent, #6366f1);
+        animation: vg-dot-bounce 1.2s ease-in-out infinite;
+      }
+      .loader-dots span:nth-child(2) { animation-delay: 0.15s; }
+      .loader-dots span:nth-child(3) { animation-delay: 0.3s; }
+      @keyframes vg-dot-bounce {
+        0%, 80%, 100% { transform: translateY(0); opacity: 0.45; }
+        40% { transform: translateY(-8px); opacity: 1; }
+      }
+      .loader-progress {
+        width: min(280px, 70vw);
+        height: 3px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+        overflow: hidden;
+      }
+      .loader-progress::after {
+        content: "";
+        display: block;
+        height: 100%;
+        width: 40%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, transparent, var(--accent, #6366f1), #22d3ee, transparent);
+        animation: vg-progress-slide 1.4s ease-in-out infinite;
+      }
+      @keyframes vg-progress-slide {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(350%); }
+      }
+      .loader-text {
+        text-align: center;
+        font-size: 14px;
+        font-weight: 500;
+        color: #e2e8f0;
+      }
+      .loader-sub {
+        font-size: 12px;
+        opacity: 0.55;
+        margin-top: 0.35rem;
+      }
+      #vg-main-content {
+        position: relative;
       }
       @media (prefers-reduced-motion: reduce) {
         * {
@@ -595,9 +662,18 @@
       .vg-module-banner img {
         object-position: center 35%;
       }
+      .vg-full-width-workspace,
       .vg-internal-workspace {
         max-width: none;
         width: 100%;
+      }
+      .vg-module-dashboard {
+        max-width: none;
+        width: 100%;
+      }
+      .vg-record-table {
+        width: 100%;
+        max-width: none;
       }
       .vg-internal-screen {
         width: 100%;
@@ -703,10 +779,13 @@
   </head>
   <body>
     <div id="root">
-      <div class="loader">
-        <div style="text-align:center">
-          <div style="font-family:var(--vg-font-family,'Inter',sans-serif);font-weight:650;font-size:20px;color:#cdd8f0;letter-spacing:-0.02em">Veraglo ERP</div>
-          <div style="margin-top:8px;font-size:13px;opacity:.7">Preparing your workspace…</div>
+      <div class="loader" id="vg-boot-loader">
+        <img src="assets/veraglo-logo.png" alt="Veraglo ERP" class="loader-logo" />
+        <div class="loader-dots" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div class="loader-progress" aria-hidden="true"></div>
+        <div class="loader-text">
+          Processing your request…
+          <div class="loader-sub" id="vg-loader-sub">Loading your workspace…</div>
         </div>
       </div>
     </div>
@@ -716,7 +795,7 @@
          order for external src, so we fetch + transform + eval each file in order. -->
     <script>
       (async function () {
-        window.VG_BUILD = "2026-06-sidebar-nav";
+        window.VG_BUILD = "2026-06-full-width-ui";
         var files = [
           "src/data.jsx", "src/typography.jsx", "src/ui.jsx", "src/store.jsx", "src/sku-engine.jsx", "src/item-mfr.jsx", "src/item-display.jsx", "src/admin-config.jsx", "src/doc-designer.jsx", "src/forms.jsx", "src/screen-nav.jsx", "src/doc-conversion.jsx", "src/doc-template-designer.jsx", "src/customer.jsx",
           "src/module-dashboard.jsx", "src/modules.jsx", "src/shell-ui.jsx", "src/enquiry.jsx", "src/invoice-export.jsx", "src/sales.jsx", "src/bom.jsx", "src/inventory.jsx", "src/purchase.jsx", "src/quality.jsx",
@@ -746,10 +825,13 @@
               document.documentElement.classList.remove("light");
             }
           }
-          var loaderEl = document.querySelector(".loader");
+          var sub = document.getElementById("vg-loader-sub");
+          if (sub) sub.textContent = "Connected to " + (initInfo.backend === "postgresql" ? "PostgreSQL" : "local storage") + " — opening workspace…";
+          var loaderEl = document.getElementById("vg-boot-loader");
           if (loaderEl) {
-            var sub = loaderEl.querySelector("div > div:last-child");
-            if (sub) sub.textContent = "Connected to " + (initInfo.backend === "postgresql" ? "PostgreSQL" : "local storage") + "…";
+            loaderEl.style.transition = "opacity .35s ease";
+            loaderEl.style.opacity = "0";
+            setTimeout(function () { if (loaderEl.parentNode) loaderEl.parentNode.removeChild(loaderEl); }, 380);
           }
           VG.bootApp();
         } catch (e) {

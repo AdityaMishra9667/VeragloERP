@@ -960,6 +960,9 @@
         <Customer360Page id={view} roleKey={roleKey} can={can} onBack={() => setView(null)} onEdit={(c) => { setView(null); setForm(c); }} />
       );
     }
+    if (form) {
+      return <CustomerForm open record={form.id ? form : null} roleKey={roleKey} can={can} onClose={() => setForm(null)} onSaved={() => {}} />;
+    }
     return (
       <div>
         <PageHead title="Customer Master" desc="Click any customer name for the full Customer 360° dashboard" />
@@ -978,7 +981,6 @@
             ))}</div>
           </Card>
         )}
-        {form && <CustomerForm open record={form.id ? form : null} roleKey={roleKey} can={can} onClose={() => setForm(null)} onSaved={() => {}} />}
       </div>
     );
   }
@@ -993,14 +995,16 @@
       { key: "symbol", label: "Symbol" }, { key: "rate", label: "Rate (→ INR)", render: (r) => r.rate }, { key: "base", label: "Base", render: (r) => r.base ? <Pill color="#34d399">base</Pill> : "" },
     ];
     function save(form) { if (!form.code) return VG.toast("Code required", "error"); if (form.id) store.update("currencies", form.id, form, roleKey); else store.create("currencies", form, roleKey); VG.toast("Saved"); setEdit(null); }
+    const currencyFields = [{ k: "code", l: "Code (INR, USD…)", req: true }, { k: "name", l: "Name", req: true }, { k: "symbol", l: "Symbol" }, { k: "rate", l: "Rate to INR", num: true, req: true }];
+    if (edit) {
+      return <VG.MasterForm title="Currency" open onClose={() => setEdit(null)} record={edit} roleKey={roleKey} can={can} fields={currencyFields} onSave={save} />;
+    }
     return (
       <div>
         <PageHead title="Currency Master" desc="Multi-currency support for customer transactions" />
         <RecordTable title="Currencies" columns={cols} rows={rows} can={can} printTitle="Currency Master" searchKeys={["code", "name"]}
           onNew={() => setEdit({})} newLabel="New Currency" onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete currency?", danger: true, confirmLabel: "Delete" })) { store.remove("currencies", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-        {edit && <VG.MasterForm title="Currency" open onClose={() => setEdit(null)} record={edit} roleKey={roleKey} can={can}
-          fields={[{ k: "code", l: "Code (INR, USD…)", req: true }, { k: "name", l: "Name", req: true }, { k: "symbol", l: "Symbol" }, { k: "rate", l: "Rate to INR", num: true, req: true }]} onSave={save} />}
       </div>
     );
   }
@@ -1013,14 +1017,16 @@
       { key: "district", label: "District" }, { key: "state", label: "State" }, { key: "stateCode", label: "State code" }, { key: "country", label: "Country" },
     ];
     function save(form) { if (!form.pin) return VG.toast("PIN required", "error"); if (form.id) store.update("pincodes", form.id, form, roleKey); else store.create("pincodes", { country: "India", ...form, stateCode: form.stateCode || STATE_CODE[form.state] || "" }, roleKey); VG.toast("Saved"); setEdit(null); }
+    const pinFields = [{ k: "pin", l: "PIN / ZIP", req: true }, { k: "city", l: "City", req: true }, { k: "district", l: "District" }, { k: "state", l: "State", req: true }, { k: "stateCode", l: "State code" }, { k: "country", l: "Country" }];
+    if (edit) {
+      return <VG.MasterForm title="PIN code" open onClose={() => setEdit(null)} record={edit} roleKey={roleKey} can={can} fields={pinFields} onSave={save} />;
+    }
     return (
       <div>
         <PageHead title="PIN Code Master" desc="Auto-populated from lookups; used to auto-fill city/state/code" />
         <RecordTable title="PIN codes" columns={cols} rows={rows} can={can} printTitle="PIN Code Master" searchKeys={["pin", "city", "state"]}
           onNew={() => setEdit({ country: "India" })} newLabel="New PIN" onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete PIN?", danger: true, confirmLabel: "Delete" })) { store.remove("pincodes", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-        {edit && <VG.MasterForm title="PIN code" open onClose={() => setEdit(null)} record={edit} roleKey={roleKey} can={can}
-          fields={[{ k: "pin", l: "PIN / ZIP", req: true }, { k: "city", l: "City", req: true }, { k: "district", l: "District" }, { k: "state", l: "State", req: true }, { k: "stateCode", l: "State code" }, { k: "country", l: "Country" }]} onSave={save} />}
       </div>
     );
   }

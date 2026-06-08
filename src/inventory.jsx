@@ -322,6 +322,9 @@
       { key: "items", label: "Items", render: (r) => store.list("items").filter((i) => i.manufacturerId === r.id).length },
       { key: "active", label: "Status", render: (r) => <Pill color={r.active !== false ? "#34d399" : "#94a3b8"}>{r.active !== false ? "Active" : "Inactive"}</Pill> },
     ];
+    if (edit !== null) {
+      return <ManufacturerForm open onClose={() => setEdit(null)} record={edit} roleKey={roleKey} can={can} onSaved={() => setEdit(null)} />;
+    }
     return (
       <div>
         <PageHead title="Manufacturer Master" desc="Canonical manufacturer list for Item Master and purchase traceability" />
@@ -332,7 +335,6 @@
             if (used) return VG.toast("Manufacturer is linked to items — cannot delete", "error");
             if (await VG.confirm({ title: "Delete " + r.name + "?", danger: true, confirmLabel: "Delete" })) { store.remove("manufacturers", r.id, roleKey); VG.toast("Deleted"); }
           } : null} />
-        {edit !== null && <ManufacturerForm open onClose={() => setEdit(null)} record={edit} roleKey={roleKey} can={can} onSaved={() => setEdit(null)} />}
       </div>
     );
   }
@@ -356,13 +358,15 @@
       { key: "qty", label: "On hand", render: (r) => <span className={r.below ? "text-rose-400 font-medium" : ""}>{r.qty}</span> },
       { key: "bom", label: "BOM", render: (r) => { const b = store.getDefaultBom && store.getDefaultBom(r.id); return b ? <span className="font-mono text-[10px] opacity-80">{b.no}</span> : "—"; } },
     ];
+    if (edit !== null) {
+      return <ItemForm open onClose={() => setEdit(null)} record={edit} roleKey={roleKey} can={can} onSaved={() => setEdit(null)} />;
+    }
     return (
       <div>
         <PageHead title="Item Master" desc="Central catalogue — SKU auto-generated · reference images supported" />
         <RecordTable title="Items" columns={cols} rows={rows} can={can} printTitle="Item Master" searchKeys={["sku", "name", "description", "hsn", "manufacturerName", "manufacturerPartNumber", "brandName"]}
           onNew={() => setEdit({ unit: "Nos", taxId: "gst18", batchTracked: "No" })} newLabel="New Item" onView={(r) => setEdit(r)} onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete " + r.sku + "?", danger: true, confirmLabel: "Delete" })) { store.remove("items", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-        {edit !== null && <ItemForm open onClose={() => setEdit(null)} record={edit} roleKey={roleKey} can={can} onSaved={() => setEdit(null)} />}
       </div>
     );
   }
@@ -403,7 +407,7 @@
       <Modal open={open} onClose={onClose} size="lg" dirty={dirty && !disabled}
         title={isEdit ? "Edit Category · " + (form.code || "") : "New Category"}
         subtitle={isEdit ? form.name : "Category code continues automatically (CAT-8 → CAT-9)"}
-        footer={<><Button variant="soft" onClick={onClose}>Close</Button>{!disabled && <Button icon="check" onClick={save}>{isEdit ? "Save changes" : "Create category"}</Button>}</>}>
+        footer={<><Button variant="soft" onClick={onClose}>Cancel</Button>{!disabled && <Button icon="check" onClick={save}>{isEdit ? "Save changes" : "Create category"}</Button>}</>}>
         <div className="grid sm:grid-cols-2 gap-3">
           <Field label="Category code" hint={isEdit ? "Master category code" : "Auto-assigned from last saved code"}>
             <Text value={form.code || (!isEdit ? store.nextCategoryCode() : "")} onChange={() => {}} disabled />
@@ -434,13 +438,15 @@
       { key: "name", label: "Category" },
       { key: "count", label: "Items" },
     ];
+    if (edit !== null) {
+      return <CategoryForm open onClose={() => setEdit(null)} record={edit} roleKey={roleKey} can={can} onSaved={() => setEdit(null)} />;
+    }
     return (
       <div>
         <PageHead title="Category Master" desc="Category code CAT-n auto · SKU type RWM, FNG, PKG…" />
         <RecordTable title="Categories" columns={cols} rows={rows} can={can} printTitle="Categories" searchKeys={["name", "code", "typeCode"]}
           onNew={() => setEdit({ typeCode: "RWM" })} newLabel="New Category" onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete category?", danger: true, confirmLabel: "Delete" })) { store.remove("categories", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-        {edit !== null && <CategoryForm open onClose={() => setEdit(null)} record={edit} roleKey={roleKey} can={can} onSaved={() => setEdit(null)} />}
       </div>
     );
   }
@@ -451,14 +457,16 @@
     const rows = store.list("suppliers");
     const cols = [{ key: "code", label: "Code", render: (r) => <span className="font-mono text-xs">{r.code}</span> }, { key: "name", label: "Supplier" }, { key: "contact", label: "Contact" }, { key: "gstin", label: "GSTIN", render: (r) => <span className="font-mono text-xs">{r.gstin}</span> }, { key: "category", label: "Grade", render: (r) => <Pill color="#14b8a6">{r.category}</Pill> }, { key: "rating", label: "Rating" }];
     function save(form) { if (!form.name || !form.gstin) return VG.toast("Name & GSTIN required", "error"); if (form.id) store.update("suppliers", form.id, form, roleKey); else store.create("suppliers", { ...form, code: store.nextNo("SUPP").replace(/\//g, "-") }, roleKey); VG.toast("Saved"); setEdit(null); }
+    const supplierFields = [{ k: "name", l: "Company name", req: true }, { k: "contact", l: "Contact person" }, { k: "phone", l: "Phone" }, { k: "email", l: "Email" }, { k: "gstin", l: "GSTIN", req: true }, { k: "category", l: "Grade", select: ["A-grade", "B-grade", "C-grade", "Watch"] }, { k: "rating", l: "Rating", num: true }, { k: "address", l: "Address", area: true, full: true }];
+    if (edit) {
+      return <MasterForm title="Supplier" open onClose={() => setEdit(null)} record={edit} onSave={save} roleKey={roleKey} can={can} fields={supplierFields} />;
+    }
     return (
       <div>
         <PageHead title="Supplier / Vendor Master" desc="Shared across Purchase, Inventory & Material Issue" />
         <RecordTable title="Suppliers" columns={cols} rows={rows} can={can} printTitle="Supplier Master" searchKeys={["name", "code", "gstin"]}
           onNew={() => setEdit({ category: "A-grade", rating: 4 })} newLabel="New Supplier" onView={(r) => setEdit(r)} onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete supplier?", danger: true, confirmLabel: "Delete" })) { store.remove("suppliers", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-        {edit && <MasterForm title="Supplier" open onClose={() => setEdit(null)} record={edit} onSave={save} roleKey={roleKey} can={can}
-          fields={[{ k: "name", l: "Company name", req: true }, { k: "contact", l: "Contact person" }, { k: "phone", l: "Phone" }, { k: "email", l: "Email" }, { k: "gstin", l: "GSTIN", req: true }, { k: "category", l: "Grade", select: ["A-grade", "B-grade", "C-grade", "Watch"] }, { k: "rating", l: "Rating", num: true }, { k: "address", l: "Address", area: true, full: true }]} />}
       </div>
     );
   }
@@ -469,13 +477,16 @@
     const rows = store.list("locations");
     const cols = [{ key: "code", label: "Code", render: (r) => <span className="font-mono text-xs">{r.code}</span> }, { key: "name", label: "Location / Rack / Bin" }];
     function save(form) { if (!form.name) return VG.toast("Name required", "error"); if (form.id) store.update("locations", form.id, form, roleKey); else store.create("locations", form, roleKey); VG.toast("Saved"); setEdit(null); }
+    const locFields = [{ k: "code", l: "Code", req: true }, { k: "name", l: "Name", req: true }];
+    if (edit) {
+      return <MasterForm title="Location" open onClose={() => setEdit(null)} record={edit} onSave={save} fields={locFields} roleKey={roleKey} can={can} />;
+    }
     return (
       <div>
         <PageHead title="Location / Rack / Bin Master" />
         <RecordTable title="Locations" columns={cols} rows={rows} can={can} printTitle="Locations" searchKeys={["name", "code"]}
           onNew={() => setEdit({})} newLabel="New Location" onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete location?", danger: true, confirmLabel: "Delete" })) { store.remove("locations", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-        {edit && <MasterForm title="Location" open onClose={() => setEdit(null)} record={edit} onSave={save} fields={[{ k: "code", l: "Code", req: true }, { k: "name", l: "Name", req: true }]} roleKey={roleKey} can={can} />}
       </div>
     );
   }
@@ -598,6 +609,9 @@
       { key: "qcStatus", label: "QC", render: (r) => <StatusTag value={r.qcStatus} map={{ Pending: "#f59e0b", Passed: "#34d399", Failed: "#ef4444" }} /> },
       { key: "totalValue", label: "Value", render: (r) => inr(r.totalValue), csv: (r) => r.totalValue },
     ];
+    if (build) {
+      return <ReceiptBuilder open onClose={() => setBuild(false)} roleKey={roleKey} can={can} />;
+    }
     return (
       <div>
         <PageHead title="Material Receipt" desc="Goods Receipt Notes — auto stock-in" />
@@ -605,7 +619,6 @@
           filters={[{ key: "qcStatus", label: "All QC", options: ["Pending", "Passed", "Failed"] }]}
           onView={(r) => printDocument(receiptDoc(r), "preview")}
           onNew={() => setBuild(true)} newLabel="New Receipt" empty="No receipts yet" />
-        {build && <ReceiptBuilder open onClose={() => setBuild(false)} roleKey={roleKey} can={can} />}
       </div>
     );
   }
@@ -725,13 +738,15 @@
       { key: "ref", label: "Reference", render: (r) => r.salesOrderId ? (store.get("salesOrders", r.salesOrderId) || {}).no : r.vendorId ? suppName(r.vendorId) : r.productionOrder || "—", csv: (r) => r.salesOrderId || r.vendorId || r.productionOrder || "" },
       { key: "pendingReturn", label: "Return", render: (r) => r.type === "Vendor Returnable Challan" ? (r.pendingReturn ? <Pill color="#f59e0b">Pending</Pill> : <Pill color="#34d399">Returned</Pill>) : "—" },
     ];
+    if (build) {
+      return <IssueBuilder open onClose={() => setBuild(false)} roleKey={roleKey} can={can} initialType={defaultType} />;
+    }
     return (
       <div>
         <PageHead title={defaultType === "Vendor Returnable Challan" ? "Returnable Challan" : defaultType === "Vendor Non-Returnable Challan" ? "Non-Returnable Challan" : "Material Issue"} desc="Invoicing · Production · Vendor challans" />
         <RecordTable title="Issues" columns={cols} rows={rows} can={can} printTitle="Material Issues" searchKeys={["no", "type"]}
           filters={defaultType ? [] : [{ key: "type", label: "All types", options: ISSUE_TYPES }]}
           onNew={() => setBuild(true)} newLabel="New Issue" onView={(r) => issueChallanPDF(r, "preview")} empty="No issues yet" />
-        {build && <IssueBuilder open onClose={() => setBuild(false)} roleKey={roleKey} can={can} initialType={defaultType} />}
       </div>
     );
   }
@@ -771,13 +786,10 @@
         </div>
       ) },
     ];
-    return (
-      <div className="space-y-5">
-        <PageHead title="Material Requirement & FG Handover" desc="Stores queue: issue materials to production and route finished goods to QC" />
-        <RecordTable title="Material requirements" columns={cols} rows={rows} can={can} printTitle="Material Requirements" searchKeys={["no", "workOrderNo"]} empty="No material requirements pending" />
-        <RecordTable title="Finished goods transfer" columns={fgCols} rows={fgRows} can={can} printTitle="Finished Goods Transfer" searchKeys={["no", "workOrderNo"]} empty="No finished goods transfers" />
-        {view && (
-          <InternalScreen onBack={() => setView(null)} backLabel="Back to requirements" title={"Material Availability & Shortage · " + view.no} subtitle={view.workOrderNo}>
+    if (view) {
+      return (
+          <InternalScreen onBack={() => setView(null)} backLabel="Back to requirements" title={"Material Availability & Shortage · " + view.no} subtitle={view.workOrderNo}
+            breadcrumbs={[{ label: "Material requirements", onClick: () => setView(null) }, { label: view.no }]}>
             <div className="text-xs opacity-70 mb-3">WO: {view.workOrderNo} · SO: {view.salesOrderNo || "—"} · BOM: {view.bomNo || "—"} {view.bomRevision || ""}</div>
             <div className="overflow-x-auto rounded-xl glass">
               <table className="w-full text-xs">
@@ -799,7 +811,13 @@
               </table>
             </div>
           </InternalScreen>
-        )}
+      );
+    }
+    return (
+      <div className="space-y-5">
+        <PageHead title="Material Requirement & FG Handover" desc="Stores queue: issue materials to production and route finished goods to QC" />
+        <RecordTable title="Material requirements" columns={cols} rows={rows} can={can} printTitle="Material Requirements" searchKeys={["no", "workOrderNo"]} empty="No material requirements pending" />
+        <RecordTable title="Finished goods transfer" columns={fgCols} rows={fgRows} can={can} printTitle="Finished Goods Transfer" searchKeys={["no", "workOrderNo"]} empty="No finished goods transfers" />
       </div>
     );
   }
@@ -816,13 +834,15 @@
       { key: "to", label: "To", render: (r) => locName(r.toId), csv: (r) => locName(r.toId) },
       { key: "qty", label: "Qty" },
     ];
+    if (build) {
+      return <TxnBuilder open onClose={() => setBuild(false)} roleKey={roleKey} can={can} title="Stock Transfer" seq="TRF" coll="stockTransfers"
+        fields={[{ k: "fromId", l: "From location", master: "locations", req: true }, { k: "toId", l: "To location", master: "locations", req: true }, { k: "qty", l: "Quantity", num: true, req: true }, { k: "reason", l: "Reason" }]}
+        onPost={(f, no) => { const q = Number(f.qty); store.postLedger({ itemId: f.itemId, locationId: f.fromId, type: "transfer-out", qty: -q, ref: no, date: f.date }, roleKey); store.postLedger({ itemId: f.itemId, locationId: f.toId, type: "transfer-in", qty: q, ref: no, date: f.date }, roleKey); }} />;
+    }
     return (
       <div>
         <PageHead title="Stock Transfer" desc="Move stock between locations / racks / bins" />
         <RecordTable title="Transfers" columns={cols} rows={rows} can={can} printTitle="Stock Transfers" searchKeys={["no"]} onNew={() => setBuild(true)} newLabel="New Transfer" empty="No transfers yet" />
-        {build && <TxnBuilder open onClose={() => setBuild(false)} roleKey={roleKey} can={can} title="Stock Transfer" seq="TRF" coll="stockTransfers"
-          fields={[{ k: "fromId", l: "From location", master: "locations", req: true }, { k: "toId", l: "To location", master: "locations", req: true }, { k: "qty", l: "Quantity", num: true, req: true }, { k: "reason", l: "Reason" }]}
-          onPost={(f, no) => { const q = Number(f.qty); store.postLedger({ itemId: f.itemId, locationId: f.fromId, type: "transfer-out", qty: -q, ref: no, date: f.date }, roleKey); store.postLedger({ itemId: f.itemId, locationId: f.toId, type: "transfer-in", qty: q, ref: no, date: f.date }, roleKey); }} />}
       </div>
     );
   }
@@ -838,13 +858,15 @@
       { key: "itemId", label: "Item", render: (r) => itemName(r.itemId), csv: (r) => itemName(r.itemId) },
       { key: "qty", label: "Qty" }, { key: "reason", label: "Reason" },
     ];
+    if (build) {
+      return <TxnBuilder open onClose={() => setBuild(false)} roleKey={roleKey} can={can} title="Return" seq="RET" coll="returns"
+        fields={[{ k: "kind", l: "Return type", select: ["Customer Return", "Vendor Returnable In"], req: true }, { k: "locationId", l: "To location", master: "locations", req: true }, { k: "qty", l: "Quantity", num: true, req: true }, { k: "reason", l: "Reason" }]}
+        onPost={(f, no) => { store.postLedger({ itemId: f.itemId, locationId: f.locationId, type: "return", qty: Number(f.qty), ref: no, date: f.date }, roleKey); }} />;
+    }
     return (
       <div>
         <PageHead title="Return Management" desc="Customer returns & vendor returnable receipts (stock-in)" />
         <RecordTable title="Returns" columns={cols} rows={rows} can={can} printTitle="Returns" searchKeys={["no", "reason"]} onNew={() => setBuild(true)} newLabel="New Return" empty="No returns yet" />
-        {build && <TxnBuilder open onClose={() => setBuild(false)} roleKey={roleKey} can={can} title="Return" seq="RET" coll="returns"
-          fields={[{ k: "kind", l: "Return type", select: ["Customer Return", "Vendor Returnable In"], req: true }, { k: "locationId", l: "To location", master: "locations", req: true }, { k: "qty", l: "Quantity", num: true, req: true }, { k: "reason", l: "Reason" }]}
-          onPost={(f, no) => { store.postLedger({ itemId: f.itemId, locationId: f.locationId, type: "return", qty: Number(f.qty), ref: no, date: f.date }, roleKey); }} />}
       </div>
     );
   }
@@ -858,13 +880,15 @@
       { key: "no", label: "Scrap #", render: (r) => <span className="font-mono text-xs">{r.no}</span> }, { key: "date", label: "Date" },
       { key: "itemId", label: "Item", render: (r) => itemName(r.itemId), csv: (r) => itemName(r.itemId) }, { key: "qty", label: "Qty" }, { key: "reason", label: "Reason" },
     ];
+    if (build) {
+      return <TxnBuilder open onClose={() => setBuild(false)} roleKey={roleKey} can={can} title="Scrap" seq="SCR" coll="scrap"
+        fields={[{ k: "locationId", l: "From location", master: "locations", req: true }, { k: "qty", l: "Quantity", num: true, req: true }, { k: "reason", l: "Reason", req: true }]}
+        onPost={(f, no) => { store.postLedger({ itemId: f.itemId, locationId: f.locationId, type: "scrap", qty: -Number(f.qty), ref: no, date: f.date }, roleKey); }} />;
+    }
     return (
       <div>
         <PageHead title="Scrap / Rejection Entry" desc="Write off rejected / damaged stock" />
         <RecordTable title="Scrap entries" columns={cols} rows={rows} can={can} printTitle="Scrap" searchKeys={["no", "reason"]} onNew={() => setBuild(true)} newLabel="New Scrap" empty="No scrap entries" />
-        {build && <TxnBuilder open onClose={() => setBuild(false)} roleKey={roleKey} can={can} title="Scrap" seq="SCR" coll="scrap"
-          fields={[{ k: "locationId", l: "From location", master: "locations", req: true }, { k: "qty", l: "Quantity", num: true, req: true }, { k: "reason", l: "Reason", req: true }]}
-          onPost={(f, no) => { store.postLedger({ itemId: f.itemId, locationId: f.locationId, type: "scrap", qty: -Number(f.qty), ref: no, date: f.date }, roleKey); }} />}
       </div>
     );
   }

@@ -174,7 +174,11 @@
             <span className="font-display font-semibold text-slate-900">Veraglo ERP</span>
           </div>
           <h2 className="text-2xl font-display font-semibold text-slate-900">Welcome back</h2>
-          <p className="text-sm login-muted mt-1">Sign in to your workspace</p>
+          <p className="text-sm login-muted mt-1">Sign in to continue to your ERP workspace</p>
+          <p className="text-xs login-muted mt-3 leading-relaxed opacity-80">
+            Manage sales, inventory, production, quality, dispatch, accounts and people from one connected platform.
+          </p>
+          <p className="text-[11px] login-muted mt-2 italic opacity-65">Designed for smarter manufacturing operations.</p>
 
           <form onSubmit={submit} className="mt-6 space-y-4">
             <div>
@@ -211,6 +215,10 @@
             )}
             {authHint && <p className="text-[11px] text-center text-amber-700 mt-2">{authHint}</p>}
           </form>
+          <div className="mt-6 pt-4 border-t border-slate-200/80 text-center text-[10px] login-muted space-y-1">
+            <div>Veraglo ERP {VG.buildId || VG_BUILD || "2.0"}</div>
+            <a href="mailto:support@veraglo.com" className="hover:text-indigo-600 transition">support@veraglo.com</a>
+          </div>
         </div>
       </Shell>
     );
@@ -650,7 +658,7 @@
         <div className="flex-1 min-w-0 flex flex-col">
           <Topbar roleKey={roleKey} email={email} mod={mod} onHome={onHome} onToggleMobile={() => setMobileOpen(true)}
             theme={theme} setTheme={setTheme} onLogout={onLogout} onOpenSearch={onOpenSearch} />
-          <main className="flex-1 p-3 sm:p-5 w-full min-w-0 max-w-none">
+          <main id="vg-main-content" className="relative flex-1 p-3 sm:p-5 w-full min-w-0 max-w-none min-h-0">
             {mod ? <VG.ModuleWorkspace key={moduleId} mod={mod} roleKey={roleKey} /> : <div className="opacity-60">Module not found.</div>}
           </main>
         </div>
@@ -914,13 +922,13 @@
     const SearchModal = VG.UniversalSearch;
     const FX = VG.fx;
     return (
-      <>
+      <div id="vg-app-root" className="min-h-screen relative">
         {screen}
         {session && SearchModal && <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} roleKey={session.roleKey} />}
         {FX && <FX.Toaster />}
         {FX && <FX.Confirmer />}
-        {VG.DocSuccessPopup && <VG.DocSuccessPopup />}
-      </>
+        {FX && FX.BannerHost && <FX.BannerHost />}
+      </div>
     );
   }
 

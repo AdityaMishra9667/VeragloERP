@@ -114,20 +114,27 @@
     ];
     if (view) {
       const inv = store.get("invoices", view.id) || view;
+      if (pay) {
+        return <PaymentModal inv={pay} roleKey={roleKey} onClose={() => { setPay(null); setView(store.get("invoices", inv.id)); }} />;
+      }
       return (
-        <>
           <InternalScreen onBack={() => setView(null)} backLabel="Back to receivables" title={"Invoice " + inv.no} subtitle={custName(inv.customerId)}
-            footer={<><DocActions build={() => invDoc(inv)} />{inv.status !== "Paid" && can("edit") && <Button icon="rupee" onClick={() => setPay(inv)}>Record payment</Button>}</>}>
+            footer={<><DocActions build={() => invDoc(inv)} />{inv.status !== "Paid" && can("edit") && <Button icon="rupee" onClick={() => setPay(inv)}>Record payment</Button>}</>}
+            breadcrumbs={[{ label: "Receivables", onClick: () => setView(null) }, { label: inv.no }]}>
             <StatusTag value={inv.status} map={INV_STATUS} />
-            <div className="mt-4 text-sm grid sm:grid-cols-3 gap-3">
+            <div className="mt-4 text-sm grid sm:grid-cols-3 gap-3 w-full">
               <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Amount</div>{inr(inv.amount)}</Card>
               <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Paid</div>{inr(inv.amountPaid || 0)}</Card>
               <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Due</div>{inv.dueDate || "—"}</Card>
             </div>
           </InternalScreen>
-          {pay && <PaymentModal inv={pay} roleKey={roleKey} onClose={() => { setPay(null); setView(store.get("invoices", inv.id)); }} />}
-        </>
       );
+    }
+    if (pay) {
+      return <PaymentModal inv={pay} roleKey={roleKey} onClose={() => setPay(null)} />;
+    }
+    if (printPick && VG.InvoicePrintCopiesModal) {
+      return <VG.InvoicePrintCopiesModal inv={printPick.inv} mode={printPick.mode} onClose={() => setPrintPick(null)} />;
     }
     return (
       <div>
@@ -157,8 +164,6 @@
         )}
         <RecordTable tableId="accounts-receivables" title="Customer invoices" columns={cols} rows={invRows} can={can} printTitle="Invoices" searchKeys={["no", "salesOrderNo"]}
           filters={[{ key: "status", label: "All status", options: ["Posted", "Partially Paid", "Paid"] }]} onView={(r) => setView(r)} />
-        {pay && <PaymentModal inv={pay} roleKey={roleKey} onClose={() => setPay(null)} />}
-        {printPick && VG.InvoicePrintCopiesModal && <VG.InvoicePrintCopiesModal inv={printPick.inv} mode={printPick.mode} onClose={() => setPrintPick(null)} />}
       </div>
     );
   }
