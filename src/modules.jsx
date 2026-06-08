@@ -494,7 +494,6 @@
     const current = visibleSections.find((s) => s.id === section);
     const isDashboard = isDashboardSection(section);
     return (
-      <div className={"animate-fade-up" + (isDashboard ? "" : " vg-internal-workspace")}>
       <div className={"animate-fade-up vg-full-width-workspace" + (isDashboard ? "" : " vg-internal-workspace")}>
         {isDashboard ? (
           <ModuleBanner mod={mod} actions={actions} />
@@ -514,15 +513,15 @@
 
   /* Cross-module deep-linking: VG.goTo("quality","inspections") opens that
      module on that section. Modules call VG.consumeSection(id, fallback). */
-  VG.goTo = function (module, section, opts) {
-    VG._pendingSection = { module, section };
+  VG.goTo = function (modId, section, opts) {
+    VG._pendingSection = { module: modId, section: section };
     if (opts && opts.customerId) {
       VG._pendingCustomerFilter = { customerId: opts.customerId, label: opts.label || "" };
     }
-    if (VG._openModule) VG._openModule(module);
-    if (VG._activeModuleNav && VG._activeModuleNav.modId === module && VG._activeModuleNav.setSection) {
+    if (VG._openModule) VG._openModule(modId);
+    if (VG._activeModuleNav && VG._activeModuleNav.modId === modId && VG._activeModuleNav.setSection) {
       VG._activeModuleNav.setSection(section);
-      VG.publishModuleNav(module, section, VG._activeModuleNav.setSection);
+      VG.publishModuleNav(modId, section, VG._activeModuleNav.setSection);
     }
   };
   VG.consumeSection = function (modId, fallback) {
@@ -572,7 +571,6 @@
     const isAnalytics = /analytic/i.test(tab);
 
     return (
-      <div className={"animate-fade-up" + (isOverview ? "" : " vg-internal-workspace")}>
       <div className={"animate-fade-up vg-full-width-workspace" + (isOverview ? "" : " vg-internal-workspace")}>
         {isOverview ? (
           <ModuleBanner mod={mod} actions={[

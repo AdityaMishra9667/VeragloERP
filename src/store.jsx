@@ -1283,7 +1283,7 @@
     // Live, cross-module task list — drives notifications and module dashboards.
     openTasks() {
       const t = [];
-      const push = (module, section, label, count, tone) => { if (count > 0) t.push({ module, section, label, count, tone }); };
+      const push = (modId, section, label, count, tone) => { if (count > 0) t.push({ module: modId, section, label, count, tone }); };
       const qc = (DB.qcInspections || []);
       push("quality", "inspections", "Material inspections pending", qc.filter((x) => x.status === "Pending").length, "#8b5cf6");
       push("quality", "ncr", "Non-conformance (NCR) open", (DB.ncrs || []).filter((x) => x.status === "Open").length, "#ef4444");
