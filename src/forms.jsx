@@ -125,7 +125,7 @@
   }
 
   /* Full-page workspace UI — Modal is an alias for inline InternalScreen (no portal overlay). */
-  VG._uiLayout = "full-page";
+  VG._uiLayout = "flat-full-page";
 
   /* ============ Modal (legacy name — inline full-width InternalScreen in main workspace) ============ */
   function Modal({ open, onClose, title, subtitle, children, footer, dirty = false, breadcrumbs, backLabel }) {
@@ -660,8 +660,8 @@
     }
 
     return (
-      <Card className="p-0 overflow-hidden vg-record-table w-full max-w-none">
-        <div className="flex flex-wrap items-center gap-2 p-3 sm:p-4">
+      <div className="vg-record-table w-full max-w-none">
+        <div className="vg-workspace-inset flex flex-wrap items-center gap-2 py-3">
           {title && <div className="font-semibold text-sm mr-auto">{title}</div>}
           {search && (
             <div className="relative">
@@ -745,7 +745,7 @@
             </tbody>
           </table>
         </div>
-        <div className="px-3 sm:px-4 py-2.5 text-[11px] opacity-50 border-t border-white/10 flex flex-wrap items-center gap-2 justify-between">
+        <div className="vg-workspace-inset px-0 py-2.5 text-[11px] opacity-50 border-t border-white/10 flex flex-wrap items-center gap-2 justify-between">
           <span>{data.length} record{data.length !== 1 ? "s" : ""}{data.length !== rows.length ? " (filtered)" : ""}</span>
           {totalPages > 1 && (
             <div className="flex items-center gap-2">
@@ -755,7 +755,7 @@
             </div>
           )}
         </div>
-      </Card>
+      </div>
     );
   }
 
@@ -870,7 +870,7 @@
   }
   function PageHead({ title, desc, children }) {
     return (
-      <div className="vg-page-head flex flex-wrap items-center justify-between gap-2 mb-3">
+      <div className="vg-page-head vg-workspace-inset flex flex-wrap items-center justify-between gap-2 mb-3 pt-2">
         <div className="min-w-0">
           <h2 className="text-base sm:text-lg font-semibold font-display leading-tight">{title}</h2>
           {desc && <p className="text-xs opacity-55 mt-0.5 leading-snug">{desc}</p>}

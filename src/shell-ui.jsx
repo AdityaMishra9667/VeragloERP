@@ -68,7 +68,7 @@
       : openItems;
 
     return (
-      <nav ref={navRef} className="vg-module-nav sticky top-0 z-30 mb-4 rounded-2xl glass-dark p-2 sm:p-3 border border-white/5" style={tabStyle}>
+      <nav ref={navRef} className="vg-module-nav vg-workspace-inset sticky top-0 z-30 mb-3 rounded-lg vg-panel p-2 sm:p-3" style={tabStyle}>
         <div className="flex flex-wrap items-center gap-2 min-w-0">
           {dash && (
             <button type="button" onClick={() => pick("dashboard")}

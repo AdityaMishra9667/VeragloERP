@@ -13,6 +13,7 @@ import * as passwordReset from "./password-reset.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.join(__dirname, "..");
+const indexHtmlPath = path.join(rootDir, "index.html");
 const PORT = Number(process.env.PORT || 3000);
 
 const app = express();
@@ -347,11 +348,25 @@ app.use(express.static(rootDir, { etag: false, maxAge: 0, setHeaders(res, filePa
 }}));
 
 app.get("*", (_req, res) => {
-  res.sendFile(path.join(rootDir, "index.html"));
+  if (!fs.existsSync(indexHtmlPath)) {
+    res.status(503).type("html").send(
+      "<!doctype html><html><body><h1>Frontend not found</h1>"
+      + "<p>Expected <code>index.html</code> at " + indexHtmlPath + "</p>"
+      + "<p>Run the server from the repository root branch and use <code>cd server && npm start</code>.</p>"
+      + "</body></html>"
+    );
+    return;
+  }
+  res.sendFile(indexHtmlPath);
 });
 
 async function start() {
   try {
+    if (!fs.existsSync(indexHtmlPath)) {
+      console.error("FATAL: index.html not found at " + indexHtmlPath);
+      console.error("  Run from the Veraglo ERP repo root. Expected layout: index.html + src/ + server/");
+      process.exit(1);
+    }
     await db.ensureSchema();
     const existing = await db.getState();
     if (existing && existing._v) {
@@ -365,9 +380,11 @@ async function start() {
   } catch (e) {
     console.error("Server startup failed:", e.message);
     if (db.storageMode() === "postgresql") {
-      console.error("  docker compose up -d");
-      console.error("  cp server/.env.example server/.env");
-      console.error("  Or set USE_FILE_STORAGE=1 for desktop / portable mode");
+      console.error("");
+      console.error("Fix options:");
+      console.error("  1. Start Postgres:  docker compose up -d");
+      console.error("  2. No Docker:       USE_FILE_STORAGE=1 ./start.sh");
+      console.error("  3. Diagnose:        ./scripts/check-localhost.sh");
     }
     process.exit(1);
   }

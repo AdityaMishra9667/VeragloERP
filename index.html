@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0b1220" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
-    <meta name="vg-build" content="2026-06-full-width-ui+so-wo" />
+    <meta name="vg-build" content="2026-06-flat-no-cards-v2" />
     <title>Veraglo ERP — Enterprise Workspace</title>
     <link rel="icon" type="image/png" href="assets/veraglo-logo.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -90,6 +90,7 @@
         --vg-input-placeholder: #94a3b8;
         --vg-table-head: #cbd5e1;
         --vg-border: rgba(255, 255, 255, 0.1);
+        --vg-panel-bg: rgba(15, 23, 42, 0.72);
         --vg-font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         --vg-font-pdf: Inter, "Segoe UI", Arial, sans-serif;
         --vg-fs-base: 14px;
@@ -118,6 +119,7 @@
         --vg-input-placeholder: #94a3b8;
         --vg-table-head: #475569;
         --vg-border: rgba(15, 23, 42, 0.1);
+        --vg-panel-bg: #ffffff;
       }
       body,
       #root,
@@ -560,6 +562,111 @@
       #vg-main-content {
         position: relative;
       }
+      /* Flat workspace — full width, no floating cards or drop shadows */
+      .vg-panel {
+        background: var(--vg-panel-bg);
+        border: 1px solid var(--vg-border);
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+      }
+      #vg-main-content.vg-flat-workspace {
+        padding: 0;
+        background: var(--vg-bg);
+        --vg-panel-bg: var(--vg-bg);
+      }
+      #vg-main-content.vg-flat-workspace .vg-workspace-inset {
+        padding-left: 1rem;
+        padding-right: 1rem;
+      }
+      @media (min-width: 1024px) {
+        #vg-main-content.vg-flat-workspace .vg-workspace-inset {
+          padding-left: 1.25rem;
+          padding-right: 1.25rem;
+        }
+      }
+      #vg-main-content.vg-flat-workspace .vg-full-width-workspace,
+      #vg-main-content.vg-flat-workspace .vg-internal-workspace,
+      #vg-main-content.vg-flat-workspace .vg-module-dashboard,
+      #vg-main-content.vg-flat-workspace .vg-internal-screen,
+      #vg-main-content.vg-flat-workspace .vg-list-page {
+        width: 100%;
+        max-width: none;
+        padding: 0;
+        margin: 0;
+      }
+      #vg-main-content.vg-flat-workspace .shadow-glass,
+      #vg-main-content.vg-flat-workspace .shadow-glow,
+      #vg-main-content.vg-flat-workspace .shadow-md,
+      #vg-main-content.vg-flat-workspace .shadow-lg,
+      #vg-main-content.vg-flat-workspace .shadow,
+      #vg-main-content.vg-flat-workspace .drop-shadow,
+      #vg-main-content.vg-flat-workspace .drop-shadow-md {
+        box-shadow: none !important;
+        filter: none !important;
+      }
+      #vg-main-content.vg-flat-workspace .glass-dark:not(.vg-master-dropdown-panel):not(.vg-dropdown-menu),
+      #vg-main-content.vg-flat-workspace .vg-panel {
+        background: var(--vg-bg);
+        border-color: var(--vg-border);
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+      }
+      #vg-main-content.vg-flat-workspace .vg-record-table {
+        background: transparent !important;
+        border: none !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+      }
+      #vg-main-content.vg-flat-workspace .vg-record-table .vg-record-table-scroll {
+        border-top: 1px solid var(--vg-border);
+        border-bottom: 1px solid var(--vg-border);
+      }
+      #vg-main-content.vg-flat-workspace .vg-record-table .vg-data-table th,
+      #vg-main-content.vg-flat-workspace .vg-record-table .vg-data-table td {
+        padding-left: 1rem;
+        padding-right: 1rem;
+      }
+      @media (min-width: 1024px) {
+        #vg-main-content.vg-flat-workspace .vg-record-table .vg-data-table th,
+        #vg-main-content.vg-flat-workspace .vg-record-table .vg-data-table td {
+          padding-left: 1.25rem;
+          padding-right: 1.25rem;
+        }
+      }
+      #vg-main-content.vg-flat-workspace .accent-ring {
+        box-shadow: none !important;
+      }
+      #vg-main-content.vg-flat-workspace .vg-module-nav {
+        box-shadow: none !important;
+        border-radius: 0.5rem;
+        background: var(--vg-bg);
+        border: 1px solid var(--vg-border);
+      }
+      #vg-main-content.vg-flat-workspace .vg-module-banner {
+        box-shadow: none !important;
+        border-radius: 0.5rem;
+        border: 1px solid var(--vg-border);
+      }
+      #vg-main-content.vg-flat-workspace .vg-tab:hover,
+      #vg-main-content.vg-flat-workspace .vg-tab-group:hover,
+      #vg-main-content.vg-flat-workspace .hover\:-translate-y-0\.5:hover,
+      #vg-main-content.vg-flat-workspace .hover\:-translate-y-1:hover,
+      #vg-main-content.vg-flat-workspace .hover\:-translate-y-1\.5:hover {
+        transform: none !important;
+      }
+      #vg-main-content.vg-flat-workspace .glass {
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        background: var(--vg-input-bg) !important;
+        border: 1px solid var(--vg-input-border) !important;
+      }
+      #vg-main-content.vg-flat-workspace .vg-home-module-card {
+        box-shadow: none !important;
+      }
+      #vg-main-content.vg-flat-workspace .vg-home-module-card:hover {
+        box-shadow: none !important;
+      }
       @media (prefers-reduced-motion: reduce) {
         * {
           animation: none !important;
@@ -797,7 +904,7 @@
          order for external src, so we fetch + transform + eval each file in order. -->
     <script>
       (async function () {
-        window.VG_BUILD = "2026-06-full-width-ui";
+        window.VG_BUILD = "2026-06-flat-no-cards-v2";
         var files = [
           "src/data.jsx", "src/typography.jsx", "src/ui.jsx", "src/store.jsx", "src/sku-engine.jsx", "src/item-mfr.jsx", "src/item-display.jsx", "src/admin-config.jsx", "src/doc-designer.jsx", "src/forms.jsx", "src/screen-nav.jsx", "src/doc-conversion.jsx", "src/doc-template-designer.jsx", "src/customer.jsx",
           "src/module-dashboard.jsx", "src/modules.jsx", "src/shell-ui.jsx", "src/enquiry.jsx", "src/invoice-export.jsx", "src/sales.jsx", "src/bom.jsx", "src/inventory.jsx", "src/purchase.jsx", "src/quality.jsx",

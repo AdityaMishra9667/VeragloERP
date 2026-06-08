@@ -1,58 +1,97 @@
 #!/usr/bin/env bash
-# Veraglo ERP — start PostgreSQL + API (port 3000)
+# Veraglo ERP — start API + React UI (port 3000)
 set -e
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT"
+PORT="${PORT:-3000}"
 
-# macOS: Homebrew / Docker Desktop paths often missing in IDE terminals
 export PATH="/usr/local/bin:/opt/homebrew/bin:$HOME/.docker/bin:/Applications/Docker.app/Contents/Resources/bin:$PATH"
 
-find_cmd() {
-  command -v "$1" 2>/dev/null || true
-}
+find_cmd() { command -v "$1" 2>/dev/null || true; }
 
-DOCKER="$(find_cmd docker)"
-NPM="$(find_cmd npm)"
+echo "Veraglo ERP — starting..."
+echo "  Repo: $ROOT"
 
-if [ -z "$NPM" ]; then
-  echo "ERROR: npm not found in PATH."
-  echo "  Install Node.js LTS: https://nodejs.org/"
-  echo "  Then open a new Terminal and run: cd \"$ROOT\" && ./start.sh"
+if [ ! -f "$ROOT/index.html" ]; then
+  echo "ERROR: index.html not found."
+  echo "  Run this script from the repository root (folder containing index.html and src/)."
   exit 1
 fi
 
-if [ -z "$DOCKER" ] && [ "${SKIP_DOCKER:-}" != "1" ]; then
-  echo "WARNING: docker not found — skipping Postgres container."
-  echo "  Install Docker Desktop, OR use existing Postgres and set DATABASE_URL in server/.env"
-  echo "  To continue without Docker: SKIP_DOCKER=1 ./start.sh"
-  echo ""
-  if [ ! -f server/.env ]; then
-    cp server/.env.example server/.env
-  fi
-  echo "Starting API only (Postgres must already be running on DATABASE_URL)..."
-else
-  if [ -n "$DOCKER" ]; then
-    if [ ! -f server/.env ]; then
-      cp server/.env.example server/.env
-      echo "Created server/.env"
-    fi
-    echo "Starting PostgreSQL..."
-    "$DOCKER" compose up -d
-    echo "Waiting for Postgres..."
+NPM="$(find_cmd npm)"
+if [ -z "$NPM" ]; then
+  echo "ERROR: npm not found in PATH."
+  echo "  Install Node.js LTS: https://nodejs.org/"
+  exit 1
+fi
+
+if [ ! -f server/.env ]; then
+  cp server/.env.example server/.env
+  echo "  Created server/.env"
+fi
+
+DOCKER="$(find_cmd docker)"
+USE_PG=0
+
+if [ "${USE_FILE_STORAGE:-}" = "1" ] || [ "${USE_FILE_STORAGE:-}" = "true" ]; then
+  echo "  Storage: local files (USE_FILE_STORAGE=1)"
+elif [ -n "$DOCKER" ] && [ "${SKIP_DOCKER:-}" != "1" ]; then
+  echo "  Starting PostgreSQL (Docker)..."
+  if ! "$DOCKER" compose up -d 2>/dev/null; then
+    echo "WARNING: Docker compose failed — falling back to local file storage."
+    export USE_FILE_STORAGE=1
+  else
+    USE_PG=1
+    echo "  Waiting for Postgres..."
     for i in $(seq 1 30); do
       if "$DOCKER" compose exec -T postgres pg_isready -U veraglo -d veraglo_erp >/dev/null 2>&1; then
         break
       fi
+      if [ "$i" -eq 30 ]; then
+        echo "WARNING: Postgres not ready — falling back to local file storage."
+        export USE_FILE_STORAGE=1
+        USE_PG=0
+      fi
       sleep 1
     done
   fi
+else
+  echo "  Docker not available — using local file storage (no Postgres required)."
+  export USE_FILE_STORAGE=1
 fi
 
-echo "Installing API dependencies (first run may take a minute)..."
-(cd server && "$NPM" install)
+if [ "${USE_FILE_STORAGE:-}" = "1" ] || [ "${USE_FILE_STORAGE:-}" = "true" ]; then
+  if ! grep -q '^USE_FILE_STORAGE=' server/.env 2>/dev/null; then
+    echo "USE_FILE_STORAGE=1" >> server/.env
+  fi
+  export USE_FILE_STORAGE=1
+fi
+
+if command -v ss >/dev/null 2>&1; then
+  if ss -ltn 2>/dev/null | grep -q ":${PORT} "; then
+    echo ""
+    echo "WARNING: Port ${PORT} is already in use."
+    echo "  Stop the other process, or run: PORT=3001 ./start.sh"
+    echo "  Diagnose: ./scripts/check-localhost.sh"
+    echo ""
+  fi
+fi
+
+echo "  Installing API dependencies..."
+(cd server && "$NPM" install --silent 2>/dev/null || (cd server && "$NPM" install))
 
 echo ""
-echo "Starting API + app on http://localhost:${PORT:-3000}"
-echo "Press Ctrl+C to stop."
+echo "=========================================="
+echo "  Open: http://localhost:${PORT}"
+echo "  Health: http://localhost:${PORT}/api/health"
+echo "  Stop with Ctrl+C"
+if [ "${USE_FILE_STORAGE:-}" = "1" ]; then
+  echo "  Data: ~/VeragloERP/data/ (file mode)"
+elif [ "$USE_PG" = "1" ]; then
+  echo "  Data: PostgreSQL (docker compose)"
+fi
+echo "=========================================="
 echo ""
+
+export PORT
 (cd server && "$NPM" start)

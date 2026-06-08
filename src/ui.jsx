@@ -172,7 +172,7 @@
     return (
       <div
         className={
-          "glass-dark rounded-2xl shadow-glass " + (glow ? "accent-ring " : "") + className
+          "vg-panel rounded-lg " + (glow ? "accent-ring " : "") + className
         }
         {...rest}
       >
@@ -225,7 +225,7 @@
     const base =
       "inline-flex items-center justify-center gap-2 rounded-xl text-sm font-medium px-3.5 py-2 transition-all duration-200 active:scale-[.97] disabled:opacity-40 disabled:cursor-not-allowed";
     const styles = {
-      solid: "text-white shadow-glow hover:brightness-110",
+      solid: "text-white hover:brightness-110",
       soft: "glass hover:bg-white/10",
       ghost: "hover:bg-white/10 opacity-80 hover:opacity-100",
     };
