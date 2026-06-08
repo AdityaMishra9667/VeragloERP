@@ -149,6 +149,19 @@
       const run = store.runPayroll(month, roleKey);
       VG.toast("Payroll " + run.no + " processed · " + (run.employeeCount || 0) + " slips", "success");
     }
+    if (viewSlip) {
+      return (
+        <InternalScreen onBack={() => setViewSlip(null)} backLabel="Back to payroll" title="Salary slip" subtitle={viewSlip.employeeName + " · " + viewSlip.month}
+          footer={<DocActions build={() => slipDoc(viewSlip)} />}
+          breadcrumbs={[{ label: "Payroll", onClick: () => setViewSlip(null) }, { label: viewSlip.employeeName }]}>
+          <div className="grid sm:grid-cols-3 gap-3 text-sm w-full">
+            <Card className="p-3">Gross {inr(viewSlip.gross)}</Card>
+            <Card className="p-3">Leave ded. {inr(viewSlip.leaveDeduction)}</Card>
+            <Card className="p-3 font-semibold">Net {inr(viewSlip.net)}</Card>
+          </div>
+        </InternalScreen>
+      );
+    }
     return (
       <div className="space-y-4">
         <PageHead title="Payroll" desc="Process monthly payroll after attendance is locked" />
@@ -173,16 +186,6 @@
           { key: "deductions", label: "Deductions", render: (r) => inr(r.deductions) },
           { key: "net", label: "Net", render: (r) => inr(r.net) },
         ]} rows={slips} can={can} printTitle="Salary slips" onView={(r) => setViewSlip(r)} />
-        {viewSlip && (
-          <Modal open onClose={() => setViewSlip(null)} title="Salary slip" subtitle={viewSlip.employeeName + " · " + viewSlip.month}
-            footer={<DocActions build={() => slipDoc(viewSlip)} />}>
-            <div className="grid sm:grid-cols-3 gap-3 text-sm">
-              <Card className="p-3">Gross {inr(viewSlip.gross)}</Card>
-              <Card className="p-3">Leave ded. {inr(viewSlip.leaveDeduction)}</Card>
-              <Card className="p-3 font-semibold">Net {inr(viewSlip.net)}</Card>
-            </div>
-          </Modal>
-        )}
       </div>
     );
   }

@@ -84,7 +84,6 @@
     const [hi, setHi] = useState(0);
     const inputRef = useRef(null);
     const InternalScreen = VG.InternalScreen;
-    const MainFullPage = VG.MainFullPage;
 
     const index = useMemo(() => (open ? VG.buildSearchIndex(roleKey) : []), [open, roleKey]);
     const ql = q.trim().toLowerCase();
@@ -137,7 +136,7 @@
         subtitle="Customers, orders, items, modules and more"
         bodyClassName="!overflow-visible"
       >
-        <div className="max-w-3xl mx-auto w-full">
+        <div className="w-full max-w-none">
           <div className="flex items-center gap-2 px-4 py-3 rounded-xl border border-white/10 bg-white/[0.03] mb-4">
             <Icon name="search" size={18} className="opacity-50 shrink-0" />
             <input
@@ -182,12 +181,9 @@
       </InternalScreen>
     );
 
-    if (MainFullPage) {
-      return <MainFullPage open onClose={onClose}>{body}</MainFullPage>;
-    }
     return (
-      <div className="fixed inset-0 z-[100] overflow-y-auto bg-[var(--vg-bg)] p-3 sm:p-5 animate-fade-up">
-        {body}
+      <div className="fixed inset-0 z-[100] overflow-y-auto bg-[var(--vg-bg)] animate-fade-up">
+        <div className="w-full min-h-full p-3 sm:p-5">{body}</div>
       </div>
     );
   }

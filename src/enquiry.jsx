@@ -549,9 +549,21 @@
       { label: "View Timeline", icon: "activity", perm: "view", onClick: () => setHighlightTimeline(true) },
     ];
 
+    if (modal === "offer") {
+      return <OfferSentModal open enquiry={e} roleKey={roleKey} onClose={() => setModal(null)} onDone={refresh} />;
+    }
+    if (modal === "followup") {
+      return <FollowupModal open enquiry={e} roleKey={roleKey} onClose={() => setModal(null)} onDone={refresh} />;
+    }
+    if (modal === "clarification") {
+      return <ClarificationModal open enquiry={e} roleKey={roleKey} onClose={() => setModal(null)} onDone={refresh} />;
+    }
+    if (modal === "doc") {
+      return <DocumentUploadModal open enquiry={e} roleKey={roleKey} onClose={() => setModal(null)} onDone={refresh} />;
+    }
     return (
-      <>
-        <InternalScreen onBack={onClose} backLabel="Back to enquiries" title={e.no} subtitle={e.projectName || e.subject}>
+      <InternalScreen onBack={onClose} backLabel="Back to enquiries" title={e.no} subtitle={e.projectName || e.subject}
+        breadcrumbs={[{ label: "Enquiries", onClick: onClose }, { label: e.no }]}>
           <div className="flex flex-wrap items-center gap-2 mb-4">
             <StatusTag value={e.status} map={ENQ_STATUS_COLORS} />
             {e.priority && e.priority !== "Normal" && <Pill color={e.priority === "Urgent" ? "#ef4444" : "#f59e0b"}>{e.priority}</Pill>}
@@ -620,12 +632,7 @@
               ))}</ul>
             </Card>
           )}
-        </InternalScreen>
-        {modal === "offer" && <OfferSentModal open enquiry={e} roleKey={roleKey} onClose={() => setModal(null)} onDone={refresh} />}
-        {modal === "followup" && <FollowupModal open enquiry={e} roleKey={roleKey} onClose={() => setModal(null)} onDone={refresh} />}
-        {modal === "clarification" && <ClarificationModal open enquiry={e} roleKey={roleKey} onClose={() => setModal(null)} onDone={refresh} />}
-        {modal === "doc" && <DocumentUploadModal open enquiry={e} roleKey={roleKey} onClose={() => setModal(null)} onDone={refresh} />}
-      </>
+      </InternalScreen>
     );
   }
 

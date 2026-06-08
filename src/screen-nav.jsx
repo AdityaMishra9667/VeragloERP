@@ -179,17 +179,14 @@
     );
   }
 
-  /** Renders a full-page layer inside main content (not a floating card). */
+  /** Renders a full-width inline page in the main workspace (no overlay portal). */
   function MainFullPage({ open, onClose, children, className = "" }) {
     if (!open) return null;
-    const layer = (
-      <div className={"vg-main-fullpage absolute inset-0 z-30 overflow-y-auto bg-[var(--vg-bg)] animate-fade-up " + className}>
-        <div className="min-h-full w-full p-3 sm:p-5">{children}</div>
+    return (
+      <div className={"vg-main-fullpage w-full max-w-none animate-fade-up " + className}>
+        <div className="w-full">{children}</div>
       </div>
     );
-    const target = mainOverlayTarget();
-    if (target && ReactDOM && ReactDOM.createPortal) return ReactDOM.createPortal(layer, target);
-    return layer;
   }
 
   VG.getTableState = getTableState;

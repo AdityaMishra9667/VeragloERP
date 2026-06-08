@@ -47,21 +47,19 @@
     const s = confirmState;
     const done = (val) => { const r = s.resolve; confirmState = null; set((v) => v + 1); r(val); };
     return (
-      <div className="fixed top-0 left-0 right-0 z-[120] animate-fade-up" role="dialog" aria-live="polite">
-        <div className={"border-b shadow-lg " + (s.danger ? "bg-rose-950/95 border-rose-500/30" : "bg-slate-900/95 border-indigo-500/25")} style={{ backdropFilter: "blur(10px)" }}>
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex flex-col sm:flex-row sm:items-center gap-4">
-            <div className="flex items-start gap-3 flex-1 min-w-0">
-              <span className="grid place-items-center w-9 h-9 rounded-xl shrink-0" style={{ background: s.danger ? "rgba(239,68,68,.2)" : "var(--accent-soft)" }}>
-                <Icon name={s.danger ? "alert" : "shield"} size={18} style={{ color: s.danger ? "#f87171" : "var(--accent)" }} />
-              </span>
-              <div className="min-w-0">
-                <h3 className="text-sm sm:text-base font-semibold font-display">{s.title}</h3>
-                {s.message && <p className="text-sm opacity-75 mt-1 leading-relaxed">{s.message}</p>}
+      <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[120] w-[min(92vw,420px)] animate-fade-up" role="dialog" aria-live="polite">
+        <div className={"glass-dark rounded-xl shadow-glass border p-4 " + (s.danger ? "border-rose-500/35" : "border-white/10")}>
+          <div className="flex items-start gap-3">
+            <span className="grid place-items-center w-8 h-8 rounded-lg shrink-0" style={{ background: s.danger ? "rgba(239,68,68,.2)" : "var(--accent-soft)" }}>
+              <Icon name={s.danger ? "alert" : "shield"} size={16} style={{ color: s.danger ? "#f87171" : "var(--accent)" }} />
+            </span>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-sm font-semibold font-display">{s.title}</h3>
+              {s.message && <p className="text-xs opacity-75 mt-1 leading-relaxed">{s.message}</p>}
+              <div className="flex justify-end gap-2 mt-3">
+                <Button variant="soft" className="!py-1.5" onClick={() => done(false)}>{s.cancelLabel || "Cancel"}</Button>
+                <button type="button" onClick={() => done(true)} className="inline-flex items-center gap-2 rounded-xl text-xs font-medium px-3 py-1.5 text-white" style={{ background: s.danger ? "#ef4444" : "var(--accent)" }}>{s.confirmLabel}</button>
               </div>
-            </div>
-            <div className="flex justify-end gap-2 shrink-0">
-              <Button variant="soft" onClick={() => done(false)}>{s.cancelLabel || "Cancel"}</Button>
-              <button type="button" onClick={() => done(true)} className="inline-flex items-center gap-2 rounded-xl text-sm font-medium px-3.5 py-2 text-white" style={{ background: s.danger ? "#ef4444" : "var(--accent)" }}>{s.confirmLabel}</button>
             </div>
           </div>
         </div>
@@ -110,56 +108,53 @@
       setTick((t) => t + 1);
       if (r) r(true);
     };
-    const colors = { success: "bg-emerald-950/90 border-emerald-500/30 text-emerald-50", error: "bg-rose-950/90 border-rose-500/30 text-rose-50", warn: "bg-amber-950/90 border-amber-500/30 text-amber-50", info: "bg-slate-900/90 border-indigo-500/25" };
+    const colors = { success: "border-emerald-500/35", error: "border-rose-500/35", warn: "border-amber-500/35", info: "border-indigo-500/25" };
+    const iconColor = { success: "#34d399", error: "#f87171", warn: "#f59e0b", info: "#60a5fa" };
     return (
-      <div className={"fixed top-0 left-0 right-0 z-[118] border-b animate-fade-up " + (colors[s.type] || colors.info)} style={{ backdropFilter: "blur(8px)" }}>
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-3">
-          <Icon name={s.type === "success" ? "check" : s.type === "error" ? "alert" : "info"} size={18} className="shrink-0" />
+      <div className={"fixed top-5 right-5 z-[118] w-[min(92vw,380px)] animate-fade-up glass-dark rounded-xl shadow-glass border p-3 " + (colors[s.type] || colors.info)}>
+        <div className="flex items-start gap-2.5">
+          <Icon name={s.type === "success" ? "check" : s.type === "error" ? "alert" : "info"} size={16} style={{ color: iconColor[s.type] || iconColor.info }} className="shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0 text-sm">
-            {s.title && <div className="font-semibold">{s.title}</div>}
-            {s.message && <div className={s.title ? "opacity-85 mt-0.5" : ""}>{s.message}</div>}
+            {s.title && <div className="font-semibold text-xs">{s.title}</div>}
+            {s.message && <div className={"text-xs opacity-85 " + (s.title ? "mt-0.5" : "")}>{s.message}</div>}
           </div>
-          <button type="button" onClick={dismiss} className="p-1.5 rounded-lg opacity-70 hover:opacity-100 shrink-0" title="Dismiss"><Icon name="x" size={16} /></button>
+          <button type="button" onClick={dismiss} className="p-1 rounded-lg opacity-70 hover:opacity-100 shrink-0" title="Dismiss"><Icon name="x" size={14} /></button>
         </div>
       </div>
     );
   }
 
-  /* ============ Modal (legacy name — renders full-page InternalScreen, never a floating card) ============ */
-  function Modal({ open, onClose, title, subtitle, children, footer, dirty = false, breadcrumbs, backLabel, size }) {
+  /* ============ Modal (legacy name — inline full-width InternalScreen in main workspace) ============ */
+  function Modal({ open, onClose, title, subtitle, children, footer, dirty = false, breadcrumbs, backLabel }) {
     if (!open) return null;
     const Screen = VG.InternalScreen;
-    const body = Screen ? (
-      <Screen
-        onBack={onClose}
-        backLabel={backLabel || "Cancel"}
-        title={title}
-        subtitle={subtitle}
-        footer={footer}
-        dirty={dirty}
-        breadcrumbs={breadcrumbs}
-        className="min-h-[calc(100dvh-4rem)]"
-      >
-        {children}
-      </Screen>
-    ) : (
-      <div className="vg-internal-screen w-full min-h-[60vh]">
+    if (Screen) {
+      return (
+        <Screen
+          onBack={onClose}
+          backLabel={backLabel || "Cancel"}
+          title={title}
+          subtitle={subtitle}
+          footer={footer}
+          dirty={dirty}
+          breadcrumbs={breadcrumbs}
+          className="w-full min-h-0"
+          bodyClassName="w-full"
+        >
+          {children}
+        </Screen>
+      );
+    }
+    return (
+      <div className="vg-internal-screen w-full min-h-0">
         <div className="flex items-center gap-3 mb-4 border-b border-white/10 pb-3">
           <Button variant="soft" icon="chevronLeft" onClick={onClose}>{backLabel || "Cancel"}</Button>
           <div><h2 className="text-lg font-semibold">{title}</h2>{subtitle && <p className="text-xs opacity-60">{subtitle}</p>}</div>
         </div>
-        <div>{children}</div>
+        <div className="w-full">{children}</div>
         {footer && <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-white/10">{footer}</div>}
       </div>
     );
-    const target = VG.mainOverlayTarget ? VG.mainOverlayTarget() : (typeof document !== "undefined" ? document.getElementById("vg-main-content") : null);
-    const layer = (
-      <div className={(target ? "absolute" : "fixed") + " inset-0 z-30 overflow-y-auto bg-[var(--vg-bg)]"}>
-        <div className="w-full h-full p-3 sm:p-5">{body}</div>
-      </div>
-    );
-    if (target && ReactDOM && ReactDOM.createPortal) return ReactDOM.createPortal(layer, target);
-    return layer;
   }
 
   /* ============ Fields ============ */
@@ -662,7 +657,7 @@
     }
 
     return (
-      <Card className="p-0 overflow-hidden vg-record-table">
+      <Card className="p-0 overflow-hidden vg-record-table w-full max-w-none">
         <div className="flex flex-wrap items-center gap-2 p-3 sm:p-4">
           {title && <div className="font-semibold text-sm mr-auto">{title}</div>}
           {search && (

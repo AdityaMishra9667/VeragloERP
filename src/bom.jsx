@@ -281,8 +281,10 @@
       onClose();
     }
 
+    if (showRevModal) {
+      return <BomRevisionModal open onClose={() => setShowRevModal(false)} onSubmit={(meta) => persist(meta)} />;
+    }
     return (
-      <>
         <InternalScreen onBack={onClose} backLabel="Back to BOM list" dirty={dirty}
           title={isEdit ? "BOM " + (f.no || "") + " · " + (f.revision || "Rev-00") : "New Bill of Materials"}
           subtitle={isEdit ? (componentsLocked ? "Components locked — authorized revision required" : "Controlled manufacturing master document") : "Finished goods SKU auto-generated · saved to item master"}
@@ -464,10 +466,6 @@
             )}
           </div>
         </InternalScreen>
-        {showRevModal && (
-          <BomRevisionModal open onClose={() => setShowRevModal(false)} onSubmit={(meta) => persist(meta)} />
-        )}
-      </>
     );
   }
 

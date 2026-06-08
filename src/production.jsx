@@ -93,12 +93,14 @@
         </div>
       ) },
     ];
+    if (complete) {
+      return <CompleteModal wo={complete} onClose={(ok) => { setComplete(null); if (ok) setView(null); }} roleKey={roleKey} />;
+    }
     if (view) {
       const wo = store.get("workOrders", view.id) || view;
       const bom = wo.bomId ? store.get("boms", wo.bomId) : (store.getDefaultBom && store.getDefaultBom(wo.finishedItemId || (store.findItemBySku && store.findItemBySku(wo.sku) || {}).id));
       const reqs = bom && store.explodeBom ? store.explodeBom(bom.id, wo.qtyPlanned || 1) : [];
       return (
-        <>
           <InternalScreen onBack={() => setView(null)} backLabel="Back to work orders" title={"Work Order " + wo.no} subtitle={custName(wo.customerId)}
             footer={<>
               <DocActions build={() => woDoc(wo)} />
@@ -150,8 +152,6 @@
               </div>
             )}
           </InternalScreen>
-          {complete && <CompleteModal wo={complete} onClose={(ok) => { setComplete(null); if (ok) setView(null); }} roleKey={roleKey} />}
-        </>
       );
     }
     return (

@@ -1312,15 +1312,12 @@
     );
   }
 
-  function InvoiceDocActions({ inv }) {
-    const [printModal, setPrintModal] = useState(null);
-    const open = (mode) => setPrintModal({ mode });
+  function InvoiceDocActions({ inv, onPrintPick }) {
     return (
       <>
-        <Button variant="soft" icon="eye" onClick={() => open("preview")}>Preview</Button>
-        <Button variant="soft" icon="printer" onClick={() => open("print")}>Print</Button>
-        <Button variant="soft" icon="download" onClick={() => open("download")}>PDF</Button>
-        {printModal && <InvoicePrintCopiesModal inv={inv} mode={printModal.mode} onClose={() => setPrintModal(null)} />}
+        <Button variant="soft" icon="eye" onClick={() => onPrintPick && onPrintPick({ inv, mode: "preview" })}>Preview</Button>
+        <Button variant="soft" icon="printer" onClick={() => onPrintPick && onPrintPick({ inv, mode: "print" })}>Print</Button>
+        <Button variant="soft" icon="download" onClick={() => onPrintPick && onPrintPick({ inv, mode: "download" })}>PDF</Button>
       </>
     );
   }
@@ -1356,6 +1353,7 @@
   function InvoiceView({ inv, onClose, roleKey, can, onChange, onEdit }) {
     if (!inv) return null;
     const [ewayOpen, setEwayOpen] = useState(false);
+    const [printPick, setPrintPick] = useState(null);
     const st = invoiceDisplayStatus(inv);
     const balance = (Number(inv.amount) || 0) - (Number(inv.amountPaid) || 0);
     function genEinv() {
@@ -1367,11 +1365,16 @@
       VG.toast("E-Invoice IRN generated", "success");
       onChange();
     }
+    if (printPick) {
+      return <InvoicePrintCopiesModal inv={printPick.inv} mode={printPick.mode} onClose={() => setPrintPick(null)} />;
+    }
+    if (ewayOpen) {
+      return <EwayBillModal inv={inv} regenerate={!!(inv.ewayBill && inv.ewayBill.no)} roleKey={roleKey} onClose={() => setEwayOpen(false)} onDone={onChange} />;
+    }
     return (
-      <>
         <InternalScreen onBack={onClose} backLabel="Back to invoices" title={(VG.invoiceTypeLabel ? VG.invoiceTypeLabel(inv) : "Tax Invoice") + " " + inv.no} subtitle={custName(inv.customerId) + (inv.salesOrderNo ? " · SO " + inv.salesOrderNo : "") + (inv.currency && inv.currency !== "INR" ? " · " + inv.currency : "")}
           footer={<>
-            <InvoiceDocActions inv={inv} />
+            <InvoiceDocActions inv={inv} onPrintPick={setPrintPick} />
             {onEdit && <Button variant="soft" icon="edit" onClick={onEdit}>Edit invoice</Button>}
             {can("add") && !(inv.eInvoice && inv.eInvoice.irn) && <Button variant="soft" icon="shield" onClick={genEinv}>Generate E-Invoice</Button>}
             {can("add") && <Button variant="soft" icon="truck" onClick={() => setEwayOpen(true)}>{inv.ewayBill && inv.ewayBill.no ? "Regenerate E-way" : "Generate E-way Bill"}</Button>}
@@ -1437,8 +1440,6 @@
             </div>
           </Card>
         </InternalScreen>
-        {ewayOpen && <EwayBillModal inv={inv} regenerate={!!(inv.ewayBill && inv.ewayBill.no)} roleKey={roleKey} onClose={() => setEwayOpen(false)} onDone={onChange} />}
-      </>
     );
   }
 
@@ -1647,6 +1648,9 @@
           onEdit={can("edit") ? () => { setBuild(store.get("invoices", view.id)); setView(null); } : null} />
       );
     }
+    if (printPick) {
+      return <InvoicePrintCopiesModal inv={printPick.inv} mode={printPick.mode} onClose={() => setPrintPick(null)} />;
+    }
     return (
       <div>
         <PageHead title="Tax Invoices" desc="Domestic & export invoices · multi-currency · LUT/Bond · E-Invoice & E-way" />
@@ -1673,7 +1677,6 @@
           newLabel="New Tax Invoice"
           onEdit={can("edit") ? (r) => setBuild(r) : null}
           empty="No invoices yet — create from a sales order or click New Tax Invoice" />
-        {printPick && <InvoicePrintCopiesModal inv={printPick.inv} mode={printPick.mode} onClose={() => setPrintPick(null)} />}
       </div>
     );
   }
@@ -1791,7 +1794,7 @@
       return (
         <InternalScreen onBack={closePopup} backLabel="Back to tracking" title={"Customer · " + (c.name || c.legalName || "—")} subtitle={o.no}
           breadcrumbs={[{ label: "Order Tracking", onClick: closePopup }, { label: o.no, onClick: () => setPopup({ type: "order", order: o }) }, { label: "Customer" }]}>
-          <div className="space-y-2 text-sm max-w-lg">
+          <div className="space-y-2 text-sm w-full">
             <div><b>Code:</b> {c.code || "—"}</div>
             <div><b>Contact:</b> {c.contact || "—"}</div>
             <div><b>Email:</b> {c.email || "—"}</div>
@@ -1807,7 +1810,7 @@
       return (
         <InternalScreen onBack={closePopup} backLabel="Back to tracking" title={"Order Value · " + o.no} subtitle={custName(o.customerId)}
           breadcrumbs={[{ label: "Order Tracking", onClick: closePopup }, { label: o.no, onClick: () => setPopup({ type: "order", order: o }) }, { label: "Value" }]}>
-          <div className="space-y-2 text-sm max-w-md">
+          <div className="space-y-2 text-sm w-full max-w-xl">
             <div className="flex justify-between"><span>Taxable</span><b>{inr(t.taxable || 0)}</b></div>
             <div className="flex justify-between"><span>Tax</span><b>{inr(t.tax || 0)}</b></div>
             <div className="flex justify-between"><span>Discount</span><b>{inr(t.discount || 0)}</b></div>
