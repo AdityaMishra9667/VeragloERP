@@ -556,7 +556,7 @@
           </span>
           <div className="leading-tight min-w-0">
             <div className="text-sm font-semibold truncate">{mod ? mod.name : "Workspace"}</div>
-            <div className="text-[11px] opacity-55 truncate">Veraglo ERP · {role.label}</div>
+            <div className="text-[11px] opacity-55 truncate">Veraglo ERP · {role.label}{VG.buildId ? <span title="UI build"> · {VG.buildId}</span> : null}</div>
           </div>
         </div>
 
@@ -950,6 +950,10 @@
   }
 
   VG.bootApp = function bootApp() {
+    if (VG._uiLayout !== "full-page") {
+      console.error("[Veraglo] Outdated floating-modal UI detected. Pull latest main and hard-refresh (Ctrl+Shift+R).");
+      if (VG.toast) VG.toast("Outdated UI scripts loaded — git pull origin main, restart server, hard refresh", "warn");
+    }
     const el = document.getElementById("root");
     const root = ReactDOM.createRoot(el);
     root.render(

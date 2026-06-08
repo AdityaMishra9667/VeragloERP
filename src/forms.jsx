@@ -124,6 +124,9 @@
     );
   }
 
+  /* Full-page workspace UI — Modal is an alias for inline InternalScreen (no portal overlay). */
+  VG._uiLayout = "full-page";
+
   /* ============ Modal (legacy name — inline full-width InternalScreen in main workspace) ============ */
   function Modal({ open, onClose, title, subtitle, children, footer, dirty = false, breadcrumbs, backLabel }) {
     if (!open) return null;
