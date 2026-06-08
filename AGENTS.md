@@ -68,6 +68,29 @@ This repo has **no** ESLint, test runner, or frontend bundler. There is nothing 
 - Admin: **Admin → Login Weather** (`settings.weatherLogin`)
 - Weather loads **asynchronously** on the login screen; login is never blocked if the API is down
 
+### Production deploy
+
+Server: `ubuntu@13.203.208.226`, app dir `~/veraglo-payroll`, port **3000**.
+
+**From your machine (needs `.pem` key):**
+```bash
+export DEPLOY_KEY=~/Downloads/your-key.pem
+export DEPLOY_BRANCH=main
+./scripts/deploy-to-server.sh
+```
+
+**GitHub Actions (auto on push to `main`):** add repo secrets at
+`Settings → Secrets and variables → Actions`:
+
+| Secret | Value |
+| --- | --- |
+| `DEPLOY_SSH_KEY` | Full contents of your EC2 `.pem` private key |
+| `DEPLOY_HOST` | `13.203.208.226` (optional — this is the default) |
+| `DEPLOY_USER` | `ubuntu` (optional) |
+| `DEPLOY_DIR` | `~/veraglo-payroll` (optional) |
+
+Then re-run **Actions → Deploy — production server → Run workflow**, or push to `main`.
+
 ### Key paths
 
 - API entry: `server/index.js`
