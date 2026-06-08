@@ -6,7 +6,8 @@
   const { Field, Text, Area, Num, DateF, Select, MasterSelect, Modal, RecordTable, PageHead, StatusTag, printDocument, DocActions } = fx;
   const MasterForm = VG.MasterForm;
 
-  const itemName = (id) => (VG.itemMfr && VG.itemMfr.label(id)) || "—";
+  const itemName = (id) => (VG.itemDisplay && VG.itemDisplay.tableLabel(id)) || (VG.itemMfr && VG.itemMfr.label(id)) || "—";
+  const itemNameSkuPdf = (id) => (VG.itemDisplay && VG.itemDisplay.itemNameSkuCell(id)) || itemName(id);
   const mfrCols = () => (VG.itemMfr && VG.itemMfr.tableColumns()) || [];
   const PartNumberSuggest = (VG.itemMfr && VG.itemMfr.PartNumberSuggest) || function () { return null; };
   const readDatasheet = (VG.itemMfr && VG.itemMfr.readDatasheet) || function (file, done) { done(null, null); };
@@ -109,9 +110,13 @@
     function save() {
       if (disabled) return onClose();
       const e = {};
-      if (!form.name) e.name = "Required";
+      if (!form.name || !String(form.name).trim()) e.name = "Required";
       if (!form.categoryId) e.categoryId = "Required";
       if (form.rate === "" || form.rate == null) e.rate = "Required";
+      if (VG.itemDisplay && form.description) {
+        const dv = VG.itemDisplay.validateDescription(form.description);
+        if (!dv.ok) return VG.toast(dv.message, "error");
+      }
       const mfrId = form.manufacturerId;
       const partNo = String(form.manufacturerPartNumber || "").trim();
       if (mfrId && partNo) {
@@ -171,8 +176,11 @@
                     <p className="text-[11px] opacity-50 mt-1">Type: {typeCodeLabel((store.get("categories", form.categoryId) || {}).typeCode)} → next SKU {store.nextSku(form.categoryId)}</p>
                   )}
                 </Field>
-                <Field label="Item description" required error={err.name} className="sm:col-span-2">
-                  <Text value={form.name} onChange={(v) => set("name", v)} disabled={disabled} placeholder="e.g. LED Driver 36W Constant Current" />
+                <Field label="Item Name" required error={err.name} className="sm:col-span-2">
+                  <Text value={form.name} onChange={(v) => set("name", v)} disabled={disabled} placeholder="e.g. OSRAM Red LED 3W" />
+                </Field>
+                <Field label="Item Description" hint="Detailed technical/commercial description · up to ~5000 words" className="sm:col-span-2">
+                  <Area value={form.description || ""} onChange={(v) => set("description", v)} disabled={disabled} rows={5} placeholder="Make, model, voltage, application, compliance, notes…" />
                 </Field>
                 <Field label="HSN / SAC"><Text value={form.hsn} onChange={(v) => set("hsn", v)} disabled={disabled} placeholder="85044090" /></Field>
                 <Field label="Warranty"><Text value={form.warranty} onChange={(v) => set("warranty", v)} disabled={disabled} placeholder="e.g. 24 months" /></Field>
@@ -338,7 +346,7 @@
     const rows = store.stockSummary();
     const cols = [
       { key: "sku", label: "SKU", render: (r) => <span className="font-mono text-xs">{r.sku}</span> },
-      { key: "name", label: "Item", render: (r) => (
+      { key: "name", label: "Item Name", render: (r) => (
         <span className="flex items-center gap-2 min-w-0">
           {r.image ? <img src={r.image} alt="" className="w-8 h-8 rounded-lg object-cover shrink-0 border border-white/10" /> : <span className="w-8 h-8 rounded-lg glass shrink-0 grid place-items-center opacity-40"><Icon name="box" size={14} /></span>}
           <span className="truncate">{r.name}</span>
@@ -354,7 +362,7 @@
     return (
       <div>
         <PageHead title="Item Master" desc="Central catalogue — SKU auto-generated · reference images supported" />
-        <RecordTable title="Items" columns={cols} rows={rows} can={can} printTitle="Item Master" searchKeys={["sku", "name", "hsn", "manufacturerName", "manufacturerPartNumber", "brandName"]}
+        <RecordTable title="Items" columns={cols} rows={rows} can={can} printTitle="Item Master" searchKeys={["sku", "name", "description", "hsn", "manufacturerName", "manufacturerPartNumber", "brandName"]}
           onNew={() => setEdit({ unit: "Nos", taxId: "gst18", batchTracked: "No" })} newLabel="New Item" onView={(r) => setEdit(r)} onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete " + r.sku + "?", danger: true, confirmLabel: "Delete" })) { store.remove("items", r.id, roleKey); VG.toast("Deleted"); } } : null} />
         {edit !== null && <ItemForm open onClose={() => setEdit(null)} record={edit} roleKey={roleKey} can={can} onSaved={() => setEdit(null)} />}
@@ -574,8 +582,8 @@
         <div class="vg-card"><b>Receipt (GRN)</b>No: ${r.no}<br>Date: ${r.date}<br>PO Ref: ${r.poRef || "—"}<br>Invoice: ${r.invoiceNo || "—"}</div>
         <div class="vg-card"><b>Transport</b>Challan: ${r.challanNo || "—"}<br>Transporter: ${r.transporter || "—"}<br>Vehicle: ${r.vehicleNo || "—"}<br>LR: ${r.lrNo || "—"}</div>
       </div>
-      <table class="vg-tbl"><thead><tr><th>Item</th><th>HSN</th><th class="vg-right">Received</th><th class="vg-right">Accepted</th><th class="vg-right">Rejected</th><th class="vg-right">Rate</th><th class="vg-right">Value</th></tr></thead>
-      <tbody><tr><td>${itemName(r.itemId)}</td><td>${(store.get("items", r.itemId) || {}).hsn || ""}</td><td class="vg-right">${r.qtyReceived || 0} ${r.unit}</td><td class="vg-right">${acc} ${r.unit}</td><td class="vg-right">${r.qtyRejected || 0}</td><td class="vg-right">${inr(r.rate || 0)}</td><td class="vg-right">${inr(r.totalValue || 0)}</td></tr></tbody></table>
+      <table class="vg-tbl"><thead><tr><th>Item Name / SKU</th><th>Item Description</th><th>HSN/SAC</th><th class="vg-right">Received</th><th class="vg-right">Accepted</th><th class="vg-right">Rejected</th><th class="vg-right">Rate</th><th class="vg-right">Value</th></tr></thead>
+      <tbody><tr><td>${itemNameSkuPdf(r.itemId)}</td><td>${(VG.itemDisplay && VG.itemDisplay.nl2br(VG.itemDisplay.itemDescription(r.itemId))) || ""}</td><td>${(store.get("items", r.itemId) || {}).hsn || ""}</td><td class="vg-right">${r.qtyReceived || 0} ${r.unit}</td><td class="vg-right">${acc} ${r.unit}</td><td class="vg-right">${r.qtyRejected || 0}</td><td class="vg-right">${inr(r.rate || 0)}</td><td class="vg-right">${inr(r.totalValue || 0)}</td></tr></tbody></table>
       <div class="vg-totals"><div><span>Location</span><span>${locName(r.locationId)}</span></div><div><span>Batch / Lot</span><span>${r.batch || "—"}</span></div><div><span>QC status</span><span>${r.qcStatus || "—"}</span></div><div class="grand"><span>Total Value</span><span>${inr(r.totalValue || 0)}</span></div></div>
       <div class="vg-terms">${r.remarks ? "<b>Remarks:</b> " + r.remarks : ""}</div>
       <div class="vg-sign"><div>Received by: <b>${r.createdBy || "—"}</b></div><div>Checked by: <b>—</b></div><div>Approved by: <b>—</b></div><div>For ${store.company().name}</div></div>`;
@@ -663,7 +671,7 @@
               }} options={[{ value: "", label: "— Select BOM —" }].concat(
                 store.list("boms").filter((b) => b.status === "Active").map((b) => ({
                   value: b.id,
-                  label: b.no + " · " + itemName(b.finishedItemId).split(" — ")[0],
+                  label: b.no + " · " + ((VG.itemDisplay && VG.itemDisplay.itemName(b.finishedItemId)) || itemName(b.finishedItemId).split(" — ")[0]),
                 }))
               )} />
             </Field>
@@ -702,8 +710,8 @@
         <div class="vg-card"><b>Reference</b>${m.salesOrderId ? "SO: " + (store.get("salesOrders", m.salesOrderId) || {}).no : m.vendorId ? "Vendor: " + suppName(m.vendorId) : m.productionOrder ? "Prod: " + m.productionOrder : "—"}<br>${m.challanNo ? "Challan: " + m.challanNo : ""}${m.invoiceNo ? "<br>Invoice: " + m.invoiceNo : ""}</div>
         ${cust ? `<div class="vg-card"><b>Ship To</b>${cust.name || ""}<br>${ship || ""}</div>` : `<div class="vg-card"><b>Location</b>${locName(m.locationId)}</div>`}
       </div>
-      <table class="vg-tbl"><thead><tr><th>Item</th><th class="vg-right">Qty</th><th>Unit</th><th>Location</th><th>Batch</th></tr></thead>
-      <tbody><tr><td>${itemName(m.itemId)}</td><td class="vg-right">${m.qtyIssued || 0}</td><td>${m.unit}</td><td>${locName(m.locationId)}</td><td>${m.batch || "—"}</td></tr></tbody></table>
+      <table class="vg-tbl"><thead><tr><th>Item Name / SKU</th><th class="vg-right">Qty</th><th>Unit</th><th>Location</th><th>Batch</th></tr></thead>
+      <tbody><tr><td>${itemNameSkuPdf(m.itemId)}</td><td class="vg-right">${m.qtyIssued || 0}</td><td>${m.unit}</td><td>${locName(m.locationId)}</td><td>${m.batch || "—"}</td></tr></tbody></table>
       <div class="vg-terms">${m.purpose ? "<b>Purpose:</b> " + m.purpose + "<br>" : ""}${m.remarks ? "<b>Remarks:</b> " + m.remarks : ""}</div>
       <div class="vg-sign"><div>Issued by: <b>${m.issuedBy || "—"}</b></div><div>Checked by: <b>—</b></div><div>Received by: <b>${m.receivedBy || "—"}</b></div><div>For ${store.company().name}</div></div>`;
     return { title: m.type || "Material Issue", subtitle: m.no + " · " + m.date, inner };

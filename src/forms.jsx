@@ -197,7 +197,8 @@
     items: { label: "Item", auto: { skuFromCategory: true }, fields: [
       { k: "categoryId", l: "Category", master: "categories", req: true },
       { k: "skuPreview", l: "SKU (auto-generated)", readonly: true },
-      { k: "name", l: "Description", req: true },
+      { k: "name", l: "Item Name", req: true },
+      { k: "description", l: "Item Description", type: "area" },
       { k: "unit", l: "Unit", select: "units", req: true }, { k: "hsn", l: "HSN / SAC" }, { k: "rate", l: "Rate (₹)", type: "number", req: true },
       { k: "taxId", l: "GST", select: "taxes", req: true }, { k: "reorder", l: "Reorder level", type: "number" }, { k: "minStock", l: "Min stock", type: "number" },
       { k: "locationId", l: "Default location", master: "locations" }, { k: "warranty", l: "Warranty" } ] },
@@ -206,6 +207,7 @@
   const ReactDOM = window.ReactDOM;
 
   function itemSearchHaystack(rec) {
+    if (VG.itemDisplay && VG.itemDisplay.searchHaystack) return VG.itemDisplay.searchHaystack(rec);
     const im = VG.itemMfr;
     const cat = store.get("categories", rec.categoryId);
     return [
@@ -222,6 +224,7 @@
     return cat ? (cat.code || "") + " " + (cat.name || "") : "";
   }
   function itemDropdownLine(rec) {
+    if (VG.itemDisplay && VG.itemDisplay.dropdownLine) return VG.itemDisplay.dropdownLine(rec);
     const im = VG.itemMfr;
     const mfr = (im && im.manufacturerName(rec)) || "—";
     const part = (im && im.partNumber(rec)) || "—";
@@ -240,6 +243,7 @@
   function labelOf(coll, rec) {
     if (!rec) return "";
     if (coll === "items") {
+      if (VG.itemDisplay && VG.itemDisplay.tableLabel) return VG.itemDisplay.tableLabel(rec);
       if (VG.itemMfr && VG.itemMfr.label) return VG.itemMfr.label(rec);
       return rec.sku + " — " + (rec.name || "");
     }
@@ -314,10 +318,11 @@
   /* ---- MasterSelect: portal dropdown, smart flip, rich item search ---- */
   function ItemOptionRow({ rec, hi, idx, value, onPick, query, onHover }) {
     const im = VG.itemMfr;
+    const id = VG.itemDisplay;
     const mfr = (im && im.manufacturerName(rec)) || "—";
     const part = (im && im.partNumber(rec)) || "—";
     const stock = itemOnHand(rec);
-    const cat = itemCategoryLabel(rec);
+    const cat = (id && id.categoryName(rec)) || itemCategoryLabel(rec).replace(/^CAT-\d+\s*/, "") || "—";
     const q = (query || "").trim().toLowerCase();
     const mark = (text) => {
       if (!q || !text) return text;
@@ -329,13 +334,9 @@
     return (
       <button type="button" data-idx={idx} onClick={() => onPick(rec)} onMouseEnter={() => onHover(idx)}
         className={"w-full text-left rounded-lg px-3 py-2.5 border border-transparent " + (hi ? "vg-master-option-hi" : "chrome-hover") + (rec.id === value ? " ring-1 ring-white/20" : "")}>
-        <div className="font-mono text-xs font-semibold tracking-tight">{mark(rec.sku)}</div>
-        <div className="text-sm mt-0.5 leading-snug">{mark(rec.name)}</div>
-        <div className="text-[11px] opacity-60 mt-1 flex flex-wrap gap-x-2 gap-y-0.5">
-          <span>{mark(mfr)}</span><span>·</span><span className="font-mono">{mark(part)}</span>
-          <span>·</span><span>Stock: <b>{stock}</b> {rec.unit || "Nos"}</span>
-          {cat && <><span>·</span><span>{cat}</span></>}
-        </div>
+        <div className="text-[11px] opacity-70 font-mono leading-snug">{mark([rec.sku, rec.name || "—", cat, mfr, part, "Stock: " + stock + " " + (rec.unit || "Nos")].join(" | "))}</div>
+        <div className="text-sm mt-1 font-medium leading-snug">{mark(rec.name || "—")}</div>
+        <div className="text-[11px] opacity-55 mt-0.5 font-mono">{mark(rec.sku)}</div>
       </button>
     );
   }
@@ -436,8 +437,13 @@
     };
 
     function triggerText() {
-      if (!selected) return placeholder || (collection === "items" ? "Search SKU, description, MFR…" : "Select from master…");
-      if (isLineItem) return <><span className="font-mono text-xs font-semibold shrink-0">{selected.sku}</span><span className="truncate opacity-80 mx-1.5">—</span><span className="truncate">{selected.name}</span></>;
+      if (!selected) return placeholder || (collection === "items" ? "Search SKU, item name, description, category, MFR…" : "Select from master…");
+      if (isLineItem) return (
+        <span className="flex flex-col items-start min-w-0 leading-tight">
+          <span className="truncate font-medium text-sm w-full">{selected.name || "—"}</span>
+          <span className="font-mono text-[10px] opacity-55 truncate w-full">SKU: {selected.sku || "—"}</span>
+        </span>
+      );
       return labelOf(collection, selected);
     }
 
@@ -446,11 +452,11 @@
         <div className="relative mb-1.5 shrink-0">
           <Icon name="search" size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 opacity-50" />
           <input ref={searchRef} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKey}
-            placeholder={collection === "items" ? "SKU · description · MFR · part no…  ↑↓ Enter" : "Search…  ↑↓ Enter"}
+            placeholder={collection === "items" ? "SKU · item name · description · category · MFR · HSN…  ↑↓ Enter" : "Search…  ↑↓ Enter"}
             className="w-full rounded-lg glass pl-8 pr-2 py-2 text-sm bg-transparent outline-none focus:ring-2" style={ring} />
         </div>
         <div ref={listRef} className="overflow-y-auto overflow-x-hidden flex-1 min-h-0 scroll-smooth space-y-0.5">
-          {filtered.length === 0 && <div className="text-xs opacity-50 px-2 py-3 text-center">No matches — try SKU, description, or manufacturer</div>}
+          {filtered.length === 0 && <div className="text-xs opacity-50 px-2 py-3 text-center">No matches — try SKU, item name, description, category, or manufacturer</div>}
           {filtered.map((r, i) => (
             collection === "items" ? (
               <ItemOptionRow key={r.id} rec={r} hi={i === hi} idx={i} value={value} query={q} onPick={choose} onHover={setHi} />

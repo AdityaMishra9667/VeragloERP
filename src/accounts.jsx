@@ -16,11 +16,17 @@
     const fmt = (n) => (VG.fmtInvoiceMoney ? VG.fmtInvoiceMoney(n, cur) : (cur === "INR" ? inr(n) : (cur + " " + Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 }))));
     const pt = (store.get("paymentTerms", fresh.paymentTermsId) || {}).name || "—";
     const dt = (store.get("deliveryTerms", fresh.deliveryTermsId) || {}).name || "—";
+    const computeInvLine = (l) => ({ total: (Number(l.qty) || 0) * (Number(l.rate) || 0) });
     if (VG.buildIndustrialDocument) {
       const tplId = fresh.templateId || (VG.isExportInvoiceType && VG.isExportInvoiceType(fresh.invoiceType) ? "tpl2exp" : "");
       const tpl = VG.resolveDocTemplate ? VG.resolveDocTemplate("Tax Invoice", tplId) : {};
       const usePremium = tpl.themeId === "industrial" || tpl.docVariant === "export_inv" || tpl.docVariant === "quotation-international" || !fresh.templateId || (VG.isExportInvoiceType && VG.isExportInvoiceType(fresh.invoiceType));
       if (usePremium) {
+        const d = VG.itemDisplay;
+        const lines = d ? d.mapIndustrialLines(fresh.lines, (r) => fmt(r), (l) => fmt(computeInvLine(l).total)) : (fresh.lines || []).map((l, i) => {
+          const amt = computeInvLine(l).total;
+          return { no: i + 1, sku: l.sku, name: l.name, desc: l.desc, itemNameSku: `<b>${l.name || l.desc || ""}</b><br><span class="vg-muted" style="font-size:8pt">SKU: ${l.sku || ""}</span>`, hsn: l.hsn, qty: String(l.qty), unit: l.unit || "", rate: fmt(l.rate), tax: (l.taxPct || 0) + "%", amount: fmt(amt) };
+        });
         return VG.buildIndustrialDocument({
           docType: "Tax Invoice",
           document: { ...fresh, customerPoRef: fresh.salesOrderNo, projectRef: fresh.salesOrderNo },
@@ -29,16 +35,14 @@
           paymentTerms: pt,
           deliveryTerms: dt,
           templateId: tplId || fresh.templateId,
-          lines: (fresh.lines || []).map((l, i) => {
-            const amt = (Number(l.qty) || 0) * (Number(l.rate) || 0);
-            return { no: i + 1, sku: l.sku, desc: l.desc, hsn: l.hsn, qty: String(l.qty), unit: l.unit || "", rate: fmt(l.rate), tax: (l.taxPct || 0) + "%", amount: fmt(amt) };
-          }),
+          lines,
         });
       }
     }
     const rows = (fresh.lines || []).map((l, i) => {
-      const amt = (Number(l.qty) || 0) * (Number(l.rate) || 0);
-      return `<tr><td>${i + 1}</td><td>${l.sku || ""}<br>${l.desc || ""}</td><td class="vg-right">${l.qty}</td><td class="vg-right">${inr(l.rate)}</td><td class="vg-right">${inr(amt)}</td></tr>`;
+      const amt = computeInvLine(l).total;
+      const name = l.name || l.desc || "";
+      return `<tr><td>${i + 1}</td><td><b>${name}</b><br><span style="color:#6b7280;font-size:8pt">SKU: ${l.sku || ""}</span></td><td class="vg-right">${l.qty}</td><td class="vg-right">${inr(l.rate)}</td><td class="vg-right">${inr(amt)}</td></tr>`;
     }).join("");
     const einv = fresh.eInvoice || {};
     const eway = fresh.ewayBill || {};

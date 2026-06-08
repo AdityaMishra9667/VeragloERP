@@ -62,7 +62,43 @@
   }
 
   /* ================= Quotation builder ================= */
-  function blankLine() { return { key: Math.random().toString(36).slice(2), itemId: "", sku: "", desc: "", hsn: "", qty: 1, unit: "Nos", rate: 0, discountPct: 0, taxPct: 18 }; }
+  function blankLine() { return { key: Math.random().toString(36).slice(2), itemId: "", sku: "", name: "", desc: "", hsn: "", qty: 1, unit: "Nos", rate: 0, discountPct: 0, taxPct: 18 }; }
+  const idsp = () => VG.itemDisplay;
+  function pickItemLine(itemId, extras) {
+    const it = store.get("items", itemId);
+    if (!it) return { itemId, ...(extras || {}) };
+    const pl = store.list("priceList").find((x) => x.itemId === itemId);
+    const tax = store.get("taxes", it.taxId);
+    const base = { rate: pl ? pl.listRate : it.rate, taxPct: tax ? tax.rate : 18, ...(extras || {}) };
+    const d = idsp();
+    return d ? d.pickLineFields(it, base) : { itemId, sku: it.sku, name: it.name, desc: it.description || it.manufacturerDesc || "", hsn: it.hsn, unit: it.unit, ...base };
+  }
+  function lineDescUi(l) {
+    const d = idsp();
+    return d ? d.lineDescription(l, l.itemId) : (l.desc || "");
+  }
+  function mapIndustrialDocLines(lines, fmt) {
+    const d = idsp();
+    if (d) return d.mapIndustrialLines(lines, fmt ? (r) => fmt(r) : null, fmt ? (l) => fmt(computeLine(l).total) : null);
+    return (lines || []).map((l, i) => {
+      const cc = computeLine(l);
+      return { no: i + 1, sku: l.sku, name: l.name || l.desc, desc: l.desc, itemNameSku: `<b>${l.name || l.desc || ""}</b><br><span class="vg-muted" style="font-size:8pt">SKU: ${l.sku || ""}</span>`, hsn: l.hsn, qty: String(l.qty), unit: l.unit, rate: fmt ? fmt(l.rate) : l.rate, disc: (l.discountPct || 0) + "%", tax: (l.taxPct || 0) + "%", amount: fmt ? fmt(cc.total) : inr(cc.total) };
+    });
+  }
+  const LINE_TABLE_HEAD = (
+    <tr className="text-left border-b border-white/10">
+      <th className="min-w-[340px]">Item Name / SKU</th>
+      <th className="min-w-[220px]">Item Description</th>
+      <th className="w-20">HSN/SAC</th>
+      <th className="w-24">Qty</th>
+      <th className="w-16">Unit</th>
+      <th className="w-28">Rate</th>
+      <th className="w-20">Disc%</th>
+      <th className="w-20">Tax%</th>
+      <th className="w-28 text-right">Amount</th>
+      <th className="w-10" />
+    </tr>
+  );
   function QuotationBuilder({ open, onClose, roleKey, can, initial, onSaved }) {
     const isEdit = !!(initial && initial.id);
     const [q, setQ] = useState(() => init());
@@ -80,11 +116,7 @@
     function patchCustomerFields(patch) { setDirty(true); setQ((p) => ({ ...p, ...patch })); }
     function setLine(key, patch) { setDirty(true); setQ((p) => ({ ...p, lines: p.lines.map((l) => (l.key === key ? { ...l, ...patch } : l)) })); }
     function pickItem(key, itemId) {
-      const it = store.get("items", itemId);
-      if (!it) return setLine(key, { itemId });
-      const pl = store.list("priceList").find((x) => x.itemId === itemId);
-      const tax = store.get("taxes", it.taxId);
-      setLine(key, { itemId, sku: it.sku, desc: it.name, hsn: it.hsn, unit: it.unit, rate: pl ? pl.listRate : it.rate, taxPct: tax ? tax.rate : 18 });
+      setLine(key, pickItemLine(itemId));
     }
     const addLine = () => { setDirty(true); setQ((p) => ({ ...p, lines: p.lines.concat(blankLine()) })); };
     const delLine = (key) => { setDirty(true); setQ((p) => ({ ...p, lines: p.lines.filter((l) => l.key !== key) })); };
@@ -155,20 +187,7 @@
         </div>
 
         <TransactionLinesShell title="Line items" onAddLine={addLine} addLabel="Add line" minWidth={1180}
-          headerRow={
-            <tr className="text-left border-b border-white/10">
-              <th className="min-w-[340px]">Item / SKU</th>
-              <th className="min-w-[220px]">Description</th>
-              <th className="w-20">HSN</th>
-              <th className="w-24">Qty</th>
-              <th className="w-16">Unit</th>
-              <th className="w-28">Rate</th>
-              <th className="w-20">Disc%</th>
-              <th className="w-20">Tax%</th>
-              <th className="w-28 text-right">Amount</th>
-              <th className="w-10" />
-            </tr>
-          }>
+          headerRow={LINE_TABLE_HEAD}>
           {q.lines.map((l) => {
             const c = computeLine(l);
             const pl = store.list("priceList").find((x) => x.itemId === l.itemId);
@@ -180,7 +199,7 @@
                 <td className="min-w-[340px]">
                   <MasterSelect variant="line" collection="items" value={l.itemId} onChange={(id) => pickItem(l.key, id)} actorRole={roleKey} can={can("add")} />
                 </td>
-                <td className="min-w-[220px]"><div className="text-sm leading-snug py-1 pr-2">{l.desc || <span className="opacity-40">—</span>}</div></td>
+                <td className="min-w-[220px]"><div className="text-sm leading-snug py-1 pr-2 whitespace-pre-wrap">{lineDescUi(l) || <span className="opacity-40">—</span>}</div></td>
                 <td className="font-mono text-xs">{l.hsn || "—"}</td>
                 <td><Num data-line-qty value={l.qty} onChange={(v) => setLine(l.key, { qty: v })} /></td>
                 <td className="text-sm opacity-80">{l.unit}</td>
@@ -261,11 +280,7 @@
     }
     function setLine(key, patch) { setDirty(true); setO((p) => ({ ...p, lines: p.lines.map((l) => (l.key === key ? { ...l, ...patch } : l)) })); }
     function pickItem(key, itemId) {
-      const it = store.get("items", itemId);
-      if (!it) return setLine(key, { itemId });
-      const pl = store.list("priceList").find((x) => x.itemId === itemId);
-      const tax = store.get("taxes", it.taxId);
-      setLine(key, { itemId, sku: it.sku, desc: it.name, hsn: it.hsn, unit: it.unit, rate: pl ? pl.listRate : it.rate, taxPct: tax ? tax.rate : 18 });
+      setLine(key, pickItemLine(itemId));
     }
     const addLine = () => { setDirty(true); setO((p) => ({ ...p, lines: p.lines.concat(blankLine()) })); };
     const delLine = (key) => { setDirty(true); setO((p) => ({ ...p, lines: p.lines.filter((l) => l.key !== key) })); };
@@ -362,20 +377,7 @@
         {lockedAfterSend && <div className="text-xs rounded-lg p-2.5 mb-3" style={{ background: "#f59e0b22", color: "#f59e0b" }}>Production-critical fields are locked after send-to-production. Edits create revision history and require approval.</div>}
 
         <TransactionLinesShell title="Line items" onAddLine={addLine} addLabel="Add line" minWidth={1180}
-          headerRow={
-            <tr className="text-left border-b border-white/10">
-              <th className="min-w-[340px]">Item / SKU</th>
-              <th className="min-w-[220px]">Description</th>
-              <th className="w-20">HSN</th>
-              <th className="w-24">Qty</th>
-              <th className="w-16">Unit</th>
-              <th className="w-28">Rate</th>
-              <th className="w-20">Disc%</th>
-              <th className="w-20">Tax%</th>
-              <th className="w-28 text-right">Amount</th>
-              <th className="w-10" />
-            </tr>
-          }>
+          headerRow={LINE_TABLE_HEAD}>
           {o.lines.map((l) => {
             const c = computeLine(l);
             return (
@@ -383,7 +385,7 @@
                 <td className="min-w-[340px]">
                   <MasterSelect variant="line" collection="items" value={l.itemId} onChange={(id) => pickItem(l.key, id)} actorRole={roleKey} can={can("add")} />
                 </td>
-                <td className="min-w-[220px]"><div className="text-sm leading-snug py-1 pr-2">{l.desc || <span className="opacity-40">—</span>}</div></td>
+                <td className="min-w-[220px]"><div className="text-sm leading-snug py-1 pr-2 whitespace-pre-wrap">{lineDescUi(l) || <span className="opacity-40">—</span>}</div></td>
                 <td className="font-mono text-xs">{l.hsn || "—"}</td>
                 <td><Num data-line-qty value={l.qty} onChange={(v) => setLine(l.key, { qty: v })} /></td>
                 <td className="text-sm opacity-80">{l.unit}</td>
@@ -534,29 +536,7 @@
           paymentTerms: pt,
           deliveryTerms: dt,
           templateId: q.templateId,
-          lines: (q.lines || []).map((l, i) => {
-            const cc = computeLine(l);
-            const it = store.get("items", l.itemId);
-            const mfr = VG.itemMfr && it ? VG.itemMfr.manufacturerName(it) : "";
-            const mfrPart = VG.itemMfr && it ? VG.itemMfr.partNumber(it) : "";
-            let spec = "";
-            if (mfr || mfrPart) spec = "<ul><li>Mfr: " + (mfr || "—") + "</li><li>Part: " + (mfrPart || "—") + "</li></ul>";
-            const tech = l.technicalSpec || (it && it.technicalSpec) || "";
-            if (tech) spec += (spec ? "" : "") + String(tech).replace(/\n/g, "<br>");
-            return {
-              no: i + 1,
-              sku: l.sku || "",
-              desc: l.desc || (it && it.name) || "",
-              spec: spec || (l.technicalSpec ? String(l.technicalSpec).replace(/\n/g, "<br>") : ""),
-              hsn: l.hsn || "",
-              qty: String(l.qty),
-              unit: l.unit || "",
-              rate: fmt(l.rate),
-              disc: (l.discountPct || 0) + "%",
-              tax: (l.taxPct || 0) + "%",
-              amount: fmt(cc.total),
-            };
-          }),
+          lines: mapIndustrialDocLines(q.lines, fmt),
         });
       }
     }
@@ -577,24 +557,12 @@
           shipTo: `${c.legalName || c.name || ""}<br>${(q.shipping || "").replace(/\n/g, "<br>")}`,
         },
         columns: [
-          { key: "no", label: "#" }, { key: "desc", label: "Item / SKU" }, { key: "hsn", label: "HSN/SAC" },
-          { key: "qty", label: "Qty", align: "right" }, { key: "rate", label: "Rate", align: "right" },
+          { key: "no", label: "Sr. No." }, { key: "itemNameSku", label: "Item Name / SKU" }, { key: "desc", label: "Item Description" }, { key: "hsn", label: "HSN/SAC" },
+          { key: "qty", label: "Qty", align: "right" }, { key: "unit", label: "Unit" }, { key: "rate", label: "Rate", align: "right" },
           { key: "disc", label: "Disc %", align: "right" }, { key: "tax", label: "Tax %", align: "right" },
           { key: "amount", label: "Amount", align: "right" },
         ],
-        lines: (q.lines || []).map((l, i) => {
-          const cc = computeLine(l);
-          return {
-            no: i + 1,
-            desc: `${l.sku || ""}<br><span class="vg-muted">${l.desc || ""}</span>`,
-            hsn: l.hsn || "",
-            qty: `${l.qty} ${l.unit || ""}`,
-            disc: (l.discountPct || 0) + "%",
-            tax: (l.taxPct || 0) + "%",
-            amount: fmt(cc.total),
-            rate: fmt(l.rate),
-          };
-        }),
+        lines: mapIndustrialDocLines(q.lines, fmt),
         totals: { sub: t.sub, discount: t.discount, taxable: t.taxable, tax: t.tax, charges: t.charges, grand: t.grand },
         taxBreakdown: t.tax ? [{ label: "GST", amount: t.tax }] : [],
         termsBlock: `<b>Payment:</b> ${pt} &nbsp;|&nbsp; <b>Delivery:</b> ${dt} &nbsp;|&nbsp; <b>Warranty:</b> ${q.warranty || "—"}<br>${q.remarks ? "<b>Remarks:</b> " + q.remarks + "<br>" : ""}<b>Terms &amp; Conditions:</b><br>${(q.terms || "").replace(/\n/g, "<br>")}`,
@@ -604,7 +572,9 @@
     }
     const rows = (q.lines || []).map((l, i) => {
       const cc = computeLine(l);
-      return `<tr><td>${i + 1}</td><td>${l.sku}<br><span style="color:#6b7280">${l.desc || ""}</span></td><td>${l.hsn || ""}</td><td class="vg-right">${l.qty} ${l.unit}</td><td class="vg-right">${inr(l.rate)}</td><td class="vg-right">${l.discountPct || 0}%</td><td class="vg-right">${l.taxPct}%</td><td class="vg-right">${inr(cc.total)}</td></tr>`;
+      const name = l.name || l.desc || "";
+      const sku = l.sku || "";
+      return `<tr><td>${i + 1}</td><td><b>${name}</b><br><span style="color:#6b7280;font-size:8pt">SKU: ${sku}</span></td><td>${(lineDescUi(l) || "").replace(/\n/g, "<br>")}</td><td>${l.hsn || ""}</td><td class="vg-right">${l.qty} ${l.unit}</td><td class="vg-right">${inr(l.rate)}</td><td class="vg-right">${l.discountPct || 0}%</td><td class="vg-right">${l.taxPct}%</td><td class="vg-right">${inr(cc.total)}</td></tr>`;
     }).join("");
     const inner = `<div class="vg-cols"><div class="vg-card"><b>Bill To</b>${c.name || ""}<br>${q.billing || ""}</div></div><table class="vg-tbl"><thead><tr><th>#</th><th>Item</th><th class="vg-right">Amount</th></tr></thead><tbody>${rows}</tbody></table><div class="vg-totals"><div class="grand"><span>Grand Total</span><span>${inr(t.grand)}</span></div></div>`;
     return { title: "Quotation", subtitle: q.no + " · Rev " + (q.rev || 0), inner, docType: "Quotation" };
@@ -721,8 +691,8 @@
         </Card>
         <div className="overflow-x-auto rounded-xl glass mb-3">
           <table className="w-full text-xs">
-            <thead className="text-[10px] uppercase opacity-55"><tr className="text-left border-b border-white/10"><th className="px-3 py-2">Item</th><th className="px-3 py-2 text-right">Qty</th><th className="px-3 py-2 text-right">Rate</th><th className="px-3 py-2 text-right">Disc</th><th className="px-3 py-2 text-right">Tax</th><th className="px-3 py-2 text-right">Total</th></tr></thead>
-            <tbody>{(q.lines || []).map((l, i) => { const c = computeLine(l); return <tr key={i} className="border-b border-white/5"><td className="px-3 py-2">{l.sku}<div className="opacity-50">{l.desc}</div></td><td className="px-3 py-2 text-right">{l.qty} {l.unit}</td><td className="px-3 py-2 text-right">{inr(l.rate)}</td><td className="px-3 py-2 text-right">{l.discountPct || 0}%</td><td className="px-3 py-2 text-right">{l.taxPct}%</td><td className="px-3 py-2 text-right font-medium">{inr(c.total)}</td></tr>; })}</tbody>
+            <thead className="text-[10px] uppercase opacity-55"><tr className="text-left border-b border-white/10"><th className="px-3 py-2">Item Name / SKU</th><th className="px-3 py-2">Item Description</th><th className="px-3 py-2 text-right">Qty</th><th className="px-3 py-2 text-right">Rate</th><th className="px-3 py-2 text-right">Disc</th><th className="px-3 py-2 text-right">Tax</th><th className="px-3 py-2 text-right">Total</th></tr></thead>
+            <tbody>{(q.lines || []).map((l, i) => { const c = computeLine(l); return <tr key={i} className="border-b border-white/5"><td className="px-3 py-2"><div className="font-medium">{l.name || l.desc || "—"}</div><div className="font-mono text-[10px] opacity-50">SKU: {l.sku || "—"}</div></td><td className="px-3 py-2 text-sm whitespace-pre-wrap opacity-80">{lineDescUi(l) || "—"}</td><td className="px-3 py-2 text-right">{l.qty} {l.unit}</td><td className="px-3 py-2 text-right">{inr(l.rate)}</td><td className="px-3 py-2 text-right">{l.discountPct || 0}%</td><td className="px-3 py-2 text-right">{l.taxPct}%</td><td className="px-3 py-2 text-right font-medium">{inr(c.total)}</td></tr>; })}</tbody>
           </table>
         </div>
         <div className="flex justify-end"><div className="w-64 text-sm space-y-1">
@@ -997,7 +967,7 @@
     return (
       <div className="overflow-x-auto rounded-xl glass">
         <table className="w-full text-xs"><thead className="text-[10px] uppercase opacity-55"><tr className="text-left border-b border-white/10"><th className="px-3 py-2">Item</th><th className="px-3 py-2 text-right">Qty</th><th className="px-3 py-2 text-right">Rate</th><th className="px-3 py-2 text-right">Total</th></tr></thead>
-          <tbody>{(o.lines || []).map((l, i) => { const c = computeLine(l); return <tr key={i} className="border-b border-white/5"><td className="px-3 py-2">{l.sku}<div className="opacity-50">{l.desc}</div></td><td className="px-3 py-2 text-right">{l.qty} {l.unit}</td><td className="px-3 py-2 text-right">{inr(l.rate)}</td><td className="px-3 py-2 text-right">{inr(c.total)}</td></tr>; })}</tbody>
+          <tbody>{(o.lines || []).map((l, i) => { const c = computeLine(l); return <tr key={i} className="border-b border-white/5"><td className="px-3 py-2"><div className="font-medium">{l.name || l.desc || "—"}</div><div className="font-mono text-[10px] opacity-50">SKU: {l.sku || "—"}</div></td><td className="px-3 py-2 text-right">{l.qty} {l.unit}</td><td className="px-3 py-2 text-right">{inr(l.rate)}</td><td className="px-3 py-2 text-right">{inr(c.total)}</td></tr>; })}</tbody>
         </table>
       </div>
     );
@@ -1021,14 +991,15 @@
           totals: t,
           paymentTerms: pt,
           deliveryTerms: dt,
-          lines: (o.lines || []).map((l, i) => {
-            const cc = computeLine(l);
-            return { no: i + 1, sku: l.sku, desc: l.desc, hsn: l.hsn, qty: String(l.qty), unit: l.unit, rate: fmt(l.rate), disc: (l.discountPct || 0) + "%", tax: (l.taxPct || 0) + "%", amount: fmt(cc.total) };
-          }),
+          lines: mapIndustrialDocLines(o.lines, fmt),
         });
       }
     }
-    const rows = (o.lines || []).map((l, i) => { const c2 = computeLine(l); return `<tr><td>${i + 1}</td><td>${l.sku}<br><span style="color:#6b7280">${l.desc}</span></td><td class="vg-right">${l.qty} ${l.unit}</td><td class="vg-right">${inr(l.rate)}</td><td class="vg-right">${inr(c2.total)}</td></tr>`; }).join("");
+    const rows = (o.lines || []).map((l, i) => {
+      const c2 = computeLine(l);
+      const name = l.name || l.desc || "";
+      return `<tr><td>${i + 1}</td><td><b>${name}</b><br><span style="color:#6b7280;font-size:8pt">SKU: ${l.sku || ""}</span></td><td class="vg-right">${l.qty} ${l.unit}</td><td class="vg-right">${inr(l.rate)}</td><td class="vg-right">${inr(c2.total)}</td></tr>`;
+    }).join("");
     const inner = `<div class="vg-cols"><div class="vg-card"><b>Bill To</b>${custName(o.customerId)}<br>${o.billing || ""}<br>GSTIN ${o.gstin || ""}</div><div class="vg-card"><b>Ship To</b>${custName(o.customerId)}<br>${o.shipping || o.billing || ""}</div><div class="vg-card"><b>Order</b>No: ${o.no}<br>Date: ${o.date}<br>Status: ${o.status}</div></div><table class="vg-tbl"><thead><tr><th>#</th><th>Item</th><th class="vg-right">Qty</th><th class="vg-right">Rate</th><th class="vg-right">Total</th></tr></thead><tbody>${rows}</tbody></table><div class="vg-totals"><div><span>Taxable</span><span>${inr(t.taxable || 0)}</span></div><div><span>GST</span><span>${inr(t.tax || 0)}</span></div><div class="grand"><span>Grand Total</span><span>${inr(t.grand || 0)}</span></div></div><div class="vg-sign"><div>Prepared by: <b>${o.preparedBy || "—"}</b></div><div>Checked by: <b>${o.checkedBy || "—"}</b></div><div>Approved by: <b>${o.approvedBy || "—"}</b></div><div>For ${store.company().name}</div></div>`;
     return { title: "Sales Order", subtitle: o.no + " · " + custName(o.customerId), inner };
   }
@@ -1057,11 +1028,7 @@
     }
     function patchProformaFields(patch) { setDirty(true); setP((x) => ({ ...x, ...patch })); }
     function pickItem(key, itemId) {
-      const it = store.get("items", itemId);
-      if (!it) return setLine(key, { itemId });
-      const pl = store.list("priceList").find((x) => x.itemId === itemId);
-      const tax = store.get("taxes", it.taxId);
-      setLine(key, { itemId, sku: it.sku, desc: it.name, hsn: it.hsn, unit: it.unit, rate: pl ? pl.listRate : it.rate, taxPct: tax ? tax.rate : 18 });
+      setLine(key, pickItemLine(itemId));
     }
     function loadFromSO(id) {
       if (!id) return;
@@ -1120,26 +1087,13 @@
           <Field label="Remarks / notes" className="lg:col-span-1"><Area value={p.remarks} onChange={(v) => set("remarks", v)} rows={2} /></Field>
         </div>
         <TransactionLinesShell title="Line items" onAddLine={addLine} addLabel="Add line" minWidth={1180}
-          headerRow={
-            <tr className="text-left border-b border-white/10">
-              <th className="min-w-[340px]">Item / SKU</th>
-              <th className="min-w-[220px]">Description</th>
-              <th className="w-20">HSN</th>
-              <th className="w-24">Qty</th>
-              <th className="w-16">Unit</th>
-              <th className="w-28">Rate</th>
-              <th className="w-20">Disc%</th>
-              <th className="w-20">Tax%</th>
-              <th className="w-28 text-right">Amount</th>
-              <th className="w-10" />
-            </tr>
-          }>
+          headerRow={LINE_TABLE_HEAD}>
           {p.lines.map((l) => {
             const c = computeLine(l);
             return (
               <tr key={l.key} className="border-b border-white/5 align-top">
                 <td className="min-w-[340px]"><MasterSelect variant="line" collection="items" value={l.itemId} onChange={(id) => pickItem(l.key, id)} actorRole={roleKey} can={can("add")} /></td>
-                <td className="min-w-[220px]"><div className="text-sm leading-snug py-1">{l.desc || <span className="opacity-40">—</span>}</div></td>
+                <td className="min-w-[220px]"><div className="text-sm leading-snug py-1 whitespace-pre-wrap">{lineDescUi(l) || <span className="opacity-40">—</span>}</div></td>
                 <td className="font-mono text-xs">{l.hsn || "—"}</td>
                 <td><Num data-line-qty value={l.qty} onChange={(v) => setLine(l.key, { qty: v })} /></td>
                 <td className="text-sm opacity-80">{l.unit}</td>
@@ -1198,7 +1152,7 @@
     const t = inv.totals || {};
     const rows = (inv.lines || []).map((l, i) => {
       const amt = (Number(l.qty) || 0) * (Number(l.rate) || 0);
-      return `<tr><td>${i + 1}</td><td>${l.sku || ""}<br>${l.desc || ""}</td><td class="vg-right">${l.qty}</td><td class="vg-right">${inr(l.rate)}</td><td class="vg-right">${inr(amt)}</td></tr>`;
+      return `<tr><td>${i + 1}</td><td><b>${l.name || l.desc || ""}</b><br><span style="color:#6b7280;font-size:8pt">SKU: ${l.sku || ""}</span></td><td class="vg-right">${l.qty}</td><td class="vg-right">${inr(l.rate)}</td><td class="vg-right">${inr(amt)}</td></tr>`;
     }).join("");
     return {
       title: "Tax Invoice", subtitle: inv.no,
@@ -1357,7 +1311,7 @@
                 <thead className="opacity-55 border-b border-white/10"><tr className="text-left"><th className="py-1 pr-2">SKU</th><th className="py-1 pr-2">Description</th><th className="py-1 text-right">Qty</th><th className="py-1 text-right">Amount</th></tr></thead>
                 <tbody>{(inv.lines || []).map((l, i) => {
                   const amt = computeLine(l).total;
-                  return <tr key={i} className="border-b border-white/5"><td className="py-1.5 font-mono">{l.sku}</td><td className="py-1.5">{l.desc}</td><td className="py-1.5 text-right">{l.qty} {l.unit}</td><td className="py-1.5 text-right">{inr(amt)}</td></tr>;
+                  return <tr key={i} className="border-b border-white/5"><td className="py-1.5"><div className="font-medium">{l.name || l.desc || "—"}</div><div className="font-mono text-[10px] opacity-50">SKU: {l.sku || "—"}</div></td><td className="py-1.5 text-sm whitespace-pre-wrap opacity-80">{lineDescUi(l) || "—"}</td><td className="py-1.5 text-right">{l.qty} {l.unit}</td><td className="py-1.5 text-right">{inr(amt)}</td></tr>;
                 })}</tbody>
               </table>
             </div>
@@ -1400,10 +1354,9 @@
     function pickItem(key, itemId) {
       const it = store.get("items", itemId);
       if (!it) return setLine(key, { itemId });
-      const pl = store.list("priceList").find((x) => x.itemId === itemId);
       const tax = store.get("taxes", it.taxId);
       const taxPct = VG.gstTreatmentZerosTax && VG.gstTreatmentZerosTax(inv.gstTreatment) ? 0 : (tax ? tax.rate : 18);
-      setLine(key, { itemId, sku: it.sku, desc: it.name, hsn: it.hsn, unit: it.unit, rate: pl ? pl.listRate : it.rate, taxPct });
+      setLine(key, pickItemLine(itemId, { taxPct }));
     }
     function loadFromSO(id) {
       if (!id || !store.buildInvoiceDraftFromSO) return;
@@ -1472,7 +1425,7 @@
             <Field label="Export declaration" className="mt-3"><Area value={inv.exportDeclaration} onChange={(v) => set("exportDeclaration", v)} rows={2} /></Field>
           </Card>
         )}
-        <TransactionLinesShell title="Line items" onAddLine={addLine} addLabel="Add line" minWidth={1180} headerRow={<tr className="text-left border-b border-white/10"><th className="min-w-[340px]">Item / SKU</th><th className="min-w-[220px]">Description</th><th className="w-20">HSN</th><th className="w-24">Qty</th><th className="w-16">Unit</th><th className="w-28">Rate</th><th className="w-20">Disc%</th><th className="w-20">Tax%</th><th className="w-28 text-right">Amount</th><th className="w-10" /></tr>}>
+        <TransactionLinesShell title="Line items" onAddLine={addLine} addLabel="Add line" minWidth={1180} headerRow={LINE_TABLE_HEAD}>
           {inv.lines.map((l) => { const c = computeLine(l); return (
             <tr key={l.key} className="border-b border-white/5 align-top">
               <td className="min-w-[340px]"><MasterSelect variant="line" collection="items" value={l.itemId} onChange={(id) => pickItem(l.key, id)} actorRole={roleKey} can={can("add")} /></td>
@@ -1644,14 +1597,15 @@
           paymentTerms: pt,
           deliveryTerms: dt,
           templateId: p.templateId,
-          lines: (p.lines || []).map((l, i) => {
-            const cc = computeLine(l);
-            return { no: i + 1, sku: l.sku, desc: l.desc, hsn: l.hsn, qty: String(l.qty), unit: l.unit, rate: fmt(l.rate), disc: (l.discountPct || 0) + "%", tax: (l.taxPct || 0) + "%", amount: fmt(cc.total) };
-          }),
+          lines: mapIndustrialDocLines(p.lines, fmt),
         });
       }
     }
-    const rows = (p.lines || []).map((l, i) => { const c2 = computeLine(l); return `<tr><td>${i + 1}</td><td>${l.sku}<br><span style="color:#6b7280">${l.desc}</span></td><td class="vg-right">${l.qty} ${l.unit}</td><td class="vg-right">${inr(l.rate)}</td><td class="vg-right">${l.taxPct}%</td><td class="vg-right">${inr(c2.total)}</td></tr>`; }).join("");
+    const rows = (p.lines || []).map((l, i) => {
+      const c2 = computeLine(l);
+      const name = l.name || l.desc || "";
+      return `<tr><td>${i + 1}</td><td><b>${name}</b><br><span style="color:#6b7280;font-size:8pt">SKU: ${l.sku || ""}</span></td><td class="vg-right">${l.qty} ${l.unit}</td><td class="vg-right">${inr(l.rate)}</td><td class="vg-right">${l.taxPct}%</td><td class="vg-right">${inr(c2.total)}</td></tr>`;
+    }).join("");
     const inner = `<div class="vg-cols"><div class="vg-card"><b>Bill To</b>${custName(p.customerId)}<br>${p.billing || ""}<br>GSTIN ${p.gstin || ""}</div><div class="vg-card"><b>Ship To</b>${custName(p.customerId)}<br>${p.shipping || p.billing || ""}</div><div class="vg-card"><b>Proforma</b>No: ${p.no}<br>Date: ${p.date}</div></div><table class="vg-tbl"><thead><tr><th>#</th><th>Item</th><th class="vg-right">Qty</th><th class="vg-right">Rate</th><th class="vg-right">Tax</th><th class="vg-right">Total</th></tr></thead><tbody>${rows}</tbody></table><div class="vg-totals"><div><span>Taxable</span><span>${inr(t.taxable)}</span></div><div><span>GST</span><span>${inr(t.tax)}</span></div><div class="grand"><span>Grand Total</span><span>${inr(t.grand)}</span></div></div><div class="vg-sign"><div>Prepared by: <b>${p.by || "—"}</b></div><div>Checked by: <b>—</b></div><div>Approved by: <b>—</b></div><div>For ${store.company().name}</div></div>`;
     return { title: "Proforma Invoice", subtitle: p.no + " · " + custName(p.customerId), inner };
   }

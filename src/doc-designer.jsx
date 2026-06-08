@@ -207,16 +207,17 @@
   ];
 
   VG.DOC_TABLE_COLUMNS = [
-    { key: "no", label: "Sr", width: "28px", align: "right", default: true },
-    { key: "sku", label: "SKU", width: "76px", align: "left", default: true },
-    { key: "desc", label: "Description", width: "", align: "left", default: true },
-    { key: "hsn", label: "HSN", width: "52px", align: "right", default: true },
+    { key: "no", label: "Sr. No.", width: "28px", align: "right", default: true },
+    { key: "itemNameSku", label: "Item Name / SKU", width: "120px", align: "left", default: true },
+    { key: "desc", label: "Item Description", width: "", align: "left", default: true },
+    { key: "hsn", label: "HSN/SAC", width: "52px", align: "right", default: true },
     { key: "qty", label: "Qty", width: "44px", align: "right", default: true },
     { key: "unit", label: "Unit", width: "40px", align: "left", default: true },
     { key: "rate", label: "Rate", width: "64px", align: "right", default: true },
-    { key: "disc", label: "Disc", width: "40px", align: "right", default: true },
-    { key: "tax", label: "Tax", width: "40px", align: "right", default: true },
+    { key: "disc", label: "Disc %", width: "40px", align: "right", default: false },
+    { key: "tax", label: "Tax %", width: "40px", align: "right", default: true },
     { key: "amount", label: "Amount", width: "72px", align: "right", default: true },
+    { key: "sku", label: "SKU", width: "76px", align: "left", default: false },
     { key: "image", label: "Image", width: "48px", align: "left", default: false },
   ];
 
@@ -967,6 +968,10 @@
       if (!colVisible(t, key)) return "";
       const align = (VG.DOC_TABLE_COLUMNS.find((x) => x.key === key) || {}).align === "right" ? "vg-right" : "";
       if (key === "no") return `<td class="vg-right">${row.no}</td>`;
+      if (key === "itemNameSku") {
+        const html = row.itemNameSku || (VG.itemDisplay ? VG.itemDisplay.nameSkuHtml(row.name, row.sku) : esc(row.name || row.desc || ""));
+        return `<td>${html}</td>`;
+      }
       if (key === "sku") return `<td><span class="sku">${esc(row.sku || "")}</span></td>`;
       if (key === "image") return row.image ? `<td><img src="${esc(row.image)}" style="max-width:48px;max-height:40px" onerror="this.remove()"/></td>` : "<td></td>";
       if (key === "desc") return `<td>${row.descHtml || nl2br(row.desc || "")}${row.spec ? `<div class="spec">${row.spec}</div>` : ""}${row.tech ? `<div class="spec">${nl2br(row.tech)}</div>` : ""}</td>`;

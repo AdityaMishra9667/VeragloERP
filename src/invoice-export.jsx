@@ -156,7 +156,7 @@
       exchangeRate: src.exchangeRate != null ? src.exchangeRate : (curRow ? curRow.rate : 1),
       exchangeRateDate: src.exchangeRateDate || today(),
       exchangeRateSource: src.exchangeRateSource || "currency_master",
-      lines: lines.length ? lines : [{ key: Math.random().toString(36).slice(2), itemId: "", sku: "", desc: "", hsn: "", qty: 1, unit: "Nos", rate: 0, discountPct: 0, taxPct: invoiceType === "domestic" ? 18 : 0 }],
+      lines: lines.length ? lines : [{ key: Math.random().toString(36).slice(2), itemId: "", sku: "", name: "", desc: "", hsn: "", qty: 1, unit: "Nos", rate: 0, discountPct: 0, taxPct: invoiceType === "domestic" ? 18 : 0 }],
       freight: src.freight || 0,
       packing: src.packing || 0,
       insurance: src.insurance || 0,

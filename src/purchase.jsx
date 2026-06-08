@@ -5,7 +5,8 @@
   const { Icon, Button, Pill, Card } = ui;
   const { Field, Text, Area, Num, DateF, Select, MasterSelect, Modal, RecordTable, PageHead, StatusTag, printDocument, DocActions } = fx;
 
-  const itemName = (id) => (VG.itemMfr && VG.itemMfr.label(id)) || "—";
+  const itemName = (id) => (VG.itemDisplay && VG.itemDisplay.tableLabel(id)) || (VG.itemMfr && VG.itemMfr.label(id)) || "—";
+  const itemNameSkuPdf = (id) => (VG.itemDisplay && VG.itemDisplay.itemNameSkuCell(id)) || itemName(id);
   const suppName = (id) => (store.get("suppliers", id) || {}).name || "—";
 
   const PR_STATUS = { Pending: "#f59e0b", Approved: "#34d399", Ordered: "#6366f1", Rejected: "#ef4444" };
@@ -16,7 +17,9 @@
     const supp = store.get("suppliers", po.supplierId) || {};
     const rows = (po.lines || []).map((l, i) => {
       const amt = (Number(l.qty) || 0) * (Number(l.rate) || 0);
-      return `<tr><td>${i + 1}</td><td>${itemName(l.itemId)}</td><td class="vg-right">${l.qty} ${l.uom || ""}</td><td class="vg-right">${inr(l.rate)}</td><td class="vg-right">${inr(amt)}</td></tr>`;
+      const it = store.get("items", l.itemId) || {};
+      const desc = (VG.itemDisplay && VG.itemDisplay.itemDescription(it)) || "";
+      return `<tr><td>${i + 1}</td><td>${itemNameSkuPdf(l.itemId)}</td><td>${(VG.itemDisplay && VG.itemDisplay.nl2br(desc)) || ""}</td><td>${it.hsn || ""}</td><td class="vg-right">${l.qty} ${l.uom || ""}</td><td class="vg-right">${inr(l.rate)}</td><td class="vg-right">${inr(amt)}</td></tr>`;
     }).join("");
     const inner = `
       <div class="vg-cols">
@@ -24,7 +27,7 @@
         <div class="vg-card"><b>Purchase Order</b>No: ${po.no}<br>Date: ${po.date}<br>Status: ${po.status}${po.prNo ? "<br>Ref PR: " + po.prNo : ""}</div>
         <div class="vg-card"><b>Deliver To</b>${store.company().name}<br>${store.company().address}</div>
       </div>
-      <table class="vg-tbl"><thead><tr><th>#</th><th>Item</th><th class="vg-right">Qty</th><th class="vg-right">Rate</th><th class="vg-right">Amount</th></tr></thead><tbody>${rows}</tbody></table>
+      <table class="vg-tbl"><thead><tr><th>#</th><th>Item Name / SKU</th><th>Item Description</th><th>HSN/SAC</th><th class="vg-right">Qty</th><th class="vg-right">Rate</th><th class="vg-right">Amount</th></tr></thead><tbody>${rows}</tbody></table>
       <div class="vg-totals"><div class="grand"><span>Total</span><span>${inr(po.total || 0)}</span></div></div>
       <div class="vg-terms"><b>Terms:</b> Goods subject to incoming quality inspection. Please quote PO number on all documents.</div>
       <div class="vg-sign"><div>Prepared by: <b>${po.preparedBy || "—"}</b></div><div>Checked by: <b>—</b></div><div>Approved by: <b>${po.approvedBy || "—"}</b></div><div>For ${store.company().name}</div></div>`;

@@ -52,10 +52,12 @@
   function label(itemOrId, opts) {
     const it = getItem(itemOrId);
     if (!it) return "—";
-    const base = it.sku + " — " + it.name;
+    const id = VG.itemDisplay;
+    const base = id ? id.tableLabel(it) : (it.sku + " — " + (it.name || "—"));
     const line = mfrLine(it);
     if (opts && opts.mfrOnly) return line || base;
     if (opts && opts.baseOnly) return base;
+    if (opts && opts.nameOnly) return id ? id.itemName(it) || "—" : (it.name || "—");
     return line ? base + " · " + line : base;
   }
 

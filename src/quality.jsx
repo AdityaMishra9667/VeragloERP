@@ -5,7 +5,8 @@
   const { Icon, Button, Pill, Card } = ui;
   const { Field, Text, Area, Num, Select, Modal, RecordTable, PageHead, StatusTag, printDocument, DocActions } = fx;
 
-  const itemName = (id) => (VG.itemMfr && VG.itemMfr.label(id)) || "—";
+  const itemName = (id) => (VG.itemDisplay && VG.itemDisplay.tableLabel(id)) || (VG.itemMfr && VG.itemMfr.label(id)) || "—";
+  const itemNameSkuPdf = (id) => (VG.itemDisplay && VG.itemDisplay.itemNameSkuCell(id)) || itemName(id);
   const suppName = (id) => (store.get("suppliers", id) || {}).name || "—";
   const locName = (id) => (store.get("locations", id) || {}).name || "—";
 
@@ -18,7 +19,7 @@
     const inner = `
       <div class="vg-cols">
         <div class="vg-card"><b>Inspection</b>No: ${q.no}<br>Date: ${q.date}<br>Source: ${q.source || "Incoming"}<br>Status: ${q.status}</div>
-        <div class="vg-card"><b>Material</b>${itemName(q.itemId)}<br>Batch: ${q.batch || "—"}<br>GRN: ${q.receiptNo || "—"}</div>
+        <div class="vg-card"><b>Material</b>${itemNameSkuPdf(q.itemId)}<br>Batch: ${q.batch || "—"}<br>GRN: ${q.receiptNo || "—"}</div>
         <div class="vg-card"><b>Supplier</b>${suppName(q.supplierId)}</div>
       </div>
       <table class="vg-tbl"><thead><tr><th>Received Qty</th><th>Sample</th><th class="vg-right">Accepted</th><th class="vg-right">Rejected</th><th>Result</th></tr></thead>

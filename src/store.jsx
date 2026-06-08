@@ -5,7 +5,8 @@
 (function (VG) {
   const { useState, useEffect } = React;
   const KEY = "veraglo-erp-db";
-  const VERSION = 11;
+  const VERSION = 12;
+  const ITEM_DESC_MAX = 30000;
   const AUTH_INACTIVE_MSG = "User account does not exist or has been deactivated.";
   const ITEM_MFR_DUP_MSG = "This manufacturer and part number already exist in Item Master. Duplicate item cannot be created.";
 
@@ -175,14 +176,14 @@
       { id: "mfr5", code: "MFR-005", name: "Kingboard", brand: "Kingboard", country: "China", website: "", contact: "", email: "", active: true },
     ];
     const items = [
-      { id: "i1", sku: "DRV-36W", name: "LED Driver 36W Constant Current", categoryId: "cat0", unit: "Nos", hsn: "85044090", rate: 320, taxId: "gst18", reorder: 200, minStock: 120, batchTracked: true, locationId: "loc0", warranty: "24 months", manufacturerId: "mfr2", manufacturerPartNumber: "LCM-36X", manufacturerDesc: "36W constant current LED driver", manufacturerModel: "LCM-36X", brandName: "Mean Well" },
-      { id: "i2", sku: "DRV-50W", name: "LED Driver 50W Dimmable", categoryId: "cat0", unit: "Nos", hsn: "85044090", rate: 540, taxId: "gst18", reorder: 150, minStock: 100, batchTracked: true, locationId: "loc0", warranty: "24 months", manufacturerId: "mfr2", manufacturerPartNumber: "LCM-50X", manufacturerDesc: "50W dimmable LED driver", manufacturerModel: "LCM-50X", brandName: "Mean Well" },
-      { id: "i3", sku: "HS-50W", name: "Aluminium Heat Sink 50W", categoryId: "cat1", unit: "Nos", hsn: "76169990", rate: 145, taxId: "gst18", reorder: 300, minStock: 150, batchTracked: false, locationId: "loc0", warranty: "", manufacturerId: "mfr3", manufacturerPartNumber: "HS-AL-50", manufacturerDesc: "Extruded aluminium heat sink 50W class", manufacturerModel: "HS-AL-50", brandName: "Cree" },
-      { id: "i4", sku: "HOU-RND-7", name: "Round Housing 7-inch", categoryId: "cat2", unit: "Nos", hsn: "94054090", rate: 88, taxId: "gst12", reorder: 400, minStock: 200, batchTracked: false, locationId: "loc0", warranty: "", manufacturerId: "mfr1", manufacturerPartNumber: "HOUS-RND-7", manufacturerDesc: "Die-cast round downlight housing 7 inch", manufacturerModel: "HOUS-RND-7", brandName: "OSRAM" },
-      { id: "i5", sku: "OPT-90D", name: "Optical Lens 90° Beam", categoryId: "cat5", unit: "Nos", hsn: "90019000", rate: 26, taxId: "gst18", reorder: 800, minStock: 400, batchTracked: false, locationId: "loc0", warranty: "", manufacturerId: "mfr4", manufacturerPartNumber: "C13450-90", manufacturerDesc: "PMMA lens 90° beam angle", manufacturerModel: "C13450", brandName: "Ledil" },
-      { id: "i6", sku: "PCB-MCB-24", name: "MCPCB 24-LED Board", categoryId: "cat6", unit: "Nos", hsn: "85340000", rate: 210, taxId: "gst18", reorder: 250, minStock: 150, batchTracked: true, locationId: "loc0", warranty: "12 months", manufacturerId: "mfr5", manufacturerPartNumber: "KB-MCPCB-24", manufacturerDesc: "Metal core PCB 24 LED positions", manufacturerModel: "KB-MCPCB-24", brandName: "Kingboard" },
-      { id: "i7", sku: "WIR-2C-1.0", name: "2-Core Wire 1.0sqmm (per mtr)", categoryId: "cat7", unit: "Mtr", hsn: "85444900", rate: 18, taxId: "gst18", reorder: 2000, minStock: 1000, batchTracked: false, locationId: "loc0", warranty: "", manufacturerId: "mfr1", manufacturerPartNumber: "WIRE-2C-1.0", manufacturerDesc: "2-core copper wire 1.0 sqmm", manufacturerModel: "", brandName: "" },
-      { id: "i8", sku: "PKG-CRT-A", name: "Carton Box Type-A", categoryId: "cat4", unit: "Nos", hsn: "48191010", rate: 12, taxId: "gst12", reorder: 1500, minStock: 800, batchTracked: false, locationId: "loc0", warranty: "", manufacturerId: "", manufacturerPartNumber: "", manufacturerDesc: "", manufacturerModel: "", brandName: "" },
+      { id: "i1", sku: "DRV-36W", name: "Mean Well LED Driver 36W", description: "LED Driver 36W Constant Current\n• Make: Mean Well\n• Model: LCM-36X\n• Application: Indoor/outdoor LED luminaire power supply\n• Warranty: 24 months", categoryId: "cat0", unit: "Nos", hsn: "85044090", rate: 320, taxId: "gst18", reorder: 200, minStock: 120, batchTracked: true, locationId: "loc0", warranty: "24 months", manufacturerId: "mfr2", manufacturerPartNumber: "LCM-36X", manufacturerDesc: "36W constant current LED driver", manufacturerModel: "LCM-36X", brandName: "Mean Well" },
+      { id: "i2", sku: "DRV-50W", name: "Mean Well LED Driver 50W", description: "LED Driver 50W Dimmable (0–10V)\n• Make: Mean Well\n• Model: LCM-50X\n• Application: Façade and architectural dimming\n• Warranty: 24 months", categoryId: "cat0", unit: "Nos", hsn: "85044090", rate: 540, taxId: "gst18", reorder: 150, minStock: 100, batchTracked: true, locationId: "loc0", warranty: "24 months", manufacturerId: "mfr2", manufacturerPartNumber: "LCM-50X", manufacturerDesc: "50W dimmable LED driver", manufacturerModel: "LCM-50X", brandName: "Mean Well" },
+      { id: "i3", sku: "HS-50W", name: "Aluminium Heat Sink 50W", description: "Extruded aluminium heat sink for 50W LED modules.\n• Material: AL6063\n• Finish: Anodized\n• Application: Downlight and panel cooling", categoryId: "cat1", unit: "Nos", hsn: "76169990", rate: 145, taxId: "gst18", reorder: 300, minStock: 150, batchTracked: false, locationId: "loc0", warranty: "", manufacturerId: "mfr3", manufacturerPartNumber: "HS-AL-50", manufacturerDesc: "Extruded aluminium heat sink 50W class", manufacturerModel: "HS-AL-50", brandName: "Cree" },
+      { id: "i4", sku: "HOU-RND-7", name: "OSRAM Round Housing 7\"", description: "Die-cast round downlight housing, 7 inch.\n• Make: OSRAM\n• Model: HOUS-RND-7\n• Finish: Powder coated white", categoryId: "cat2", unit: "Nos", hsn: "94054090", rate: 88, taxId: "gst12", reorder: 400, minStock: 200, batchTracked: false, locationId: "loc0", warranty: "", manufacturerId: "mfr1", manufacturerPartNumber: "HOUS-RND-7", manufacturerDesc: "Die-cast round downlight housing 7 inch", manufacturerModel: "HOUS-RND-7", brandName: "OSRAM" },
+      { id: "i5", sku: "OPT-90D", name: "Ledil Lens 90° Beam", description: "PMMA optical lens, 90° beam angle.\n• Make: Ledil\n• Part: C13450-90\n• Application: Spot and downlight optics", categoryId: "cat5", unit: "Nos", hsn: "90019000", rate: 26, taxId: "gst18", reorder: 800, minStock: 400, batchTracked: false, locationId: "loc0", warranty: "", manufacturerId: "mfr4", manufacturerPartNumber: "C13450-90", manufacturerDesc: "PMMA lens 90° beam angle", manufacturerModel: "C13450", brandName: "Ledil" },
+      { id: "i6", sku: "PCB-MCB-24", name: "Kingboard MCPCB 24-LED", description: "Metal core PCB — 24 LED positions.\n• Make: Kingboard\n• Model: KB-MCPCB-24\n• Warranty: 12 months", categoryId: "cat6", unit: "Nos", hsn: "85340000", rate: 210, taxId: "gst18", reorder: 250, minStock: 150, batchTracked: true, locationId: "loc0", warranty: "12 months", manufacturerId: "mfr5", manufacturerPartNumber: "KB-MCPCB-24", manufacturerDesc: "Metal core PCB 24 LED positions", manufacturerModel: "KB-MCPCB-24", brandName: "Kingboard" },
+      { id: "i7", sku: "WIR-2C-1.0", name: "2-Core Wire 1.0 sqmm", description: "2-core copper wire, 1.0 sqmm, per metre.\n• Conductor: Copper\n• Application: Internal wiring for luminaires", categoryId: "cat7", unit: "Mtr", hsn: "85444900", rate: 18, taxId: "gst18", reorder: 2000, minStock: 1000, batchTracked: false, locationId: "loc0", warranty: "", manufacturerId: "mfr1", manufacturerPartNumber: "WIRE-2C-1.0", manufacturerDesc: "2-core copper wire 1.0 sqmm", manufacturerModel: "", brandName: "" },
+      { id: "i8", sku: "PKG-CRT-A", name: "Carton Box Type-A", description: "Corrugated carton for finished goods packing.\n• Type: 5-ply export grade\n• Application: Standard FG dispatch", categoryId: "cat4", unit: "Nos", hsn: "48191010", rate: 12, taxId: "gst12", reorder: 1500, minStock: 800, batchTracked: false, locationId: "loc0", warranty: "", manufacturerId: "", manufacturerPartNumber: "", manufacturerDesc: "", manufacturerModel: "", brandName: "" },
     ];
     items.forEach((it) => {
       const mfr = it.manufacturerId ? manufacturers.find((m) => m.id === it.manufacturerId) : null;
@@ -234,7 +235,7 @@
         {
           id: "so1", no: "SO/2627/0001", date: todayISO(), quotationId: "", customerId: "c1",
           contact: "R. Kapoor", billing: "Court House, Lokmanya Tilak Marg, Mumbai 400002", shipping: "DC-3, Bhiwandi Logistics Park, Bhiwandi 421302",
-          gstin: "27AAACR5055K1Z5", lines: [{ sku: "DRV-36W", desc: "LED Driver 36W", hsn: "85044090", qty: 200, unit: "Nos", rate: 320, discountPct: 5, taxPct: 18 }],
+          gstin: "27AAACR5055K1Z5", lines: [{ sku: "DRV-36W", name: "Mean Well LED Driver 36W", desc: "LED Driver 36W Constant Current\n• Make: Mean Well\n• Model: LCM-36X", hsn: "85044090", qty: 200, unit: "Nos", rate: 320, discountPct: 5, taxPct: 18 }],
           totals: { sub: 64000, discount: 3200, taxable: 60800, tax: 10944, charges: 0, grand: 71744 },
           paymentTermsId: "pt2", deliveryTermsId: "dt3", status: "Confirmed", stage: "Confirmed", preparedBy: "sales",
           timeline: [{ ts: Date.now(), action: "create", by: "sales", note: "Order confirmed from quotation" }],
@@ -413,8 +414,29 @@
     migrateCompanyAddresses(db);
     migrateEnquiries(db);
     migrateInvoices(db);
+    migrateItems(db);
     db._v = VERSION;
     return db;
+  }
+
+  function migrateItems(db) {
+    (db.items || []).forEach((it) => {
+      if (!it.description && it.manufacturerDesc) it.description = String(it.manufacturerDesc);
+      if (it.description && String(it.description).length > ITEM_DESC_MAX) {
+        it.description = String(it.description).slice(0, ITEM_DESC_MAX);
+      }
+    });
+    (db.quotations || []).concat(db.proformas || [], db.salesOrders || [], db.invoices || [], db.purchaseOrders || []).forEach((doc) => {
+      (doc.lines || []).forEach((l) => {
+        if (!l.name && l.itemId) {
+          const it = (db.items || []).find((x) => x.id === l.itemId);
+          if (it) {
+            if (!l.name) l.name = it.name || "";
+            if (!l.desc || l.desc === it.name) l.desc = it.description || it.manufacturerDesc || l.desc || "";
+          }
+        }
+      });
+    });
   }
 
   function migrateInvoices(db) {
@@ -1052,6 +1074,14 @@
 
     create(coll, obj, actor) {
       if (coll === "items") {
+        if (!obj.name || !String(obj.name).trim()) {
+          if (VG.toast) VG.toast("Item Name is required", "error");
+          return null;
+        }
+        if (obj.description && String(obj.description).length > ITEM_DESC_MAX) {
+          if (VG.toast) VG.toast("Item Description exceeds maximum length", "error");
+          return null;
+        }
         if (typeof VG !== "undefined" && VG.skuEngine && !obj.skuGeneratedAt && !obj._skuPrepared) {
           const prep = VG.skuEngine.prepareCreate(obj, actor, { module: obj._skuModule || "Item Master" });
           if (!prep.ok) {
@@ -1078,6 +1108,15 @@
       if (lockErr) return null;
       const prev = this.get(coll, id);
       if (coll === "items" && prev) {
+        const merged = { ...prev, ...patch };
+        if (!merged.name || !String(merged.name).trim()) {
+          if (VG.toast) VG.toast("Item Name is required", "error");
+          return null;
+        }
+        if (merged.description && String(merged.description).length > ITEM_DESC_MAX) {
+          if (VG.toast) VG.toast("Item Description exceeds maximum length", "error");
+          return null;
+        }
         if (typeof VG !== "undefined" && VG.skuEngine) {
           const skuPrep = VG.skuEngine.prepareUpdate(prev, patch, actor);
           if (!skuPrep.ok) {
@@ -1317,7 +1356,7 @@
       const wo = this.create("workOrders", {
         no: this.nextNo("WO", so.date), date: todayISO(), salesOrderId: soId, salesOrderNo: so.no,
         customerId: so.customerId, customerPoRef: so.customerPoRef || "", priority: so.priority || "Normal",
-        product: line.desc || line.sku || "Order " + so.no, sku: line.sku || "", technicalSpec: so.technicalSpec || line.spec || "",
+        product: line.name || line.desc || line.sku || "Order " + so.no, sku: line.sku || "", technicalSpec: so.technicalSpec || line.spec || "",
         productionInstructions: so.specialInstructions || "", drawingRef: so.drawingRef || "", documentRef: so.documents || "",
         finishedItemId: fgItem ? fgItem.id : "", bomId: bom ? bom.id : "", bomNo: bom ? bom.no : "",
         qtyPlanned: qty, qtyProduced: 0, targetDate: so.deliveryDate || "", requiredDate: so.deliveryDate || "",
@@ -1465,7 +1504,7 @@
         const min = Number(item.minStock) || 0;
         const shortage = Math.max(0, (Number(r.qty) || 0) - Math.max(0, available - reserved));
         return {
-          itemId: r.itemId, sku: item.sku || "", description: item.name || "", category: item.category || "Raw Material",
+          itemId: r.itemId, sku: item.sku || "", itemName: item.name || "", description: item.description || "", category: item.category || "Raw Material",
           processStage: r.processStage || "", requiredQty: Number(r.qty) || 0, wastagePct: Number(r.scrapPct) || 0,
           totalRequiredQty: Number(r.qty) || 0, unit: r.unit || item.unit || "Nos", alternateItemId: r.altItemId || "", alternateAllowed: !!r.altItemId,
           availableStock: available, wipStock: wip, reservedStock: reserved, minStock: min, shortageQty: shortage,
@@ -1724,7 +1763,7 @@
         const alt = ln.alternateItemId ? this.get("items", ln.alternateItemId) : null;
         return {
           workOrderNo: mr.workOrderNo, salesOrderNo: mr.salesOrderNo || "", bomNo: mr.bomNo || "", bomRevision: mr.bomRevision || "",
-          sku: item.sku || ln.sku || "", description: item.name || ln.description || "", category: ln.category || item.category || "",
+          sku: item.sku || ln.sku || "", itemName: item.name || ln.itemName || "", description: item.description || ln.description || "", category: ln.category || item.category || "",
           unit: ln.unit || item.unit || "Nos", requiredQty: required, availableStock: available, reservedStock: reserved, freeStock: free,
           qtyCanIssueNow, shortageQty, expectedAvailabilityDate: ln.expectedAvailabilityDate || "", purchaseRequestStatus: ln.purchaseRequestNo ? "Pending (" + ln.purchaseRequestNo + ")" : "",
           locationRackBin: ln.rackBin || item.locationId || "loc0", altItemAvailable: alt ? this.onHand(alt.id) > 0 : false, remarks: ln.pendingReason || ln.remarks || "",

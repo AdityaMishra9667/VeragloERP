@@ -65,15 +65,18 @@
     const rows = (bom.lines || []).map((l, i) => {
       const it = store.get("items", l.itemId) || {};
       const lineCost = (Number(l.qty) || 0) * (Number(it.rate) || 0);
-      return `<tr><td>${i + 1}</td><td>${it.sku || ""}</td><td>${it.name || ""}</td><td>${itemMfr(l.itemId)}</td><td class="vg-right">${l.qty}</td><td>${l.unit || it.unit || ""}</td><td class="vg-right">${l.scrapPct || 0}%</td><td>${l.issueMethod || "Manual"}</td><td class="vg-right">${inr(lineCost)}</td></tr>`;
+      const nameCell = VG.itemDisplay ? VG.itemDisplay.itemNameSkuCell(it) : ((it.sku || "") + " — " + (it.name || ""));
+      const desc = VG.itemDisplay ? VG.itemDisplay.nl2br(VG.itemDisplay.itemDescription(it)) : "";
+      return `<tr><td>${i + 1}</td><td>${nameCell}</td><td>${desc}</td><td>${itemMfr(l.itemId)}</td><td class="vg-right">${l.qty}</td><td>${l.unit || it.unit || ""}</td><td class="vg-right">${l.scrapPct || 0}%</td><td>${l.issueMethod || "Manual"}</td><td class="vg-right">${inr(lineCost)}</td></tr>`;
     }).join("");
+    const fgNameCell = VG.itemDisplay ? VG.itemDisplay.itemNameSkuCell(fg) : (sku + " — " + (bom.fgName || fg.name || ""));
     const inner = `
       <div class="vg-cols">
-        <div class="vg-card"><b>Finished product</b>${sku} — ${bom.fgName || fg.name || ""}<br>${bom.fgDescription || ""}<br>Output: ${bom.qtyOutput || 1} ${bom.unit || fg.unit || "Nos"}</div>
+        <div class="vg-card"><b>Finished product</b>${fgNameCell}<br>${bom.fgDescription || (VG.itemDisplay && VG.itemDisplay.nl2br(VG.itemDisplay.itemDescription(fg))) || ""}<br>Output: ${bom.qtyOutput || 1} ${bom.unit || fg.unit || "Nos"}</div>
         <div class="vg-card"><b>BOM</b>${bom.no}<br>${bom.revision || "Rev-00"} · ${bom.status}<br>${bom.isDefault ? "Default BOM" : ""}</div>
         <div class="vg-card"><b>Routing</b>${bom.department || "—"} · ${bom.line || "—"}<br>Cycle: ${bom.cycleTimeMin || "—"} min</div>
       </div>
-      <table class="vg-tbl"><thead><tr><th>#</th><th>SKU</th><th>Component</th><th>Mfr</th><th class="vg-right">Qty</th><th>Unit</th><th class="vg-right">Wastage</th><th>Issue</th><th class="vg-right">Cost</th></tr></thead><tbody>${rows || "<tr><td colspan=9>No components</td></tr>"}</tbody></table>
+      <table class="vg-tbl"><thead><tr><th>#</th><th>Item Name / SKU</th><th>Item Description</th><th>Mfr</th><th class="vg-right">Qty</th><th>Unit</th><th class="vg-right">Wastage</th><th>Issue</th><th class="vg-right">Cost</th></tr></thead><tbody>${rows || "<tr><td colspan=9>No components</td></tr>"}</tbody></table>
       <div class="vg-totals"><div class="grand"><span>Std material cost / unit</span><span>${inr(cost)}</span></div></div>
       ${bom.remarks ? `<div class="vg-terms"><b>Remarks:</b> ${bom.remarks}</div>` : ""}`;
     return { title: "Bill of Materials", subtitle: bom.no + " · " + (bom.revision || "Rev-00"), inner, docType: "BOM" };
