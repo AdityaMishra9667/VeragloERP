@@ -36,7 +36,7 @@
   const confirmSubs = new Set();
   VG.confirm = function (opts) {
     return new Promise((resolve) => {
-      confirmState = { title: "Are you sure?", message: "", confirmLabel: "Confirm", danger: false, ...opts, resolve };
+      confirmState = { title: "Are you sure?", message: "", confirmLabel: "Confirm", cancelLabel: "Cancel", danger: false, ...opts, resolve };
       confirmSubs.forEach((f) => f());
     });
   };
@@ -47,13 +47,13 @@
     const s = confirmState;
     const done = (val) => { const r = s.resolve; confirmState = null; set((v) => v + 1); r(val); };
     return (
-      <div className="fixed inset-0 z-[110] grid place-items-center p-4 bg-black/50" onMouseDown={() => done(false)}>
-        <div className="glass-dark rounded-2xl shadow-glass p-5 w-[min(92vw,420px)] animate-scale-in" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="fixed inset-0 z-[110] grid place-items-center p-4 bg-black/55 backdrop-blur-[2px]" onMouseDown={() => done(false)}>
+        <div className="glass-dark rounded-2xl shadow-glass p-5 w-[min(92vw,420px)] animate-scale-in border border-white/10" onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
           <h3 className="text-lg font-semibold font-display">{s.title}</h3>
-          {s.message && <p className="text-sm opacity-70 mt-2">{s.message}</p>}
+          {s.message && <p className="text-sm opacity-75 mt-2 leading-relaxed">{s.message}</p>}
           <div className="flex justify-end gap-2 mt-5">
-            <Button variant="soft" onClick={() => done(false)}>Cancel</Button>
-            <button onClick={() => done(true)} className="inline-flex items-center gap-2 rounded-xl text-sm font-medium px-3.5 py-2 text-white" style={{ background: s.danger ? "#ef4444" : "var(--accent)" }}>{s.confirmLabel}</button>
+            <Button variant="soft" onClick={() => done(false)}>{s.cancelLabel || "Cancel"}</Button>
+            <button type="button" onClick={() => done(true)} className="inline-flex items-center gap-2 rounded-xl text-sm font-medium px-3.5 py-2 text-white" style={{ background: s.danger ? "#ef4444" : "var(--accent)" }}>{s.confirmLabel}</button>
           </div>
         </div>
       </div>

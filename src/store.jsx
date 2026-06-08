@@ -1167,6 +1167,28 @@
       persist();
     },
 
+    recordDocumentConversion(entry) {
+      const e = entry || {};
+      const fromLabel = [e.fromType, e.fromNo].filter(Boolean).join(" ");
+      const toLabel = [e.toType, e.toNo].filter(Boolean).join(" ");
+      const summary = "Converted " + (fromLabel || "—") + " → " + (toLabel || "—")
+        + (e.statusChange ? " · Status: " + e.statusChange : "")
+        + (e.confirmed ? " · Confirmed" : "");
+      this.audit(e.actor || "system", "convert", e.toType || "document", e.toNo || e.toId || "-", summary, {
+        module: e.module || "sales",
+        oldValue: fromLabel,
+        newValue: toLabel + (e.statusChange ? " (" + e.statusChange + ")" : ""),
+        fromType: e.fromType,
+        fromNo: e.fromNo,
+        fromId: e.fromId,
+        toType: e.toType,
+        toNo: e.toNo,
+        toId: e.toId,
+        statusChange: e.statusChange,
+        confirmed: !!e.confirmed,
+      });
+    },
+
     /* ----- stock engine ----- */
     ledgerFor(itemId, locationId) {
       return DB.stockLedger.filter((e) => e.itemId === itemId && (!locationId || e.locationId === locationId));

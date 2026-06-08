@@ -22,11 +22,18 @@
 
   function ShipmentForm({ open, onClose, so, roleKey }) {
     const [f, setF] = useState({ destination: (so && so.shipping) || "", vehicle: "", driver: "", ewayBill: "" });
-    function submit() {
+    async function submit() {
       if (!so) return;
-      const sh = store.createShipmentFromSO(so.id, f, roleKey);
-      VG.toast("Shipment " + sh.no + " created", "success");
-      onClose(true);
+      const existing = store.list("shipments").find((s) => s.salesOrderId === so.id && s.status !== "Cancelled");
+      await VG.forwardDocument({
+        action: "sales_order:dispatch",
+        fromType: "Sales Order", fromNo: so.no, fromId: so.id,
+        toType: "Shipment", actor: roleKey,
+        duplicate: existing ? { exists: true, no: existing.no, label: "Shipment" } : null,
+        run: () => store.createShipmentFromSO(so.id, f, roleKey),
+        statusChange: "Dispatch Planned",
+        onDone: () => onClose(true),
+      });
     }
     return (
       <Modal open={open} onClose={() => onClose(false)} size="lg" title="Create shipment" subtitle={so ? so.no + " · " + custName(so.customerId) : ""}
@@ -62,8 +69,25 @@
       { key: "status", label: "Status", render: (r) => <StatusTag value={r.status} map={SH_STATUS} /> },
       { key: "act", label: "Action", render: (r) => (
         <div className="flex gap-1 flex-wrap">
-          {(r.status === "Pending" || r.status === "Packing") && can("edit") && <Button variant="soft" className="!py-1" onClick={() => { store.dispatchShipment(r.id, roleKey); VG.toast("Dispatched " + r.no); }}>Dispatch</Button>}
-          {r.status === "In-transit" && can("edit") && <Button variant="soft" className="!py-1" onClick={() => { store.deliverShipment(r.id, roleKey); VG.toast("Delivered " + r.no); }}>POD OK</Button>}
+          {(r.status === "Pending" || r.status === "Packing") && can("edit") && <Button variant="soft" className="!py-1" onClick={async () => {
+            await VG.forwardStatus({
+              fromType: "Shipment", fromNo: r.no, fromId: r.id, actor: roleKey,
+              action: "shipment:dispatch",
+              confirmMessage: "Are you sure you want to mark Shipment " + r.no + " as dispatched?",
+              successMessage: "Shipment " + r.no + " dispatched successfully.",
+              statusChange: "In-transit",
+              run: () => store.dispatchShipment(r.id, roleKey),
+            });
+          }}>Dispatch</Button>}
+          {r.status === "In-transit" && can("edit") && <Button variant="soft" className="!py-1" onClick={async () => {
+            await VG.forwardStatus({
+              fromType: "Shipment", fromNo: r.no, fromId: r.id, actor: roleKey,
+              confirmMessage: "Are you sure you want to confirm delivery for Shipment " + r.no + "?",
+              successMessage: "Shipment " + r.no + " marked as delivered.",
+              statusChange: "Delivered",
+              run: () => store.deliverShipment(r.id, roleKey),
+            });
+          }}>POD OK</Button>}
           {r.status === "Delivered" && <Button variant="soft" className="!py-1" onClick={() => VG.goTo("accounts", "receivables")}>Invoice</Button>}
         </div>
       ) },
@@ -88,8 +112,26 @@
         {view && (
           <Modal open onClose={() => setView(null)} size="xl" title={"Shipment " + view.no} subtitle={custName(view.customerId)}
             footer={<><DocActions build={() => shDoc(view)} />
-              {(view.status === "Pending" || view.status === "Packing") && can("edit") && <Button icon="truck" onClick={() => { store.dispatchShipment(view.id, roleKey); setView(store.get("shipments", view.id)); VG.toast("Dispatched"); }}>Mark dispatched</Button>}
-              {view.status === "In-transit" && can("edit") && <Button icon="check" onClick={() => { store.deliverShipment(view.id, roleKey); setView(store.get("shipments", view.id)); }}>Confirm delivery</Button>}
+              {(view.status === "Pending" || view.status === "Packing") && can("edit") && <Button icon="truck" onClick={async () => {
+                await VG.forwardStatus({
+                  fromType: "Shipment", fromNo: view.no, fromId: view.id, actor: roleKey,
+                  confirmMessage: "Are you sure you want to mark Shipment " + view.no + " as dispatched?",
+                  successMessage: "Shipment " + view.no + " dispatched successfully.",
+                  statusChange: "In-transit",
+                  run: () => store.dispatchShipment(view.id, roleKey),
+                  onDone: () => setView(store.get("shipments", view.id)),
+                });
+              }}>Mark dispatched</Button>}
+              {view.status === "In-transit" && can("edit") && <Button icon="check" onClick={async () => {
+                await VG.forwardStatus({
+                  fromType: "Shipment", fromNo: view.no, fromId: view.id, actor: roleKey,
+                  confirmMessage: "Are you sure you want to confirm delivery for Shipment " + view.no + "?",
+                  successMessage: "Shipment " + view.no + " marked as delivered.",
+                  statusChange: "Delivered",
+                  run: () => store.deliverShipment(view.id, roleKey),
+                  onDone: () => setView(store.get("shipments", view.id)),
+                });
+              }}>Confirm delivery</Button>}
             </>}>
             <StatusTag value={view.status} map={SH_STATUS} />
             <div className="grid sm:grid-cols-3 gap-3 mt-4 text-sm">

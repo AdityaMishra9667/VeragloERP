@@ -919,6 +919,7 @@
         {session && SearchModal && <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} roleKey={session.roleKey} />}
         {FX && <FX.Toaster />}
         {FX && <FX.Confirmer />}
+        {VG.DocSuccessPopup && <VG.DocSuccessPopup />}
       </>
     );
   }

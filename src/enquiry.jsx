@@ -512,21 +512,28 @@
       onClose();
     }
 
-    function convertSO() {
+    async function convertSO() {
       if (!can("add")) return VG.toast("No permission", "error");
       const q = linkedQuotes.find((x) => x.status === "Approved" || x.status === "Sent" || x.status === "Won") || linkedQuotes[0];
       if (!q) return VG.toast("Create a quotation first", "warn");
-      if (VG.ensureSOFromQuotation) {
-        const so = VG.ensureSOFromQuotation(q, roleKey);
-        if (so) {
+      const existingSO = store.list("salesOrders").find((o) => o.quotationId === q.id && o.status !== "Cancelled");
+      if (!VG.ensureSOFromQuotation) return VG.toast("Sales order conversion unavailable", "error");
+      await VG.forwardDocument({
+        action: "enquiry:sales_order",
+        fromType: "Enquiry", fromNo: e.no, fromId: e.id,
+        toType: "Sales Order", actor: roleKey,
+        duplicate: existingSO ? { exists: true, no: existingSO.no, label: "Sales Order", linked: existingSO } : null,
+        confirmMessage: "Are you sure you want to convert this Enquiry (" + e.no + ") to Sales Order?",
+        run: () => {
+          const so = VG.ensureSOFromQuotation(q, roleKey);
+          if (!so) return null;
           store.update("salesOrders", so.id, { enquiryId: e.id }, roleKey);
           enquiryTransition(e.id, "converted_so", { salesOrderId: so.id, salesOrderNo: so.no, note: "Sales order " + so.no }, roleKey);
-          VG.toast("Sales order " + so.no + " created");
-          refresh();
-        }
-      } else {
-        VG.toast("Sales order conversion unavailable", "error");
-      }
+          return so;
+        },
+        statusChange: "Converted to Sales Order",
+        onDone: () => refresh(),
+      });
     }
 
     const actions = [

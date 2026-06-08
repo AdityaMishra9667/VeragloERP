@@ -120,11 +120,20 @@
           <Card className="p-3 mb-4 flex flex-wrap items-center gap-2 text-sm">
             <span className="opacity-70">Create invoice from SO:</span>
             {toInvoice.map((s) => (
-              <Button key={s.id} variant="soft" className="!py-1" onClick={() => {
-                const draft = store.buildInvoiceDraftFromSO ? store.buildInvoiceDraftFromSO(s.id) : null;
-                if (VG.openInvoiceBuilder && draft) VG.openInvoiceBuilder(draft);
-                else if (draft && VG.goTo) { VG._pendingInvoiceBuild = draft; VG.goTo("sales", "invoices"); }
-                else { const inv = store.createInvoiceFromSO(s.id, roleKey); VG.toast("Invoice " + inv.no + " posted", "success"); }
+              <Button key={s.id} variant="soft" className="!py-1" onClick={async () => {
+                const existingInv = store.list("invoices").find((i) => i.salesOrderId === s.id && i.status !== "Cancelled");
+                if (existingInv) return VG.toast("Invoice " + existingInv.no + " already exists", "warn");
+                await VG.forwardDocument({
+                  action: "sales_order:invoice",
+                  fromType: "Sales Order", fromNo: s.no, fromId: s.id,
+                  toType: "Tax Invoice", actor: roleKey,
+                  run: () => {
+                    const draft = store.buildInvoiceDraftFromSO ? store.buildInvoiceDraftFromSO(s.id) : null;
+                    if (VG.openInvoiceBuilder && draft) { VG.openInvoiceBuilder(draft); return { id: s.id, no: "(draft opened)" }; }
+                    if (draft && VG.goTo) { VG._pendingInvoiceBuild = draft; VG.goTo("sales", "invoices"); return { id: s.id, no: "(draft opened)" }; }
+                    return store.createInvoiceFromSO(s.id, roleKey);
+                  },
+                });
               }}>{s.no} · {VG.fmtInvoiceMoney ? VG.fmtInvoiceMoney((s.totals || {}).grand, s.currency) : inr((s.totals || {}).grand)}</Button>
             ))}
           </Card>
