@@ -412,8 +412,23 @@
     migrateManufacturers(db);
     migrateCompanyAddresses(db);
     migrateEnquiries(db);
+    migrateInvoices(db);
     db._v = VERSION;
     return db;
+  }
+
+  function migrateInvoices(db) {
+    (db.invoices || []).forEach((inv) => {
+      if (typeof VG !== "undefined" && VG.normalizeInvoice) {
+        const n = VG.normalizeInvoice(inv);
+        Object.assign(inv, n);
+        if (inv.totals && VG.computeFxTotals) inv.fxTotals = VG.computeFxTotals(inv, inv.totals);
+      } else {
+        if (!inv.invoiceType) inv.invoiceType = "domestic";
+        if (!inv.currency) inv.currency = "INR";
+        if (inv.exchangeRate == null) inv.exchangeRate = 1;
+      }
+    });
   }
 
   function migrateEnquiries(db) {
@@ -707,6 +722,7 @@
         { id: "tpl1c", docType: "Quotation", name: "Quotation — Warm Commerce", isDefault: false, ...presets("warm") },
         { id: "tpl2", docType: "Tax Invoice", name: "Tax Invoice — Corporate GST", isDefault: true, ...presets("corporate"), showQr: true },
         { id: "tpl2b", docType: "Tax Invoice", name: "Tax Invoice — Classic", isDefault: false, ...presets("classic") },
+        { id: "tpl2exp", docType: "Tax Invoice", name: "Export Tax Invoice — International", isDefault: false, variant: "export_inv", themeId: "industrial", docTitleOverride: "Export Tax Invoice", showQr: true, showAmountInWords: true, ...presets("industrial") },
         { id: "tpl3", docType: "Purchase Order", name: "Purchase Order — Modern", isDefault: true, ...presets("modern") },
         { id: "tpl4", docType: "Salary Slip", name: "Salary Slip — Classic", isDefault: true, ...presets("classic"), fontSize: 10, showDocRibbon: false },
         { id: "tpl5", docType: "Proforma Invoice", name: "Proforma — Executive", isDefault: true, ...presets("executive") },
@@ -733,6 +749,14 @@
       { id: "role_im", key: "inventory_manager", label: "Inventory Manager", tag: "Stock control", avatar: "IM", color: "#059669", moduleAccess: ["inventory", "purchase", "reports"], actions: ["view", "add", "edit", "delete", "approve", "export", "print"], permissions: {}, hierarchy: 45, builtIn: true, active: true },
       { id: "role_qm", key: "quality_manager", label: "Quality Manager", tag: "QC leadership", avatar: "QM", color: "#7c3aed", moduleAccess: ["quality", "production", "reports"], actions: ["view", "add", "edit", "approve", "export", "print"], permissions: {}, hierarchy: 45, builtIn: true, active: true },
     ];
+    if (!(db.documentTemplates || []).some((t) => t.id === "tpl2exp")) {
+      const indPreset = typeof VG !== "undefined" && VG.applyDocThemePreset ? VG.applyDocThemePreset("industrial") : tplBase;
+      db.documentTemplates = (db.documentTemplates || []).concat([{
+        id: "tpl2exp", docType: "Tax Invoice", name: "Export Tax Invoice — International", isDefault: false,
+        variant: "export_inv", themeId: "industrial", docTitleOverride: "Export Tax Invoice",
+        showQr: true, showAmountInWords: true, active: true, ...indPreset,
+      }]);
+    }
     extraRoles.forEach((r) => { if (!(db.customRoles || []).some((x) => x.key === r.key)) db.customRoles.push(r); });
     if (!(db.fieldPermissions || []).length) {
       db.fieldPermissions = [
@@ -742,12 +766,26 @@
       ];
     }
   }
-  function load() {
+  function readLocalState() {
     try {
       const raw = JSON.parse(localStorage.getItem(KEY) || "null");
       if (raw && raw._v) return migrate(raw);
     } catch (e) {}
+    return null;
+  }
+
+  function stateSavedAt(st) {
+    if (!st) return 0;
+    const local = Number(st._localSavedAt);
+    if (local > 0) return local;
+    return st._updatedAt ? new Date(st._updatedAt).getTime() : 0;
+  }
+
+  function load() {
+    const saved = readLocalState();
+    if (saved) return saved;
     const fresh = seed();
+    fresh._localSavedAt = Date.now();
     try { localStorage.setItem(KEY, JSON.stringify(fresh)); } catch (e) {}
     return fresh;
   }
@@ -757,25 +795,49 @@
     return (typeof VG !== "undefined" && VG.apiBase != null) ? String(VG.apiBase) : "";
   }
 
-  async function pushStateToApi() {
-    if (!_usePostgres) return;
+  async function pushStateToApi(opts) {
+    if (!_usePostgres) return false;
     try {
+      DB._localSavedAt = DB._localSavedAt || Date.now();
       const res = await fetch(apiBase() + "/api/state", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(DB),
+        keepalive: !!(opts && opts.keepalive),
       });
       if (!res.ok) throw new Error("PUT /api/state " + res.status);
+      const body = await res.json().catch(() => ({}));
+      if (body.updatedAt) DB._updatedAt = body.updatedAt;
+      try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {}
+      return true;
     } catch (e) {
       console.warn("[Veraglo store] PostgreSQL sync failed:", e.message || e);
+      return false;
     }
   }
 
   let persistTimer;
   function persist() {
+    DB._localSavedAt = Date.now();
     try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {}
     clearTimeout(persistTimer);
-    persistTimer = setTimeout(pushStateToApi, 400);
+    persistTimer = setTimeout(() => { pushStateToApi(); }, 400);
+  }
+
+  function flushPersist() {
+    clearTimeout(persistTimer);
+    persistTimer = null;
+    DB._localSavedAt = Date.now();
+    try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {}
+    if (_usePostgres) pushStateToApi({ keepalive: true });
+  }
+
+  if (typeof window !== "undefined") {
+    window.addEventListener("beforeunload", flushPersist);
+    window.addEventListener("pagehide", flushPersist);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") flushPersist();
+    });
   }
   function notify() { persist(); listeners.forEach((fn) => fn()); }
 
@@ -1966,30 +2028,79 @@
       }
       return inv;
     },
-    createInvoiceFromSO(soId, actor) {
+    buildInvoiceDraftFromSO(soId) {
       const so = this.get("salesOrders", soId);
       if (!so) return null;
-      const existing = (DB.invoices || []).find((i) => i.salesOrderId === soId && i.status !== "Cancelled");
-      if (existing) return existing;
-      const t = so.totals || {};
-      const grand = Number(t.final != null ? t.final : t.grand) || 0;
       const qRow = so.quotationId ? this.get("quotations", so.quotationId) : null;
-      const inv = this.create("invoices", {
-        no: this.nextNo("INV", todayISO()), date: todayISO(), type: "Tax Invoice",
-        customerId: so.customerId, salesOrderId: soId, salesOrderNo: so.no,
-        quotationId: so.quotationId || "", quotationNo: (qRow && qRow.no) || "",
-        enquiryId: so.enquiryId || "", billing: so.billing, shipping: so.shipping,
-        billingAddressId: so.billingAddressId || "", shippingAddressId: so.shippingAddressId || "",
-        gstin: so.gstin, currency: so.currency || "INR", exchangeRate: so.exchangeRate != null ? so.exchangeRate : 1,
-        lines: so.lines || [], totals: t, paymentTermsId: so.paymentTermsId || "", deliveryTermsId: so.deliveryTermsId || "",
-        amount: grand, amountPaid: 0, dueDate: extraDueDate(30), status: "Posted", preparedBy: actor,
-        eInvoiceStatus: "", ewayBillNo: "",
-      }, actor);
-      this._setSOStage(soId, "Invoiced", actor, "Tax invoice " + inv.no);
-      (DB.shipments || []).filter((s) => s.salesOrderId === soId && !s.invoiceId).forEach((s) => {
-        this.update("shipments", s.id, { invoiceId: inv.id, invoiceNo: inv.no }, actor);
+      if (typeof VG !== "undefined" && VG.buildInvoiceDraft) {
+        return VG.buildInvoiceDraft({
+          ...so,
+          salesOrderId: so.id,
+          salesOrderNo: so.no,
+          quotationId: so.quotationId || "",
+          quotationNo: (qRow && qRow.no) || "",
+          preparedBy: so.preparedBy || "",
+          terms: so.terms || (qRow && qRow.terms) || "",
+          warranty: so.warranty || (qRow && qRow.warranty) || "",
+          remarks: so.remarks || (qRow && qRow.remarks) || "",
+        });
+      }
+      return { ...so, salesOrderId: so.id, salesOrderNo: so.no, type: "Tax Invoice", invoiceType: "domestic" };
+    },
+    saveInvoice(payload, actor, existingId) {
+      if (typeof VG === "undefined" || !VG.normalizeInvoice || !VG.computeInvoiceTotals) {
+        return null;
+      }
+      let inv = VG.normalizeInvoice(payload);
+      inv.lines = VG.applyGstTreatmentToLines(inv.lines, inv.gstTreatment);
+      const totals = VG.computeInvoiceTotals(inv);
+      const fxTotals = VG.computeFxTotals(inv, totals);
+      const grand = Number(totals.final != null ? totals.final : totals.grand) || 0;
+      inv.totals = totals;
+      inv.fxTotals = fxTotals;
+      inv.amount = grand;
+      inv.exportDeclaration = inv.exportDeclaration || (VG.EXPORT_DECLARATIONS && VG.EXPORT_DECLARATIONS[inv.gstTreatment]) || "";
+      if (VG.isExportInvoiceType && VG.isExportInvoiceType(inv.invoiceType) && !inv.templateId) inv.templateId = "tpl2exp";
+      const cleanLines = (inv.lines || []).map((l) => {
+        const { key, ...rest } = l;
+        return rest;
       });
-      return inv;
+      const body = { ...inv, lines: cleanLines, preparedBy: inv.preparedBy || actor };
+      if (existingId) {
+        this.update("invoices", existingId, body, actor);
+        this.audit(actor, "update", "invoices", (this.get("invoices", existingId) || {}).no || existingId, "Invoice updated · " + (VG.invoiceTypeLabel ? VG.invoiceTypeLabel(inv) : inv.invoiceType));
+        notify();
+        return this.get("invoices", existingId);
+      }
+      if (body.salesOrderId) {
+        const dup = (DB.invoices || []).find((i) => i.salesOrderId === body.salesOrderId && i.status !== "Cancelled");
+        if (dup) return dup;
+      }
+      const created = this.create("invoices", {
+        no: this.nextNo("INV", body.date || todayISO()),
+        date: body.date || todayISO(),
+        type: "Tax Invoice",
+        status: "Posted",
+        amountPaid: 0,
+        dueDate: body.dueDate || extraDueDate(30),
+        eInvoiceStatus: "",
+        ewayBillNo: "",
+        ...body,
+      }, actor);
+      if (created.salesOrderId) {
+        this._setSOStage(created.salesOrderId, "Invoiced", actor, "Tax invoice " + created.no);
+        (DB.shipments || []).filter((s) => s.salesOrderId === created.salesOrderId && !s.invoiceId).forEach((s) => {
+          this.update("shipments", s.id, { invoiceId: created.id, invoiceNo: created.no }, actor);
+        });
+      }
+      this.audit(actor, "create", "invoices", created.no, (VG.invoiceTypeLabel ? VG.invoiceTypeLabel(created) : "Tax Invoice") + " posted");
+      return created;
+    },
+    createInvoiceFromSO(soId, actor, extra) {
+      const draft = this.buildInvoiceDraftFromSO(soId);
+      if (!draft) return null;
+      if (extra && typeof extra === "object") Object.assign(draft, extra);
+      return this.saveInvoice(draft, actor);
     },
     _randToken(len) {
       const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -2196,17 +2307,28 @@
     backend: () => (_usePostgres ? "postgresql" : "localStorage"),
 
     async init() {
+      const localState = readLocalState();
       const base = apiBase();
       try {
         const res = await fetch(base + "/api/state");
         if (res.status === 404) {
-          DB = load();
+          DB = localState || load();
+          if (!DB._localSavedAt) DB._localSavedAt = Date.now();
           _usePostgres = true;
           await pushStateToApi();
         } else if (res.ok) {
-          DB = migrate(await res.json());
+          const serverState = migrate(await res.json());
           _usePostgres = true;
-          try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {}
+          const localTs = stateSavedAt(localState);
+          const serverTs = stateSavedAt(serverState);
+          if (localState && localTs > serverTs) {
+            console.warn("[Veraglo store] Local data is newer than server — restoring and syncing to PostgreSQL");
+            DB = localState;
+            await pushStateToApi();
+          } else {
+            DB = serverState;
+            try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {}
+          }
         } else {
           DB = load();
         }

@@ -354,6 +354,63 @@
     };
   }
 
+  /** CSS for company footer fixed at bottom of every printed page. */
+  function printFooterRepeatCSS(fs, marginMm) {
+    const m = Math.max(8, Number(marginMm) || 12);
+    const fsz = Math.max(7, (Number(fs) || 10.5) - 2.5);
+    return `
+    @page{size:A4;margin:${m}mm ${m}mm 24mm ${m}mm}
+    .vg-print-footer-repeat{display:none}
+    @media print{
+      .vg-print-footer-repeat{
+        display:block;position:fixed;left:0;right:0;bottom:0;z-index:9999;
+        padding:3mm ${m}mm 2.5mm;background:#fff;border-top:1.5px solid #334155;
+        font-size:${fsz}pt;line-height:1.35;color:#64748b;
+        -webkit-print-color-adjust:exact;print-color-adjust:exact
+      }
+      .vg-pfr-inner{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;flex-wrap:wrap}
+      .vg-pfr-left{flex:1;min-width:40%;font-weight:600;color:#334155}
+      .vg-pfr-left span{font-weight:400;color:#64748b}
+      .vg-pfr-center{flex:1;text-align:center;font-style:italic;max-width:38%}
+      .vg-pfr-right{text-align:right;white-space:nowrap}
+      .vg-pfr-page::after{content:counter(page)}
+      .vg-foot-document-end{display:none!important}
+      .vg-page,.vg-quotation-intl{padding-bottom:26mm!important}
+      .vg-print-copy{padding-bottom:26mm!important}
+    }`;
+  }
+
+  /** Compact footer HTML repeated on every printed page. */
+  function buildRepeatingPrintFooter(tpl, opts) {
+    const c = store.company();
+    const t = { ...DEFAULT_LAYOUT, ...(tpl || {}) };
+    const reg = companyRegBlock(c);
+    const foot = (t.footerOverride || c.docFooter || "").trim();
+    const conf = foot || "Confidential — ERP-generated document. Unauthorised distribution prohibited.";
+    const docLabel = (opts && opts.docType) ? String(opts.docType) : "";
+    const ref = (opts && opts.subtitle) ? String(opts.subtitle) : "";
+    const bank = t.showBankBlock !== false && (c.bank || c.accountNo)
+      ? `${esc(c.bankName || c.bank || "")}${c.accountNo ? " · A/c " + esc(c.accountNo) : ""}${c.ifsc ? " · IFSC " + esc(c.ifsc) : ""}`
+      : "";
+    return `<div class="vg-print-footer-repeat" aria-hidden="true">
+      <div class="vg-pfr-inner">
+        <div class="vg-pfr-left">
+          <strong>${esc(c.legalName || c.name)}</strong>
+          <span> · GSTIN ${esc(reg.gstin || c.gstin || "—")} · PAN ${esc(c.pan || "—")}${c.iec ? " · IEC " + esc(c.iec) : ""}</span>
+          ${bank ? `<div style="font-weight:400;margin-top:2px">${bank}</div>` : ""}
+        </div>
+        <div class="vg-pfr-center">${esc(conf).slice(0, 160)}${conf.length > 160 ? "…" : ""}</div>
+        <div class="vg-pfr-right">
+          ${docLabel ? esc(docLabel) + " · " : ""}${ref ? esc(ref) + " · " : ""}Page <span class="vg-pfr-page"></span>
+          · © ${new Date().getFullYear()} ${esc(c.legalName || c.name)}
+        </div>
+      </div>
+    </div>`;
+  }
+
+  VG.buildRepeatingPrintFooter = buildRepeatingPrintFooter;
+  VG.printFooterRepeatCSS = printFooterRepeatCSS;
+
   VG.templatePrintCSS = function (tpl) {
     const t = { ...DEFAULT_LAYOUT, ...(tpl || {}) };
     const docFont = resolveDocFont(t);
@@ -457,12 +514,12 @@
     .vg-bar button{background:${accent};color:#fff;border:0;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer}
     .vg-bar button.ghost{background:rgba(255,255,255,.12)}
     .vg-bar .tip{opacity:.8;font-size:12px;margin-left:auto}
-    @page{size:${t.pageSize || "A4"};margin:${margin}mm}
+    ${printFooterRepeatCSS(fs, margin)}
     @media print{.vg-page{padding:0;max-width:none}.vg-bar{display:none!important}body{background:#fff}}
     ${headerBanner ? "" : ".vg-head-banner{background:none;color:inherit;padding:0;margin:0}"}
     ${headerMinimal ? ".vg-doc-badge{background:transparent;color:" + accent + ";padding:0}" : ""}
     ${tblRules}
-    ${t.docVariant === "quotation-international" ? quotationIntlCSS(t, fs, margin) : ""}`;
+    ${t.docVariant === "quotation-international" || t.docVariant === "export_inv" ? quotationIntlCSS(t, fs, margin) : ""}`;
   };
 
   function customerRegion(c) {
@@ -587,6 +644,45 @@
     return "INV:" + (inv.no || "") + "|DT:" + (inv.date || "") + "|AMT:" + (inv.amount || "");
   }
 
+  function buildExportInvoiceBlock(q, co, currency, fx) {
+    if (!q.invoiceType || q.invoiceType === "domestic") return "";
+    const fxTotals = q.fxTotals || (VG.computeFxTotals ? VG.computeFxTotals(q, q.totals || {}) : {});
+    const pairs = [
+      ["Invoice type", VG.invoiceTypeLabel ? VG.invoiceTypeLabel(q) : q.invoiceType],
+      ["Buyer country", q.buyerCountry],
+      ["Consignee country", q.consigneeCountry],
+      ["Port of loading", q.portOfLoading],
+      ["Port of discharge", q.portOfDischarge],
+      ["Final destination", q.finalDestination],
+      ["Country of origin", q.countryOfOrigin],
+      ["Country of final destination", q.countryOfFinalDestination],
+      ["IEC code", q.iecCode || co.iec],
+      ["LUT / Bond", [q.lutNumber, q.lutBondDetails].filter(Boolean).join(" · ")],
+      ["LUT validity", q.lutValidity],
+      ["Export supply", q.exportSupplyType === "with_igst" ? "With payment of IGST" : "Without payment of IGST under LUT"],
+      ["Shipping bill", [q.shippingBillNo, q.shippingBillDate].filter(Boolean).join(" · ")],
+      ["AD code", q.adCode],
+      ["Incoterms", q.incoterms],
+      ["Shipment mode", q.shipmentMode],
+      ["Net / Gross weight", [q.netWeight, q.grossWeight].filter((x) => x != null && x !== "").join(" / ") + (q.netWeight || q.grossWeight ? " kg" : "")],
+      ["Packages", q.packages],
+      ["Packing", q.packingDetails],
+    ].filter(([, v]) => v);
+    const bank = [q.remittanceBank || co.bank, q.remittanceAccount || co.accountNo, q.swiftCode || co.swiftCode ? "SWIFT: " + (q.swiftCode || co.swiftCode) : ""].filter(Boolean).join(" · ");
+    return `
+      <div class="vg-q-section">
+        <div class="vg-q-section-hdr">Export &amp; remittance details</div>
+        <div class="vg-q-kv">${pairs.map(([k, v]) => `<span class="k">${esc(k)}</span><span>${esc(String(v))}</span>`).join("")}</div>
+        ${currency !== "INR" ? `<div class="vg-q-kv" style="margin-top:8px">
+          <span class="k">Exchange rate</span><span>1 ${esc(currency)} = ₹${esc(fx)} (as on ${esc(q.exchangeRateDate || q.date || "—")}, ${esc(q.exchangeRateSource === "manual" ? "manual" : "currency master")})</span>
+          <span class="k">INR equivalent</span><span>${fmtMoney(fxTotals.grandTotalInr || 0, "INR")}</span>
+          <span class="k">Taxable (INR)</span><span>${fmtMoney(fxTotals.taxableValueInr || 0, "INR")}</span>
+        </div>` : ""}
+        ${bank ? `<div class="vg-bank" style="margin-top:10px"><b>Bank details for foreign remittance</b><br>${esc(bank)}</div>` : ""}
+        ${q.exportDeclaration ? `<div class="vg-amount-words" style="margin-top:10px"><strong>Export declaration:</strong> ${esc(q.exportDeclaration)}</div>` : ""}
+      </div>`;
+  }
+
   function buildInvoiceComplianceBlock(inv, einv, eway, co) {
     let html = "";
     if (einv && einv.irn) {
@@ -629,7 +725,7 @@
     const reg = companyRegBlock(co);
     const t = { ...DEFAULT_LAYOUT, ...(tpl || {}) };
     return `
-    <div class="vg-q-foot-seller">
+    <div class="vg-q-foot-seller vg-foot-document-end">
       <div class="vg-q-foot-grid">
         <div class="vg-q-foot-col">
           <div class="vg-q-foot-brand">${esc(co.legalName || co.name)}</div>
@@ -811,10 +907,10 @@
         ${esc(c.bank || "")}${c.accountNo ? "<br>Account: " + esc(c.accountNo) : ""}${c.ifsc ? " · IFSC: " + esc(c.ifsc) : ""}
       </div>` : "";
     const qr = t.showQr ? `<div class="vg-qr">SCAN<br><span style="font-size:7px">${esc((c.gstin || "DOC").slice(0, 15))}</span></div>` : "";
-    return `${sign}${bank}<div class="vg-foot">
+    return `${sign}${bank}<div class="vg-foot vg-foot-document-end">
       <div>${foot ? esc(foot) : ""}</div>
       <div>${terms ? "<strong>Terms:</strong> " + esc(terms).slice(0, 200) + (terms.length > 200 ? "…" : "") : ""}</div>
-      <div>Page 1 · © ${new Date().getFullYear()} ${esc(c.legalName || c.name)}</div>
+      <div>© ${new Date().getFullYear()} ${esc(c.legalName || c.name)}${c.jurisdiction ? " · " + esc(c.jurisdiction) : ""}</div>
     </div>${qr}`;
   }
 
@@ -854,11 +950,14 @@
     const contactPhone = customerContactPhone(c);
     const warrantyText = defaultWarrantyText(t, q, co);
     const subject = q.subject || q.projectName || (q.remarks ? String(q.remarks).split("\n")[0] : "") || "";
-    const docTitle = (t.docTitleOverride || labels.title || "").trim();
+    let docTitle = (t.docTitleOverride || labels.title || "").trim();
     const isInvoice = docType === "Tax Invoice";
+    if (isInvoice && q.invoiceType && q.invoiceType !== "domestic" && VG.invoiceTypeLabel) docTitle = VG.invoiceTypeLabel(q);
     const einv = q.eInvoice || {};
     const eway = q.ewayBill || {};
+    const exportBlock = isInvoice ? buildExportInvoiceBlock(q, co, currency, fx) : "";
     const invoiceCompliance = isInvoice ? buildInvoiceComplianceBlock(q, einv, eway, co) : "";
+    const fxTotals = q.fxTotals || (VG.computeFxTotals ? VG.computeFxTotals(q, totals) : {});
 
     const showBilling = policy.billing === true || (policy.billing === "optional" && (q.billing || "").trim());
     const showShipping = policy.shipping === true || (policy.shipping === "optional" && (q.shipping || "").trim());
@@ -890,13 +989,15 @@
     const lineRows = lines.map((row) => `<tr>${visibleCols.map((c) => lineCell(c.key, row)).join("")}</tr>`).join("");
 
     const revList = revisionDocList(q);
-    const termsSections = opts.termsSections || buildQuotationTerms(q, pt, dt, co, t, warrantyText);
+    const termsSections = opts.termsSections || (isInvoice
+      ? buildInvoiceTerms(q, pt, dt, co, t, warrantyText)
+      : buildQuotationTerms(q, pt, dt, co, t, warrantyText));
     const qrData = quotationQrPayload(q, c, totals, currency, validUntil, rev);
     const headerQrData = isInvoice ? invoiceQrPayload(q, einv, co) : qrData;
     const qrPayload = esc((q.no || docType.slice(0, 2)) + "|Rev-" + rev);
     const showCustomerQr = t.showQr !== false && !isInvoice;
     const showInvoiceQr = isInvoice;
-    const incoterms = c.incoterms || q.incoterms || "";
+    const incoterms = q.incoterms || c.incoterms || "";
 
     const addrBlock = (showBilling || showShipping) ? `
       <div class="vg-q-addr-row">
@@ -940,6 +1041,8 @@
           <span>Due Date<b>${esc(q.dueDate || "—")}</b></span>
           <span>SO Ref.<b>${esc(q.salesOrderNo || "—")}</b></span>
           <span>Currency<b>${esc(currency)}</b></span>
+          ${currency !== "INR" ? `<span>Exchange rate<b>₹${esc(fx)} / ${esc(currency)}</b></span>` : ""}
+          ${incoterms ? `<span>Incoterms<b>${esc(incoterms)}</b></span>` : ""}
           <span>Buyer GSTIN<b>${esc(q.gstin || c.gstin || "—")}</b></span>
         </div>
         <div class="vg-q-contact-row">
@@ -987,21 +1090,25 @@
             <span class="k">Payment terms</span><span>${esc(pt)}</span>
             <span class="k">Delivery terms</span><span>${esc(dt)}</span>
             <span class="k">Warranty</span><span>${esc(warrantyText)}</span>
+            ${incoterms ? `<span class="k">Incoterms</span><span>${esc(incoterms)}</span>` : ""}
           </div>
-          ${t.showAmountInWords !== false ? `<div class="vg-amount-words"><strong>Amount in words:</strong> ${esc(amountInWordsIntl(totals.final != null ? totals.final : totals.grand, currency))}</div>` : ""}
+          ${t.showAmountInWords !== false ? `<div class="vg-amount-words"><strong>Amount in words (${esc(currency)}):</strong> ${esc(amountInWordsIntl(totals.final != null ? totals.final : totals.grand, currency))}</div>` : ""}
+          ${currency !== "INR" && t.showAmountInWords !== false ? `<div class="vg-amount-words"><strong>Amount in words (INR):</strong> ${esc(amountInWordsIntl(fxTotals.grandTotalInr || totals.final * fx || totals.grand * fx, "INR"))}</div>` : ""}
         </div>
         <div class="vg-q-total-panel">
           <div class="row"><span>Basic amount</span><span>${fmtMoney(totals.sub, currency)}</span></div>
           ${totals.discount ? `<div class="row"><span>Discount</span><span>- ${fmtMoney(totals.discount, currency)}</span></div>` : ""}
-          <div class="row"><span>Taxable value</span><span>${fmtMoney(totals.taxable, currency)}</span></div>
+          <div class="row"><span>Taxable value (${esc(currency)})</span><span>${fmtMoney(totals.taxable, currency)}</span></div>
           <div class="row"><span>Tax (GST)</span><span>${fmtMoney(totals.tax, currency)}</span></div>
           ${totals.charges ? `<div class="row"><span>Freight / charges</span><span>${fmtMoney(totals.charges, currency)}</span></div>` : ""}
-          <div class="grand"><span>Grand total</span><span>${fmtMoney(totals.grand, currency)}</span></div>
+          <div class="grand"><span>Grand total (${esc(currency)})</span><span>${fmtMoney(totals.grand, currency)}</span></div>
+          ${currency !== "INR" ? `<div class="row"><span>INR equivalent</span><span>${fmtMoney(fxTotals.grandTotalInr || 0, "INR")}</span></div>` : ""}
           ${totals.roundOff ? `<div class="row"><span>Round off</span><span>${totals.roundOff > 0 ? "+" : ""}${fmtMoney(totals.roundOff, currency)}</span></div><div class="final"><span>Final amount</span><span>${fmtMoney(totals.final, currency)}</span></div>` : ""}
           ${isInvoice ? `<div class="row"><span>Amount paid</span><span>${fmtMoney(q.amountPaid || 0, currency)}</span></div><div class="row"><span>Balance due</span><span>${fmtMoney(Math.max(0, (Number(q.amount) || totals.final || totals.grand || 0) - (Number(q.amountPaid) || 0)), currency)}</span></div>` : ""}
         </div>
       </div>
 
+      ${exportBlock}
       ${invoiceCompliance}
 
       ${!isInvoice ? `<div class="vg-q-section">
@@ -1009,10 +1116,12 @@
         <ul class="vg-q-rev-list">${revList}</ul>
       </div>` : ""}
 
-      ${!isInvoice ? `<div class="vg-q-section">
+      <div class="vg-q-section">
         <div class="vg-q-section-hdr">Terms &amp; conditions</div>
         <div class="vg-q-terms-cols">${termsSections}</div>
-      </div>` : (isInvoice ? `<div class="vg-q-section"><div class="vg-q-section-hdr">Statutory note</div><div class="vg-q-kv" style="font-size:${Number(t.fontSize || 9.5) - 1.5}pt"><span class="k">Declaration</span><span>We declare that this invoice shows the actual price of the goods/services described and that all particulars are true and correct. Subject to ${esc(co.jurisdiction || "Pune, Maharashtra")} jurisdiction.</span></div></div>` : "")}
+      </div>
+
+      ${isInvoice ? `<div class="vg-q-section"><div class="vg-q-section-hdr">Statutory declaration</div><div class="vg-q-kv" style="font-size:${Number(t.fontSize || 9.5) - 1.5}pt"><span class="k">Declaration</span><span>${esc(q.exportDeclaration || ("We declare that this invoice shows the actual price of the goods/services described and that all particulars are true and correct. Subject to " + (co.jurisdiction || "Pune, Maharashtra") + " jurisdiction."))}</span></div></div>` : ""}
 
       <div class="vg-q-sign-grid">
         <div class="slot"><div class="role">Prepared by</div><b>${esc(q.preparedBy || "—")}</b></div>
@@ -1040,6 +1149,44 @@
   VG.buildQuotationDocument = function (opts) {
     return VG.buildIndustrialDocument({ ...opts, docType: "Quotation", document: opts.quotation || opts.document });
   };
+
+  /** Standard commercial T&amp;C for tax invoices (same clauses as quotations, invoice wording). */
+  function buildInvoiceTerms(q, pt, dt, co, tpl, warrantyText) {
+    const raw = (q.terms || "").trim();
+    const override = (tpl && tpl.termsOverride) || "";
+    if (override.trim()) return `<div class="vg-q-terms-custom">${nl2br(override)}</div>`;
+    const warr = warrantyText || defaultWarrantyText(tpl || {}, q, co);
+    const due = q.dueDate || "—";
+    const blocks = [
+      ["1. Payment Due", "Payment for this invoice is due on or before " + due + " unless otherwise agreed in writing. Late payments may attract interest as per agreed credit terms."],
+      ["2. Delivery", (dt || co.deliveryTermsDefault || "Ex-works / FOR destination as mutually agreed") + ". Delivery schedule is indicative and subject to drawing approval, advance receipt, and material availability."],
+      ["3. Freight & Logistics", "Freight, insurance, and transit arrangements apply as stated in the commercial summary. Risk transfer follows agreed Incoterms. Export documentation charges, if any, shall be borne as agreed."],
+      ["4. Packing", "Standard export-worthy / industrial packing suitable for domestic or international transit unless special packing is quoted separately."],
+      ["5. Taxes & Duties", "GST / IGST / cess extra as applicable under Indian law. For export orders, LUT / bond / refund conditions apply per statutory rules and customer instructions. Import duties and local taxes at destination are buyer's responsibility unless expressly included."],
+      ["6. Warranty", warr],
+      ["7. Installation & Commissioning", "Supply only unless explicitly mentioned. Installation, commissioning, calibration, civil works, cabling, and third-party integration are excluded unless specifically quoted."],
+      ["8. Exclusions", "Any item, accessory, consumable, or service not listed in the schedule of quantities is excluded. Statutory fees, permits, and insurance beyond quoted scope are excluded unless specified."],
+      ["9. Force Majeure", "Neither party is liable for delay or non-performance caused by events beyond reasonable control including natural calamities, war, strikes, pandemic restrictions, government actions, or supply-chain disruption."],
+      ["10. Material Availability", "Supply is subject to raw material, component, and capacity availability at the time of dispatch. Alternate specifications of equivalent quality may be proposed if required."],
+      ["11. Payment Terms", pt || co.paymentTermsDefault || "As per agreed credit terms. Title to goods remains with seller until full payment is received unless otherwise agreed in writing."],
+      ["12. Dispatch & Readiness", "Dispatch shall be effected after clearance of payments as per agreed terms and readiness of goods. Partial dispatch may be made where mutually agreed."],
+      ["13. Transit & Damage", "Transit damage claims must be notified within 48 hours of receipt with photographic evidence and carrier acknowledgement. Concealed damage claims within 7 days of delivery."],
+      ["14. Testing & Inspection", "Standard factory inspection applies. Third-party inspection, if required, shall be at buyer's cost and arranged with reasonable advance notice."],
+      ["15. Customer Dependencies", "Delays caused by pending approvals, drawings, site readiness, or information from buyer may extend delivery without penalty to seller."],
+      ["16. Storage After Readiness", "If buyer fails to take delivery within 15 days of readiness notification, seller may store goods at buyer's risk and cost or invoice storage charges."],
+      ["17. Cancellation", "Orders once confirmed may be cancelled only with written consent. Cancellation charges including material procurement, engineering, and restocking costs shall apply."],
+      ["18. Price Variation", "Prices are based on current input costs. Seller reserves the right to revise pricing if significant currency, duty, freight, or raw-material variation occurs before dispatch, with prior notice."],
+      ["19. Limitation of Liability", "Seller's liability is limited to repair, replacement, or credit of defective supplied goods. Consequential, indirect, or loss-of-profit claims are excluded to the maximum extent permitted by law."],
+      ["20. Intellectual Property", "Drawings, designs, specifications, and technical data shared remain seller's property and shall not be reproduced or disclosed without consent."],
+      ["21. Confidentiality", "Commercial terms, pricing, and technical information in this document are confidential and for recipient's internal use only."],
+      ["22. Jurisdiction", co.jurisdiction || "Courts at Pune, Maharashtra, India shall have exclusive jurisdiction unless otherwise agreed in writing."],
+      ["23. Acknowledgement", "Receipt of this tax invoice constitutes acknowledgement of supply as described. Disputes must be raised in writing within seven (7) days of invoice date."],
+    ];
+    let html = "";
+    if (raw) html += `<h4>Additional Conditions</h4><ol><li>${nl2br(raw)}</li></ol>`;
+    html += blocks.map(([h, t]) => `<h4>${esc(h)}</h4><ol><li>${esc(t)}</li></ol>`).join("");
+    return html;
+  }
 
   function buildQuotationTerms(q, pt, dt, co, tpl, warrantyText) {
     const raw = (q.terms || "").trim();
@@ -1186,8 +1333,9 @@
     const auto = mode === "print";
     const copyTip = copyList ? '<span class="tip">' + copyList.length + " cop" + (copyList.length > 1 ? "ies" : "y") + " · " + esc(copyList.join(", ")) + "</span>" : "";
     const tip = mode === "download" ? '<span class="tip">Choose “Save as PDF” in the print dialog.</span>' + copyTip : '<span class="tip">Professional template · ' + esc(tpl.name || tpl.themeId || "default") + "</span>" + copyTip;
+    const repeatFooter = buildRepeatingPrintFooter(tpl, { docType: title, subtitle: subtitle || "" });
     const bar = `<div class="vg-bar"><button onclick="window.print()">Print / Save PDF</button><button class="ghost" onclick="window.close()">Close</button>${tip}</div>`;
-    w.document.write(`<!doctype html><html lang="en"><head><meta charset="utf-8"/><title>${esc(title)}</title><style>${css}</style></head><body class="${bodyClass}">${bar}<div class="vg-page ${bodyClass}">${body}</div><script>window.onload=function(){${auto ? "setTimeout(function(){window.print()},400)" : ""}}<\/script></body></html>`);
+    w.document.write(`<!doctype html><html lang="en"><head><meta charset="utf-8"/><title>${esc(title)}</title><style>${css}</style></head><body class="${bodyClass}">${bar}<div class="vg-page ${bodyClass}">${body}</div>${repeatFooter}<script>window.onload=function(){${auto ? "setTimeout(function(){window.print()},400)" : ""}}<\/script></body></html>`);
     w.document.close();
   };
 
