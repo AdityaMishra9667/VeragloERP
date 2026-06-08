@@ -2,6 +2,7 @@ node_modules/
 server/node_modules/
 desktop/node_modules/
 desktop/dist/
+java-backend/target/
 .env
 server/.env
 .DS_Store

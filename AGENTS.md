@@ -4,7 +4,9 @@
 
 ### Product overview
 
-Veraglo ERP is a zero-build React + Tailwind prototype (CDN/Babel) with a Node.js/Express API and PostgreSQL 16 (JSONB document store). The API serves both `/api/*` and the static UI on one port (default **3000**).
+Veraglo ERP is a zero-build React + Tailwind prototype (CDN/Babel) with a **Java 21 / Spring Boot** backend (preferred) or legacy Node.js/Express API, plus PostgreSQL 16. The API serves both `/api/*` and the static UI on one port (default **3000**).
+
+**Java backend:** `cd java-backend && mvn package -DskipTests` or `./scripts/start-java.sh`. See `docs/JAVA-MIGRATION.md`.
 
 ### Services (recommended dev stack)
 
