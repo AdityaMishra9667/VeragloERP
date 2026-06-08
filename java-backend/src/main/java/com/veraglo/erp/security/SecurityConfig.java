@@ -45,6 +45,10 @@ public class SecurityConfig {
                                 "/api/weather/**",
                                 "/",
                                 "/index.html",
+                                "/login",
+                                "/launcher",
+                                "/module/**",
+                                "/admin/**",
                                 "/assets/**",
                                 "/src/**",
                                 "/legacy/**"
