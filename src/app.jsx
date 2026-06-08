@@ -798,11 +798,14 @@
       return VG.store.subscribe(check);
     }, []);
 
+    const logoutGuard = useRef(false);
     useEffect(() => {
       if (!session || !VG.store) return;
       const check = () => {
+        if (logoutGuard.current) return;
         const v = VG.store.validateSession(session);
         if (!v.ok) {
+          logoutGuard.current = true;
           VG.toast(v.reason || "Session ended", "error");
           logout(true);
         }
@@ -858,10 +861,14 @@
       setSession(s); setModuleId(null); persist(s);
     }
     function logout(silent) {
-      if (session && VG.store && VG.store.endSession) VG.store.endSession(session.sessionId);
+      if (logoutGuard.current && !session) return;
+      const sid = session && session.sessionId;
+      logoutGuard.current = true;
       setSession(null); setModuleId(null);
+      if (sid && VG.store && VG.store.endSession) VG.store.endSession(sid);
       clearAuthCache();
       setAccent("#6366f1");
+      logoutGuard.current = false;
       if (!silent) VG.toast("Signed out", "info");
     }
     function openModule(id) {

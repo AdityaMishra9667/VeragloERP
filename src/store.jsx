@@ -2654,12 +2654,21 @@
 
     isSessionRevoked(session) {
       if (!session) return true;
-      return (DB.revokedSessions || []).some((r) =>
-        r.userId === "*" || r.sessionId === "*global*"
-        || r.sessionId === session.sessionId
-        || (r.sessionId === "*" && r.userId && session.userId === r.userId)
-        || (r.email && session.email && r.email === session.email && r.sessionId === "*")
-      );
+      const since = Number(session.since) || 0;
+      return (DB.revokedSessions || []).some((r) => {
+        const at = Number(r.revokedAt) || 0;
+        if (r.sessionId && r.sessionId !== "*" && r.sessionId !== "*global*") {
+          return r.sessionId === session.sessionId;
+        }
+        if (r.sessionId === "*global*") return since < at;
+        if (r.sessionId === "*" && r.userId && r.userId !== "*") {
+          return session.userId === r.userId && since < at;
+        }
+        if (r.sessionId === "*" && r.email && session.email) {
+          return session.email === r.email && since < at;
+        }
+        return false;
+      });
     },
 
     revokeAllSessions(actor) {
@@ -2690,8 +2699,9 @@
     },
 
     endSession(sessionId) {
+      const before = (DB.connectedSessions || []).length;
       DB.connectedSessions = (DB.connectedSessions || []).filter((s) => s.sessionId !== sessionId);
-      notify();
+      if (DB.connectedSessions.length !== before) persist();
     },
 
     sessionsForUser(userId) {
