@@ -3,7 +3,7 @@
   const { useState } = React;
   const ui = VG.ui, fx = VG.fx, store = VG.store, inr = VG.fmt.inr, today = VG.fmt.todayISO;
   const { Icon, Button, Pill, Card } = ui;
-  const { Field, Num, Modal, RecordTable, PageHead, StatusTag, printDocument, DocActions } = fx;
+  const { Field, Num, Modal, InternalScreen, RecordTable, PageHead, StatusTag, printDocument, DocActions } = fx;
 
   const custName = (id) => (store.get("customers", id) || {}).name || "—";
   const INV_STATUS = { Posted: "#22d3ee", "Partially Paid": "#f59e0b", Paid: "#34d399", Cancelled: "#ef4444" };
@@ -13,13 +13,20 @@
     const c = VG.normalizeCustomer ? VG.normalizeCustomer(store.get("customers", fresh.customerId) || {}) : (store.get("customers", fresh.customerId) || {});
     const t = fresh.totals || {};
     const cur = fresh.currency || c.currency || "INR";
-    const fmt = (n) => (cur === "INR" ? inr(n) : (cur + " " + Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })));
+    const fmt = (n) => (VG.fmtInvoiceMoney ? VG.fmtInvoiceMoney(n, cur) : (cur === "INR" ? inr(n) : (cur + " " + Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 }))));
     const pt = (store.get("paymentTerms", fresh.paymentTermsId) || {}).name || "—";
     const dt = (store.get("deliveryTerms", fresh.deliveryTermsId) || {}).name || "—";
+    const computeInvLine = (l) => ({ total: (Number(l.qty) || 0) * (Number(l.rate) || 0) });
     if (VG.buildIndustrialDocument) {
-      const tpl = VG.resolveDocTemplate ? VG.resolveDocTemplate("Tax Invoice", fresh.templateId) : {};
-      const usePremium = tpl.themeId === "industrial" || tpl.docVariant === "quotation-international" || !fresh.templateId;
+      const tplId = fresh.templateId || (VG.isExportInvoiceType && VG.isExportInvoiceType(fresh.invoiceType) ? "tpl2exp" : "");
+      const tpl = VG.resolveDocTemplate ? VG.resolveDocTemplate("Tax Invoice", tplId) : {};
+      const usePremium = tpl.themeId === "industrial" || tpl.docVariant === "export_inv" || tpl.docVariant === "quotation-international" || !fresh.templateId || (VG.isExportInvoiceType && VG.isExportInvoiceType(fresh.invoiceType));
       if (usePremium) {
+        const d = VG.itemDisplay;
+        const lines = d ? d.mapIndustrialLines(fresh.lines, (r) => fmt(r), (l) => fmt(computeInvLine(l).total)) : (fresh.lines || []).map((l, i) => {
+          const amt = computeInvLine(l).total;
+          return { no: i + 1, sku: l.sku, name: l.name, desc: l.desc, itemNameSku: `<b>${l.name || l.desc || ""}</b><br><span class="vg-muted" style="font-size:8pt">SKU: ${l.sku || ""}</span>`, hsn: l.hsn, qty: String(l.qty), unit: l.unit || "", rate: fmt(l.rate), tax: (l.taxPct || 0) + "%", amount: fmt(amt) };
+        });
         return VG.buildIndustrialDocument({
           docType: "Tax Invoice",
           document: { ...fresh, customerPoRef: fresh.salesOrderNo, projectRef: fresh.salesOrderNo },
@@ -27,17 +34,15 @@
           totals: t,
           paymentTerms: pt,
           deliveryTerms: dt,
-          templateId: fresh.templateId,
-          lines: (fresh.lines || []).map((l, i) => {
-            const amt = (Number(l.qty) || 0) * (Number(l.rate) || 0);
-            return { no: i + 1, sku: l.sku, desc: l.desc, hsn: l.hsn, qty: String(l.qty), unit: l.unit || "", rate: fmt(l.rate), tax: (l.taxPct || 0) + "%", amount: fmt(amt) };
-          }),
+          templateId: tplId || fresh.templateId,
+          lines,
         });
       }
     }
     const rows = (fresh.lines || []).map((l, i) => {
-      const amt = (Number(l.qty) || 0) * (Number(l.rate) || 0);
-      return `<tr><td>${i + 1}</td><td>${l.sku || ""}<br>${l.desc || ""}</td><td class="vg-right">${l.qty}</td><td class="vg-right">${inr(l.rate)}</td><td class="vg-right">${inr(amt)}</td></tr>`;
+      const amt = computeInvLine(l).total;
+      const name = l.name || l.desc || "";
+      return `<tr><td>${i + 1}</td><td><b>${name}</b><br><span style="color:#6b7280;font-size:8pt">SKU: ${l.sku || ""}</span></td><td class="vg-right">${l.qty}</td><td class="vg-right">${inr(l.rate)}</td><td class="vg-right">${inr(amt)}</td></tr>`;
     }).join("");
     const einv = fresh.eInvoice || {};
     const eway = fresh.ewayBill || {};
@@ -102,11 +107,35 @@
       { key: "date", label: "Date" },
       { key: "salesOrderNo", label: "SO" },
       { key: "customerId", label: "Customer", render: (r) => custName(r.customerId), csv: (r) => custName(r.customerId) },
-      { key: "amount", label: "Amount", render: (r) => inr(r.amount), csv: (r) => r.amount },
+      { key: "amount", label: "Amount", render: (r) => VG.fmtInvoiceMoney ? VG.fmtInvoiceMoney(r.amount, r.currency) : inr(r.amount), csv: (r) => r.amount },
       { key: "amountPaid", label: "Paid", render: (r) => inr(r.amountPaid || 0) },
       { key: "status", label: "Status", render: (r) => <StatusTag value={r.status} map={INV_STATUS} /> },
       { key: "act", label: "Action", render: (r) => r.status !== "Paid" && can("edit") ? <Button variant="soft" className="!py-1" onClick={() => setPay(r)}>Payment</Button> : null },
     ];
+    if (view) {
+      const inv = store.get("invoices", view.id) || view;
+      if (pay) {
+        return <PaymentModal inv={pay} roleKey={roleKey} onClose={() => { setPay(null); setView(store.get("invoices", inv.id)); }} />;
+      }
+      return (
+          <InternalScreen onBack={() => setView(null)} backLabel="Back to receivables" title={"Invoice " + inv.no} subtitle={custName(inv.customerId)}
+            footer={<><DocActions build={() => invDoc(inv)} />{inv.status !== "Paid" && can("edit") && <Button icon="rupee" onClick={() => setPay(inv)}>Record payment</Button>}</>}
+            breadcrumbs={[{ label: "Receivables", onClick: () => setView(null) }, { label: inv.no }]}>
+            <StatusTag value={inv.status} map={INV_STATUS} />
+            <div className="mt-4 text-sm grid sm:grid-cols-3 gap-3 w-full">
+              <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Amount</div>{inr(inv.amount)}</Card>
+              <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Paid</div>{inr(inv.amountPaid || 0)}</Card>
+              <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Due</div>{inv.dueDate || "—"}</Card>
+            </div>
+          </InternalScreen>
+      );
+    }
+    if (pay) {
+      return <PaymentModal inv={pay} roleKey={roleKey} onClose={() => setPay(null)} />;
+    }
+    if (printPick && VG.InvoicePrintCopiesModal) {
+      return <VG.InvoicePrintCopiesModal inv={printPick.inv} mode={printPick.mode} onClose={() => setPrintPick(null)} />;
+    }
     return (
       <div>
         <PageHead title="Receivables" desc="Raise tax invoices from dispatched orders and record payments" />
@@ -115,28 +144,26 @@
           <Card className="p-3 mb-4 flex flex-wrap items-center gap-2 text-sm">
             <span className="opacity-70">Create invoice from SO:</span>
             {toInvoice.map((s) => (
-              <Button key={s.id} variant="soft" className="!py-1" onClick={() => {
-                const inv = store.createInvoiceFromSO(s.id, roleKey);
-                VG.toast("Invoice " + inv.no + " posted", "success");
-              }}>{s.no} · {inr((s.totals || {}).grand)}</Button>
+              <Button key={s.id} variant="soft" className="!py-1" onClick={async () => {
+                const existingInv = store.list("invoices").find((i) => i.salesOrderId === s.id && i.status !== "Cancelled");
+                if (existingInv) return VG.toast("Invoice " + existingInv.no + " already exists", "warn");
+                await VG.forwardDocument({
+                  action: "sales_order:invoice",
+                  fromType: "Sales Order", fromNo: s.no, fromId: s.id,
+                  toType: "Tax Invoice", actor: roleKey,
+                  run: () => {
+                    const draft = store.buildInvoiceDraftFromSO ? store.buildInvoiceDraftFromSO(s.id) : null;
+                    if (VG.openInvoiceBuilder && draft) { VG.openInvoiceBuilder(draft); return { id: s.id, no: "(draft opened)" }; }
+                    if (draft && VG.goTo) { VG._pendingInvoiceBuild = draft; VG.goTo("sales", "invoices"); return { id: s.id, no: "(draft opened)" }; }
+                    return store.createInvoiceFromSO(s.id, roleKey);
+                  },
+                });
+              }}>{s.no} · {VG.fmtInvoiceMoney ? VG.fmtInvoiceMoney((s.totals || {}).grand, s.currency) : inr((s.totals || {}).grand)}</Button>
             ))}
           </Card>
         )}
-        <RecordTable title="Customer invoices" columns={cols} rows={invRows} can={can} printTitle="Invoices" searchKeys={["no", "salesOrderNo"]}
+        <RecordTable tableId="accounts-receivables" title="Customer invoices" columns={cols} rows={invRows} can={can} printTitle="Invoices" searchKeys={["no", "salesOrderNo"]}
           filters={[{ key: "status", label: "All status", options: ["Posted", "Partially Paid", "Paid"] }]} onView={(r) => setView(r)} />
-        {view && (
-          <Modal open onClose={() => setView(null)} size="xl" title={"Invoice " + view.no} subtitle={custName(view.customerId)}
-            footer={<><DocActions build={() => invDoc(view)} />{view.status !== "Paid" && can("edit") && <Button icon="rupee" onClick={() => setPay(view)}>Record payment</Button>}</>}>
-            <StatusTag value={view.status} map={INV_STATUS} />
-            <div className="mt-4 text-sm grid sm:grid-cols-3 gap-3">
-              <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Amount</div>{inr(view.amount)}</Card>
-              <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Paid</div>{inr(view.amountPaid || 0)}</Card>
-              <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Due</div>{view.dueDate || "—"}</Card>
-            </div>
-          </Modal>
-        )}
-        {pay && <PaymentModal inv={pay} roleKey={roleKey} onClose={() => setPay(null)} />}
-        {printPick && VG.InvoicePrintCopiesModal && <VG.InvoicePrintCopiesModal inv={printPick.inv} mode={printPick.mode} onClose={() => setPrintPick(null)} />}
       </div>
     );
   }

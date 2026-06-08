@@ -1,0 +1,86 @@
+# Deploy Veraglo ERP to the production Ubuntu server (Java Spring Boot by default).
+name: Deploy — production server
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Git branch to deploy"
+        required: false
+        default: "main"
+      runtime:
+        description: "Runtime: java or node"
+        required: false
+        default: "java"
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST || '13.203.208.226' }}
+          username: ${{ secrets.DEPLOY_USER || 'ubuntu' }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || '22' }}
+          script_stop: true
+          script: |
+            set -e
+            REMOTE_DIR="${{ secrets.DEPLOY_DIR || '~/veraglo-payroll' }}"
+            BRANCH="${{ github.event.inputs.branch || 'main' }}"
+            PORT="${{ secrets.DEPLOY_APP_PORT || '3000' }}"
+            RUNTIME="${{ github.event.inputs.runtime || 'java' }}"
+            JAR_NAME="veraglo-erp-2.0.0-SNAPSHOT.jar"
+            cd ${REMOTE_DIR}
+            echo "==> git fetch && checkout ${BRANCH}"
+            git fetch origin
+            git checkout ${BRANCH}
+            git pull origin ${BRANCH}
+            if command -v docker >/dev/null 2>&1 && [ -f docker-compose.yml ]; then
+              echo "==> docker compose up -d (postgres)"
+              docker compose up -d || true
+            fi
+            if [ "${RUNTIME}" = "java" ] && [ -d java-backend ]; then
+              echo "==> build Java backend"
+              if ! command -v mvn >/dev/null 2>&1; then
+                sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq maven openjdk-21-jre-headless
+              fi
+              export DATABASE_URL="jdbc:postgresql://localhost:5432/veraglo_erp"
+              export DB_USER="veraglo"
+              export DB_PASSWORD="veraglo"
+              export PORT="${PORT}"
+              export VERAGLO_FRONTEND_PATH="${REMOTE_DIR}"
+              (cd java-backend && mvn -q -DskipTests package)
+              JAR_PATH="${REMOTE_DIR}/java-backend/target/${JAR_NAME}"
+              if command -v pm2 >/dev/null 2>&1; then
+                pm2 delete veraglo-erp-java 2>/dev/null || true
+                pm2 delete veraglo-erp 2>/dev/null || true
+                pm2 start "java -jar ${JAR_PATH}" --name veraglo-erp-java --cwd ${REMOTE_DIR}
+                pm2 save || true
+              else
+                pkill -f "${JAR_NAME}" 2>/dev/null || true
+                nohup java -jar "${JAR_PATH}" > /tmp/veraglo-java-api.log 2>&1 &
+                sleep 4
+              fi
+            else
+              echo "==> npm install (legacy Node server)"
+              cd server && npm install && cd ..
+              if command -v pm2 >/dev/null 2>&1; then
+                pm2 restart veraglo-erp 2>/dev/null || pm2 start server/index.js --name veraglo-erp --cwd ${REMOTE_DIR}/server
+                pm2 save || true
+              else
+                pkill -f "node index.js" 2>/dev/null || true
+                cd server && nohup npm start > /tmp/veraglo-api.log 2>&1 &
+                sleep 2
+              fi
+            fi
+            echo "==> health check"
+            curl -sf "http://127.0.0.1:${PORT}/api/health" | head -c 240
+            echo ""
+            echo "Deploy complete (${RUNTIME})."

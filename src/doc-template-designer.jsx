@@ -349,6 +349,9 @@
       });
     }
     const canManage = can("add") && (can("edit") || can("settings"));
+    if (edit) {
+      return <DocumentFormatDesigner open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} can={can} />;
+    }
     return (
       <div>
         <PageHead title="Document Template Designer" desc="Design quotation, invoice, challan, and HR print layouts — logo, fonts, fields, tables, footer" />
@@ -378,7 +381,6 @@
             </ul>
           </Card>
         )}
-        {edit && <DocumentFormatDesigner open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} can={can} />}
       </div>
     );
   }

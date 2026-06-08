@@ -9,6 +9,20 @@ it owns a focused, premium app rather than one cluttered system.
 This is a **working coded prototype** (greenfield React + Tailwind UI shell). The previous
 vanilla payroll app has been preserved under [`legacy/`](legacy/).
 
+## Java Spring Boot backend (enterprise migration)
+
+Veraglo ERP is migrating to **Java 21 + Spring Boot** for production-grade multi-user ERP.
+The existing React UI is preserved; the new backend lives in [`java-backend/`](java-backend/).
+
+```bash
+docker compose up -d
+./scripts/start-java.sh
+# open http://localhost:3000
+```
+
+See [docs/JAVA-MIGRATION.md](docs/JAVA-MIGRATION.md) for architecture, data migration, and rollout plan.
+The legacy Node.js API in `server/` remains during transition.
+
 ## Windows installer (.exe) for other laptops
 
 Build a **Setup.exe** (no Docker on the target PC — data stored locally):

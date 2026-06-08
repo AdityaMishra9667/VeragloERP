@@ -499,13 +499,15 @@
       { key: "defaultWarehouse", label: "Default WH", render: (r) => r.defaultWarehouse ? <Pill color="#34d399">Yes</Pill> : "—" },
       { key: "status", label: "Status", render: (r) => <StatusTag value={r.status} map={{ Active: "#34d399", Inactive: "#94a3b8" }} /> },
     ];
+    if (edit) {
+      return <LocationForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} can={can} />;
+    }
     return (
       <div>
         <PageHead title="Locations" desc="Plants, branches, warehouses, stores and rack/bin locations" />
         <RecordTable title="Locations" columns={cols} rows={rows} can={can} printTitle="Locations" searchKeys={["name", "code", "city", "contact"]}
           onNew={can("add") ? () => setEdit({}) : null} newLabel="New Location" onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete " + r.name + "?", danger: true, confirmLabel: "Delete" })) { store.remove("locations", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-        {edit && <LocationForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} can={can} />}
       </div>
     );
   }
@@ -654,6 +656,9 @@
         </div>
       ) : null },
     ];
+    if (edit) {
+      return <UserForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} can={can} />;
+    }
     return (
       <div>
         <PageHead title="Users" desc="ERP user accounts — login requires active user, role and password in this database" />
@@ -670,7 +675,6 @@
               VG.toast("User deleted — login disabled");
             }
           } : null} />
-        {edit && <UserForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} can={can} />}
       </div>
     );
   }
@@ -735,12 +739,14 @@
         </div>
       ) },
     ];
+    if (edit) {
+      return <RoleForm open onClose={() => { setEdit(null); setDup(false); }} record={edit} roleKey={roleKey} duplicate={dup} />;
+    }
     return (
       <div>
         <PageHead title="Roles" desc="Custom roles with module access, actions and hierarchy" />
         <RecordTable title="Roles" columns={cols} rows={rows} can={can} printTitle="Roles" searchKeys={["label", "key", "tag"]} search={false}
           onNew={can("add") ? () => { setDup(false); setEdit({ key: "custom_" + Date.now().toString(36).slice(-4), label: "New Role", avatar: "NR", color: "#6366f1" }); } : null} newLabel="New Role" />
-        {edit && <RoleForm open onClose={() => { setEdit(null); setDup(false); }} record={edit} roleKey={roleKey} duplicate={dup} />}
       </div>
     );
   }
@@ -838,13 +844,15 @@
       { key: "mandatory", label: "Mandatory", render: (r) => r.mandatory ? "✓" : "—" },
       { key: "approvalRequired", label: "Approval", render: (r) => r.approvalRequired ? "✓" : "—" },
     ];
+    if (edit) {
+      return <FieldPermForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} />;
+    }
     return (
       <div>
         <PageHead title="Field Permissions" desc="Control visibility, editability and mandatory rules per module field" />
         <RecordTable title="Field rules" columns={cols} rows={rows} can={can} printTitle="Field Permissions" searchKeys={["module", "field"]}
           onNew={can("add") ? () => setEdit({}) : null} newLabel="Add rule" onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete this rule?", danger: true, confirmLabel: "Delete" })) { store.remove("fieldPermissions", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-        {edit && <FieldPermForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} />}
       </div>
     );
   }
@@ -897,13 +905,15 @@
       { key: "escalationHours", label: "Escalation (h)" },
       { key: "active", label: "Status", render: (r) => <StatusTag value={r.active !== false ? "Active" : "Inactive"} map={{ Active: "#34d399", Inactive: "#94a3b8" }} /> },
     ];
+    if (edit) {
+      return <ApprovalForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} />;
+    }
     return (
       <div>
         <PageHead title="Approval Workflows" desc="Multi-level approval rules by process type and amount" />
         <RecordTable title="Workflows" columns={cols} rows={rows} can={can} printTitle="Approval Workflows" searchKeys={["process"]}
           onNew={can("add") ? () => setEdit({}) : null} newLabel="New Workflow" onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete workflow?", danger: true, confirmLabel: "Delete" })) { store.remove("approvalWorkflows", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-        {edit && <ApprovalForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} />}
       </div>
     );
   }
@@ -984,29 +994,55 @@
       { key: "reset", label: "Reset" },
       { key: "active", label: "Status", render: (r) => <StatusTag value={r.active !== false ? "Active" : "Inactive"} map={{ Active: "#34d399", Inactive: "#94a3b8" }} /> },
     ];
+    if (edit) {
+      return <SeriesForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} />;
+    }
     return (
       <div>
         <PageHead title="Numbering Series" desc="Auto-number prefixes for quotations, orders, challans and invoices" />
         <RecordTable title="Series" columns={cols} rows={rows} can={can} printTitle="Number Series" searchKeys={["prefix", "docType"]}
           onNew={can("add") ? () => setEdit({}) : null} newLabel="New Series" onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete series?", danger: true, confirmLabel: "Delete" })) { store.remove("numberSeries", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-        {edit && <SeriesForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} />}
       </div>
     );
   }
 
   /* ================= Security ================= */
-  function SecurityPage({ roleKey, can }) {
+  function SecurityPage({ roleKey, can, go }) {
     VG.useDB();
     const live = store.settings().security;
+    const resetLogs = (store.db().passwordResetLog || []).slice().reverse().slice(0, 50);
     const [s, setS] = useState(() => clone(live));
     const set = (k, v) => setS((p) => ({ ...p, [k]: v }));
     function save() { store.saveAdminSettings({ security: s }, roleKey); VG.toast("Security settings saved"); }
     return (
-      <div>
-        <PageHead title="Security Settings" desc="Password policy, session timeout, login lockout and audit retention">
+      <div className="space-y-4">
+        <PageHead title="Security Settings" desc="Password policy, session timeout, login lockout, forgot password and audit retention">
           {can("edit") && <Button icon="check" onClick={save}>Save settings</Button>}
         </PageHead>
+        <Card className="p-4">
+          <h3 className="text-sm font-semibold mb-3">Forgot password (self-service)</h3>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+            <div className="lg:col-span-3">
+              <Checkbox checked={s.forgotPasswordEnabled !== false} onChange={(v) => set("forgotPasswordEnabled", v)} label="Enable forgot password on login screen" />
+            </div>
+            <Field label="OTP expiry (minutes)"><Num value={s.forgotPasswordOtpExpiryMins || 10} onChange={(v) => set("forgotPasswordOtpExpiryMins", v)} min={5} max={60} /></Field>
+            <Field label="Reset link expiry (minutes)"><Num value={s.forgotPasswordLinkExpiryMins || 60} onChange={(v) => set("forgotPasswordLinkExpiryMins", v)} min={15} max={1440} /></Field>
+            <Field label="Max attempts per hour"><Num value={s.forgotPasswordMaxAttemptsPerHour || 5} onChange={(v) => set("forgotPasswordMaxAttemptsPerHour", v)} min={3} max={20} /></Field>
+            <Field label="Delivery method" className="lg:col-span-2">
+              <Select
+                value={s.forgotPasswordDelivery || "both"}
+                onChange={(v) => set("forgotPasswordDelivery", v)}
+                options={[
+                  { value: "email", label: "Email only" },
+                  { value: "sms", label: "SMS only" },
+                  { value: "both", label: "Email and SMS" },
+                ]}
+              />
+            </Field>
+          </div>
+          <p className="text-xs opacity-55">Configure SMTP and SMS under Notifications. Set VERAGLO_DEBUG_RESET=1 on the server to log OTP/link to console during development.</p>
+        </Card>
         <Card className="p-4">
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
             <Field label="Min password length"><Num value={s.minPasswordLength} onChange={(v) => set("minPasswordLength", v)} /></Field>
@@ -1024,6 +1060,25 @@
               <Checkbox checked={!!s.forceLogoutAll} onChange={(v) => set("forceLogoutAll", v)} label="Force logout all sessions on save" />
             </div>
           </div>
+        </Card>
+        <RecordTable
+          title="Password reset activity log"
+          columns={[
+            { key: "ts", label: "When", render: (r) => fmtTime(r.ts) },
+            { key: "action", label: "Action", render: (r) => r.action || "—" },
+            { key: "email", label: "User", render: (r) => r.email || "—" },
+            { key: "ip", label: "IP", render: (r) => (r.ip || "—").slice(0, 24) },
+            { key: "detail", label: "Detail", render: (r) => (r.detail || "").slice(0, 60) },
+          ]}
+          rows={resetLogs}
+          can={can}
+          empty="No password reset activity yet"
+          searchKeys={["email", "action", "detail"]}
+        />
+        <Card className="p-4 flex flex-wrap items-center gap-3">
+          <Icon name="users" size={20} style={{ color: "var(--accent)" }} />
+          <span className="text-sm flex-1">Manual password reset: open Admin → Users, edit a user, and set a new password.</span>
+          {go && <Button variant="soft" onClick={() => go("users")}>Open Users</Button>}
         </Card>
       </div>
     );
@@ -1051,6 +1106,16 @@
             <Field label="Password"><Text type="password" value={n.smtpPass} onChange={(v) => set("smtpPass", v)} /></Field>
             <div className="flex items-end pb-1"><Checkbox checked={n.smtpTls !== false} onChange={(v) => set("smtpTls", v)} label="Use TLS" /></div>
           </div>
+        </Card>
+        <Card className="p-4 mb-4">
+          <h3 className="text-sm font-semibold mb-3">SMS (password reset & alerts)</h3>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="lg:col-span-3"><Checkbox checked={!!n.smsEnabled} onChange={(v) => set("smsEnabled", v)} label="Enable SMS delivery" /></div>
+            <Field label="Provider"><Select value={n.smsProvider || "Twilio"} onChange={(v) => set("smsProvider", v)} options={["Twilio", "MSG91", "AWS SNS", "Other"].map((x) => ({ value: x, label: x }))} /></Field>
+            <Field label="API key"><Text type="password" value={n.smsApiKey || ""} onChange={(v) => set("smsApiKey", v)} /></Field>
+            <Field label="Sender ID"><Text value={n.smsFrom || ""} onChange={(v) => set("smsFrom", v)} placeholder="VERAGLO" /></Field>
+          </div>
+          <p className="text-xs opacity-55 mt-2">SMS requires provider configuration. Without it, reset codes are sent by email when SMTP is configured.</p>
         </Card>
         <Card className="p-4">
           <h3 className="text-sm font-semibold mb-3">Alert toggles</h3>
@@ -1142,6 +1207,154 @@
             <p className="text-xs opacity-50">Document numbers and financial values use tabular numerals for aligned, premium readability — same family as body text.</p>
           </div>
         </Card>
+      </div>
+    );
+  }
+
+  const WEATHER_CONDITIONS = [
+    { id: "clear", label: "Clear / sunny" },
+    { id: "cloudy", label: "Cloudy" },
+    { id: "rain", label: "Rain" },
+    { id: "fog", label: "Fog / haze" },
+    { id: "storm", label: "Storm / thunder" },
+    { id: "night", label: "Night" },
+    { id: "snow", label: "Snow" },
+  ];
+
+  /* ================= Login weather theme ================= */
+  function WeatherLoginPage({ roleKey, can }) {
+    VG.useDB();
+    const live = store.settings().weatherLogin || {};
+    const companyCity = (store.company() || {}).city
+      || ((store.company() || {}).registeredAddress || {}).city
+      || ((store.company() || {}).officeAddress || {}).city
+      || "";
+    const [w, setW] = useState(() => clone({ ...store.settings().weatherLogin }));
+    const [preview, setPreview] = useState(null);
+    const [previewBusy, setPreviewBusy] = useState(false);
+    const set = (k, v) => setW((p) => ({ ...p, [k]: v }));
+    const setWall = (cond, v) => setW((p) => ({ ...p, wallpapers: { ...(p.wallpapers || {}), [cond]: v } }));
+
+    async function fetchPreview() {
+      if (previewBusy) return;
+      setPreviewBusy(true);
+      try {
+        const params = new URLSearchParams({ source: w.locationSource || "company" });
+        if (w.locationSource === "manual" && w.manualCity) params.set("city", w.manualCity);
+        const res = await fetch((VG.apiBase || "") + "/api/weather/current?" + params.toString());
+        const data = await res.json();
+        setPreview(data);
+        if (data.ok) VG.toast("Weather preview loaded");
+        else VG.toast(data.error || "Weather unavailable", "warn");
+      } catch (e) {
+        VG.toast("Could not reach weather service", "error");
+      } finally {
+        setPreviewBusy(false);
+      }
+    }
+
+    function save() {
+      store.saveAdminSettings({ weatherLogin: w }, roleKey);
+      try { localStorage.removeItem("veraglo-weather-login-cache"); } catch (e) {}
+      VG.toast("Login weather settings saved");
+    }
+
+    const stock = (VG.WEATHER_LOGIN_WALLPAPERS || {});
+
+    return (
+      <div className="space-y-4">
+        <PageHead
+          title="Login Weather Theme"
+          desc="Dynamic login wallpaper and colours from live weather. Loads asynchronously — never blocks sign-in."
+        >
+          {can("edit") && (
+            <div className="flex flex-wrap gap-2">
+              <Button variant="soft" icon="refresh" onClick={fetchPreview} disabled={previewBusy || !w.enabled}>
+                {previewBusy ? "Loading…" : "Preview weather"}
+              </Button>
+              <Button icon="check" onClick={save}>Save settings</Button>
+            </div>
+          )}
+        </PageHead>
+
+        <Card className="p-4">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="sm:col-span-2 lg:col-span-3">
+              <Checkbox checked={w.enabled !== false} onChange={(v) => set("enabled", v)} label="Enable weather-based login theme" />
+            </div>
+            <Field label="Location source" hint="Where to fetch weather for the login page">
+              <Select
+                value={w.locationSource || "company"}
+                onChange={(v) => set("locationSource", v)}
+                options={[
+                  { value: "company", label: "Company city (Admin → Company Profile)" },
+                  { value: "browser", label: "Visitor current location (browser permission)" },
+                  { value: "manual", label: "Manual city" },
+                ]}
+              />
+            </Field>
+            {w.locationSource === "manual" ? (
+              <Field label="Manual city" hint="City name for geocoding, e.g. Mumbai, India">
+                <Text value={w.manualCity || ""} onChange={(v) => set("manualCity", v)} placeholder="Mumbai" />
+              </Field>
+            ) : (
+              <Field label="Company city (reference)" hint={companyCity ? "Using: " + companyCity : "Set city in Company Profile → Addresses"}>
+                <Text value={companyCity || "— not set —"} readOnly />
+              </Field>
+            )}
+            <Field label="Refresh interval (minutes)" hint="Client cache + background refresh">
+              <Num value={w.refreshIntervalMins || 30} onChange={(v) => set("refreshIntervalMins", Math.max(5, Number(v) || 30))} min={5} max={180} />
+            </Field>
+            <Field label="OpenWeather API key (optional)" hint="Open-Meteo is used by default (no key). Reserve for future fallback." className="lg:col-span-2">
+              <Text type="password" value={w.openWeatherApiKey || ""} onChange={(v) => set("openWeatherApiKey", v)} placeholder="Leave blank to use Open-Meteo" />
+            </Field>
+          </div>
+        </Card>
+
+        <Card className="p-4">
+          <h3 className="font-semibold text-sm mb-1">Wallpapers</h3>
+          <p className="text-xs opacity-60 mb-4">Upload an image or paste a URL/path. Empty fields use curated stock photos per condition.</p>
+          <Field label="Default fallback wallpaper" className="mb-4">
+            <div className="grid sm:grid-cols-2 gap-3 items-start">
+              <Text value={w.defaultWallpaper || "assets/happy-employees.png"} onChange={(v) => set("defaultWallpaper", v)} />
+              <ImageUploadField label="Upload default" value={w.defaultWallpaper} onChange={(v) => set("defaultWallpaper", v)} />
+            </div>
+          </Field>
+          <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
+            {WEATHER_CONDITIONS.map((c) => (
+              <div key={c.id} className="rounded-xl border border-white/10 p-3 space-y-2">
+                <div className="text-xs font-medium">{c.label}</div>
+                <div className="vg-weather-preview">
+                  <img src={(w.wallpapers || {})[c.id] || stock[c.id] || w.defaultWallpaper} alt="" />
+                </div>
+                <Text
+                  value={((w.wallpapers || {})[c.id]) || ""}
+                  onChange={(v) => setWall(c.id, v)}
+                  placeholder={stock[c.id] ? "Stock photo (leave empty)" : "URL or assets/…"}
+                />
+                <ImageUploadField label={"Upload " + c.label} value={(w.wallpapers || {})[c.id]} onChange={(v) => setWall(c.id, v)} />
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        {preview && (
+          <Card className="p-4">
+            <div className="text-[11px] uppercase tracking-wider opacity-55 mb-2">Live preview</div>
+            {preview.ok ? (
+              <div className="flex flex-wrap items-center gap-4 text-sm">
+                <span className="text-2xl font-display font-bold">{preview.temperature}°C</span>
+                <div>
+                  <div className="font-medium">{preview.location}</div>
+                  <div className="text-xs opacity-70">{preview.conditionLabel} · Theme: {preview.condition}</div>
+                  {preview.forecastSummary && <div className="text-xs opacity-55 mt-1">{preview.forecastSummary}</div>}
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm opacity-60">{preview.error || preview.reason || "Weather unavailable"}</p>
+            )}
+          </Card>
+        )}
       </div>
     );
   }
@@ -1339,6 +1552,7 @@
     { id: "notifications", label: "Notifications", icon: "bell", group: "System" },
     { id: "uiSettings", label: "UI Settings", icon: "settings", group: "System" },
     { id: "theme", label: "Theme", icon: "sparkle", group: "System" },
+    { id: "weatherLogin", label: "Login Weather", icon: "cloud", group: "System" },
     { id: "backup", label: "Backup & Restore", icon: "cloud", group: "System" },
     { id: "audit", label: "Audit Trail", icon: "activity", group: "System" },
     { id: "licDashboard", label: "License Dashboard", icon: "shield", group: "Licensing & Data" },
@@ -1361,7 +1575,7 @@
     masterData: MasterDataPage, importExport: ImportExportPage, templates: DocumentTemplatesPage,
     numberSeries: NumberSeriesPage, skuNumbering: (p) => VG.SkuNumberingPage ? React.createElement(VG.SkuNumberingPage, p) : null,
     security: SecurityPage, notifications: NotificationsPage,
-    uiSettings: UiSettingsPage, theme: ThemePage, backup: BackupRestore, audit: AuditTrail,
+    uiSettings: UiSettingsPage, theme: ThemePage, weatherLogin: WeatherLoginPage, backup: BackupRestore, audit: AuditTrail,
     licDashboard: licensePages.licDashboard, licGenerate: licensePages.licGenerate,
     licActivate: licensePages.licActivate, licRenew: licensePages.licRenew,
     licTransfer: licensePages.licTransfer, licDeactivate: licensePages.licDeactivate,

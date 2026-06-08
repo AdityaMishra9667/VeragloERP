@@ -5,7 +5,8 @@
 (function (VG) {
   const { useState, useEffect } = React;
   const KEY = "veraglo-erp-db";
-  const VERSION = 11;
+  const VERSION = 12;
+  const ITEM_DESC_MAX = 30000;
   const AUTH_INACTIVE_MSG = "User account does not exist or has been deactivated.";
   const ITEM_MFR_DUP_MSG = "This manufacturer and part number already exist in Item Master. Duplicate item cannot be created.";
 
@@ -175,14 +176,14 @@
       { id: "mfr5", code: "MFR-005", name: "Kingboard", brand: "Kingboard", country: "China", website: "", contact: "", email: "", active: true },
     ];
     const items = [
-      { id: "i1", sku: "DRV-36W", name: "LED Driver 36W Constant Current", categoryId: "cat0", unit: "Nos", hsn: "85044090", rate: 320, taxId: "gst18", reorder: 200, minStock: 120, batchTracked: true, locationId: "loc0", warranty: "24 months", manufacturerId: "mfr2", manufacturerPartNumber: "LCM-36X", manufacturerDesc: "36W constant current LED driver", manufacturerModel: "LCM-36X", brandName: "Mean Well" },
-      { id: "i2", sku: "DRV-50W", name: "LED Driver 50W Dimmable", categoryId: "cat0", unit: "Nos", hsn: "85044090", rate: 540, taxId: "gst18", reorder: 150, minStock: 100, batchTracked: true, locationId: "loc0", warranty: "24 months", manufacturerId: "mfr2", manufacturerPartNumber: "LCM-50X", manufacturerDesc: "50W dimmable LED driver", manufacturerModel: "LCM-50X", brandName: "Mean Well" },
-      { id: "i3", sku: "HS-50W", name: "Aluminium Heat Sink 50W", categoryId: "cat1", unit: "Nos", hsn: "76169990", rate: 145, taxId: "gst18", reorder: 300, minStock: 150, batchTracked: false, locationId: "loc0", warranty: "", manufacturerId: "mfr3", manufacturerPartNumber: "HS-AL-50", manufacturerDesc: "Extruded aluminium heat sink 50W class", manufacturerModel: "HS-AL-50", brandName: "Cree" },
-      { id: "i4", sku: "HOU-RND-7", name: "Round Housing 7-inch", categoryId: "cat2", unit: "Nos", hsn: "94054090", rate: 88, taxId: "gst12", reorder: 400, minStock: 200, batchTracked: false, locationId: "loc0", warranty: "", manufacturerId: "mfr1", manufacturerPartNumber: "HOUS-RND-7", manufacturerDesc: "Die-cast round downlight housing 7 inch", manufacturerModel: "HOUS-RND-7", brandName: "OSRAM" },
-      { id: "i5", sku: "OPT-90D", name: "Optical Lens 90° Beam", categoryId: "cat5", unit: "Nos", hsn: "90019000", rate: 26, taxId: "gst18", reorder: 800, minStock: 400, batchTracked: false, locationId: "loc0", warranty: "", manufacturerId: "mfr4", manufacturerPartNumber: "C13450-90", manufacturerDesc: "PMMA lens 90° beam angle", manufacturerModel: "C13450", brandName: "Ledil" },
-      { id: "i6", sku: "PCB-MCB-24", name: "MCPCB 24-LED Board", categoryId: "cat6", unit: "Nos", hsn: "85340000", rate: 210, taxId: "gst18", reorder: 250, minStock: 150, batchTracked: true, locationId: "loc0", warranty: "12 months", manufacturerId: "mfr5", manufacturerPartNumber: "KB-MCPCB-24", manufacturerDesc: "Metal core PCB 24 LED positions", manufacturerModel: "KB-MCPCB-24", brandName: "Kingboard" },
-      { id: "i7", sku: "WIR-2C-1.0", name: "2-Core Wire 1.0sqmm (per mtr)", categoryId: "cat7", unit: "Mtr", hsn: "85444900", rate: 18, taxId: "gst18", reorder: 2000, minStock: 1000, batchTracked: false, locationId: "loc0", warranty: "", manufacturerId: "mfr1", manufacturerPartNumber: "WIRE-2C-1.0", manufacturerDesc: "2-core copper wire 1.0 sqmm", manufacturerModel: "", brandName: "" },
-      { id: "i8", sku: "PKG-CRT-A", name: "Carton Box Type-A", categoryId: "cat4", unit: "Nos", hsn: "48191010", rate: 12, taxId: "gst12", reorder: 1500, minStock: 800, batchTracked: false, locationId: "loc0", warranty: "", manufacturerId: "", manufacturerPartNumber: "", manufacturerDesc: "", manufacturerModel: "", brandName: "" },
+      { id: "i1", sku: "DRV-36W", name: "Mean Well LED Driver 36W", description: "LED Driver 36W Constant Current\n• Make: Mean Well\n• Model: LCM-36X\n• Application: Indoor/outdoor LED luminaire power supply\n• Warranty: 24 months", categoryId: "cat0", unit: "Nos", hsn: "85044090", rate: 320, taxId: "gst18", reorder: 200, minStock: 120, batchTracked: true, locationId: "loc0", warranty: "24 months", manufacturerId: "mfr2", manufacturerPartNumber: "LCM-36X", manufacturerDesc: "36W constant current LED driver", manufacturerModel: "LCM-36X", brandName: "Mean Well" },
+      { id: "i2", sku: "DRV-50W", name: "Mean Well LED Driver 50W", description: "LED Driver 50W Dimmable (0–10V)\n• Make: Mean Well\n• Model: LCM-50X\n• Application: Façade and architectural dimming\n• Warranty: 24 months", categoryId: "cat0", unit: "Nos", hsn: "85044090", rate: 540, taxId: "gst18", reorder: 150, minStock: 100, batchTracked: true, locationId: "loc0", warranty: "24 months", manufacturerId: "mfr2", manufacturerPartNumber: "LCM-50X", manufacturerDesc: "50W dimmable LED driver", manufacturerModel: "LCM-50X", brandName: "Mean Well" },
+      { id: "i3", sku: "HS-50W", name: "Aluminium Heat Sink 50W", description: "Extruded aluminium heat sink for 50W LED modules.\n• Material: AL6063\n• Finish: Anodized\n• Application: Downlight and panel cooling", categoryId: "cat1", unit: "Nos", hsn: "76169990", rate: 145, taxId: "gst18", reorder: 300, minStock: 150, batchTracked: false, locationId: "loc0", warranty: "", manufacturerId: "mfr3", manufacturerPartNumber: "HS-AL-50", manufacturerDesc: "Extruded aluminium heat sink 50W class", manufacturerModel: "HS-AL-50", brandName: "Cree" },
+      { id: "i4", sku: "HOU-RND-7", name: "OSRAM Round Housing 7\"", description: "Die-cast round downlight housing, 7 inch.\n• Make: OSRAM\n• Model: HOUS-RND-7\n• Finish: Powder coated white", categoryId: "cat2", unit: "Nos", hsn: "94054090", rate: 88, taxId: "gst12", reorder: 400, minStock: 200, batchTracked: false, locationId: "loc0", warranty: "", manufacturerId: "mfr1", manufacturerPartNumber: "HOUS-RND-7", manufacturerDesc: "Die-cast round downlight housing 7 inch", manufacturerModel: "HOUS-RND-7", brandName: "OSRAM" },
+      { id: "i5", sku: "OPT-90D", name: "Ledil Lens 90° Beam", description: "PMMA optical lens, 90° beam angle.\n• Make: Ledil\n• Part: C13450-90\n• Application: Spot and downlight optics", categoryId: "cat5", unit: "Nos", hsn: "90019000", rate: 26, taxId: "gst18", reorder: 800, minStock: 400, batchTracked: false, locationId: "loc0", warranty: "", manufacturerId: "mfr4", manufacturerPartNumber: "C13450-90", manufacturerDesc: "PMMA lens 90° beam angle", manufacturerModel: "C13450", brandName: "Ledil" },
+      { id: "i6", sku: "PCB-MCB-24", name: "Kingboard MCPCB 24-LED", description: "Metal core PCB — 24 LED positions.\n• Make: Kingboard\n• Model: KB-MCPCB-24\n• Warranty: 12 months", categoryId: "cat6", unit: "Nos", hsn: "85340000", rate: 210, taxId: "gst18", reorder: 250, minStock: 150, batchTracked: true, locationId: "loc0", warranty: "12 months", manufacturerId: "mfr5", manufacturerPartNumber: "KB-MCPCB-24", manufacturerDesc: "Metal core PCB 24 LED positions", manufacturerModel: "KB-MCPCB-24", brandName: "Kingboard" },
+      { id: "i7", sku: "WIR-2C-1.0", name: "2-Core Wire 1.0 sqmm", description: "2-core copper wire, 1.0 sqmm, per metre.\n• Conductor: Copper\n• Application: Internal wiring for luminaires", categoryId: "cat7", unit: "Mtr", hsn: "85444900", rate: 18, taxId: "gst18", reorder: 2000, minStock: 1000, batchTracked: false, locationId: "loc0", warranty: "", manufacturerId: "mfr1", manufacturerPartNumber: "WIRE-2C-1.0", manufacturerDesc: "2-core copper wire 1.0 sqmm", manufacturerModel: "", brandName: "" },
+      { id: "i8", sku: "PKG-CRT-A", name: "Carton Box Type-A", description: "Corrugated carton for finished goods packing.\n• Type: 5-ply export grade\n• Application: Standard FG dispatch", categoryId: "cat4", unit: "Nos", hsn: "48191010", rate: 12, taxId: "gst12", reorder: 1500, minStock: 800, batchTracked: false, locationId: "loc0", warranty: "", manufacturerId: "", manufacturerPartNumber: "", manufacturerDesc: "", manufacturerModel: "", brandName: "" },
     ];
     items.forEach((it) => {
       const mfr = it.manufacturerId ? manufacturers.find((m) => m.id === it.manufacturerId) : null;
@@ -234,7 +235,7 @@
         {
           id: "so1", no: "SO/2627/0001", date: todayISO(), quotationId: "", customerId: "c1",
           contact: "R. Kapoor", billing: "Court House, Lokmanya Tilak Marg, Mumbai 400002", shipping: "DC-3, Bhiwandi Logistics Park, Bhiwandi 421302",
-          gstin: "27AAACR5055K1Z5", lines: [{ sku: "DRV-36W", desc: "LED Driver 36W", hsn: "85044090", qty: 200, unit: "Nos", rate: 320, discountPct: 5, taxPct: 18 }],
+          gstin: "27AAACR5055K1Z5", lines: [{ sku: "DRV-36W", name: "Mean Well LED Driver 36W", desc: "LED Driver 36W Constant Current\n• Make: Mean Well\n• Model: LCM-36X", hsn: "85044090", qty: 200, unit: "Nos", rate: 320, discountPct: 5, taxPct: 18 }],
           totals: { sub: 64000, discount: 3200, taxable: 60800, tax: 10944, charges: 0, grand: 71744 },
           paymentTermsId: "pt2", deliveryTermsId: "dt3", status: "Confirmed", stage: "Confirmed", preparedBy: "sales",
           timeline: [{ ts: Date.now(), action: "create", by: "sales", note: "Order confirmed from quotation" }],
@@ -310,10 +311,32 @@
         minPasswordLength: 8, passwordExpiryDays: 90, sessionTimeoutMins: 60, maxLoginAttempts: 5,
         lockoutMins: 30, twoFactorRequired: false, loginOtp: false, ipRestriction: false, allowedIps: "",
         exportRestricted: false, auditRetentionDays: 365, forceLogoutAll: false,
+        forgotPasswordEnabled: true,
+        forgotPasswordOtpExpiryMins: 10,
+        forgotPasswordLinkExpiryMins: 60,
+        forgotPasswordMaxAttemptsPerHour: 5,
+        forgotPasswordDelivery: "both",
       },
       theme: {
         accent: "#6366f1", defaultMode: "dark", sidebarCollapsed: false, fontSize: "medium",
         loginBackground: "assets/happy-employees.png",
+      },
+      weatherLogin: {
+        enabled: true,
+        locationSource: "company",
+        manualCity: "",
+        refreshIntervalMins: 30,
+        openWeatherApiKey: "",
+        defaultWallpaper: "assets/happy-employees.png",
+        wallpapers: {
+          clear: "",
+          cloudy: "",
+          rain: "",
+          fog: "",
+          storm: "",
+          night: "",
+          snow: "",
+        },
       },
       typography: {
         fontFamily: "inter", headingSize: "medium", tableSize: "medium", formSize: "medium",
@@ -323,6 +346,8 @@
       notifications: {
         smtpHost: "", smtpPort: 587, smtpUser: "", smtpPass: "", smtpFrom: "noreply@veraglo.in",
         smtpTls: true, lowStockAlert: true, approvalAlerts: true, paymentReminders: true, followupReminders: true,
+        smsEnabled: false, smsProvider: "Twilio", smsApiKey: "", smsFrom: "",
+        passwordResetAlerts: true,
       },
       license: { plan: "Enterprise Manufacturing", seats: 50, validUntil: "2027-03-31", status: "Active" },
       activation: { status: "Trial", trialEndsAt: null, serial: "", licenseKeyId: "", machineId: "" },
@@ -358,6 +383,7 @@
     ["purchaseRequests", "purchaseOrders", "qcInspections", "qcIssues", "ncrs", "boms", "workOrders", "materialRequirements", "finishedGoodsTransfers", "dispatchQueue", "orderHistory", "shipments", "invoices", "payments", "employees", "leaveRequests", "attendanceRecords", "payrollRuns", "salarySlips",
       "erpUsers", "customRoles", "loginLog", "approvalWorkflows", "documentTemplates", "numberSeries", "fieldPermissions", "departments", "designations"].forEach((k) => { if (!Array.isArray(db[k])) db[k] = []; });
     if (!db.settings.security) db.settings.security = defaultSettings().security;
+    else db.settings.security = { ...defaultSettings().security, ...db.settings.security };
     if (!db.settings.theme) db.settings.theme = defaultSettings().theme;
     if (!db.settings.typography) {
       db.settings.typography = typeof VG !== "undefined" && VG.defaultTypography
@@ -367,12 +393,15 @@
       db.settings.typography = { ...defaultSettings().typography, ...db.settings.typography };
     }
     if (!db.settings.notifications) db.settings.notifications = defaultSettings().notifications;
+    else db.settings.notifications = { ...defaultSettings().notifications, ...db.settings.notifications };
     if (!db.settings.license) db.settings.license = defaultSettings().license;
     if (!db.settings.dashboard) db.settings.dashboard = defaultSettings().dashboard;
     if (!db.settings.skuNumbering) db.settings.skuNumbering = defaultSettings().skuNumbering;
     else db.settings.skuNumbering = { ...defaultSettings().skuNumbering, ...db.settings.skuNumbering, categoryPrefixes: { ...defaultSettings().skuNumbering.categoryPrefixes, ...(db.settings.skuNumbering.categoryPrefixes || {}) } };
     if (!db.settings.activation) db.settings.activation = defaultSettings().activation;
     if (!db.settings.dataPath) db.settings.dataPath = defaultSettings().dataPath;
+    if (!db.settings.weatherLogin) db.settings.weatherLogin = defaultSettings().weatherLogin;
+    else db.settings.weatherLogin = { ...defaultSettings().weatherLogin, ...db.settings.weatherLogin, wallpapers: { ...defaultSettings().weatherLogin.wallpapers, ...(db.settings.weatherLogin.wallpapers || {}) } };
     migrateLicense(db);
     db.seq = db.seq || {};
     ["PR", "PO", "QC", "QCI", "NCR", "BOM", "WO", "MR", "FG", "SH", "INV", "LP", "PAY", "USR"].forEach((k) => { if (db.seq[k] == null) db.seq[k] = 0; });
@@ -384,8 +413,44 @@
     migrateManufacturers(db);
     migrateCompanyAddresses(db);
     migrateEnquiries(db);
+    migrateInvoices(db);
+    migrateItems(db);
     db._v = VERSION;
     return db;
+  }
+
+  function migrateItems(db) {
+    (db.items || []).forEach((it) => {
+      if (!it.description && it.manufacturerDesc) it.description = String(it.manufacturerDesc);
+      if (it.description && String(it.description).length > ITEM_DESC_MAX) {
+        it.description = String(it.description).slice(0, ITEM_DESC_MAX);
+      }
+    });
+    (db.quotations || []).concat(db.proformas || [], db.salesOrders || [], db.invoices || [], db.purchaseOrders || []).forEach((doc) => {
+      (doc.lines || []).forEach((l) => {
+        if (!l.name && l.itemId) {
+          const it = (db.items || []).find((x) => x.id === l.itemId);
+          if (it) {
+            if (!l.name) l.name = it.name || "";
+            if (!l.desc || l.desc === it.name) l.desc = it.description || it.manufacturerDesc || l.desc || "";
+          }
+        }
+      });
+    });
+  }
+
+  function migrateInvoices(db) {
+    (db.invoices || []).forEach((inv) => {
+      if (typeof VG !== "undefined" && VG.normalizeInvoice) {
+        const n = VG.normalizeInvoice(inv);
+        Object.assign(inv, n);
+        if (inv.totals && VG.computeFxTotals) inv.fxTotals = VG.computeFxTotals(inv, inv.totals);
+      } else {
+        if (!inv.invoiceType) inv.invoiceType = "domestic";
+        if (!inv.currency) inv.currency = "INR";
+        if (inv.exchangeRate == null) inv.exchangeRate = 1;
+      }
+    });
   }
 
   function migrateEnquiries(db) {
@@ -679,6 +744,7 @@
         { id: "tpl1c", docType: "Quotation", name: "Quotation — Warm Commerce", isDefault: false, ...presets("warm") },
         { id: "tpl2", docType: "Tax Invoice", name: "Tax Invoice — Corporate GST", isDefault: true, ...presets("corporate"), showQr: true },
         { id: "tpl2b", docType: "Tax Invoice", name: "Tax Invoice — Classic", isDefault: false, ...presets("classic") },
+        { id: "tpl2exp", docType: "Tax Invoice", name: "Export Tax Invoice — International", isDefault: false, variant: "export_inv", themeId: "industrial", docTitleOverride: "Export Tax Invoice", showQr: true, showAmountInWords: true, ...presets("industrial") },
         { id: "tpl3", docType: "Purchase Order", name: "Purchase Order — Modern", isDefault: true, ...presets("modern") },
         { id: "tpl4", docType: "Salary Slip", name: "Salary Slip — Classic", isDefault: true, ...presets("classic"), fontSize: 10, showDocRibbon: false },
         { id: "tpl5", docType: "Proforma Invoice", name: "Proforma — Executive", isDefault: true, ...presets("executive") },
@@ -705,6 +771,14 @@
       { id: "role_im", key: "inventory_manager", label: "Inventory Manager", tag: "Stock control", avatar: "IM", color: "#059669", moduleAccess: ["inventory", "purchase", "reports"], actions: ["view", "add", "edit", "delete", "approve", "export", "print"], permissions: {}, hierarchy: 45, builtIn: true, active: true },
       { id: "role_qm", key: "quality_manager", label: "Quality Manager", tag: "QC leadership", avatar: "QM", color: "#7c3aed", moduleAccess: ["quality", "production", "reports"], actions: ["view", "add", "edit", "approve", "export", "print"], permissions: {}, hierarchy: 45, builtIn: true, active: true },
     ];
+    if (!(db.documentTemplates || []).some((t) => t.id === "tpl2exp")) {
+      const indPreset = typeof VG !== "undefined" && VG.applyDocThemePreset ? VG.applyDocThemePreset("industrial") : tplBase;
+      db.documentTemplates = (db.documentTemplates || []).concat([{
+        id: "tpl2exp", docType: "Tax Invoice", name: "Export Tax Invoice — International", isDefault: false,
+        variant: "export_inv", themeId: "industrial", docTitleOverride: "Export Tax Invoice",
+        showQr: true, showAmountInWords: true, active: true, ...indPreset,
+      }]);
+    }
     extraRoles.forEach((r) => { if (!(db.customRoles || []).some((x) => x.key === r.key)) db.customRoles.push(r); });
     if (!(db.fieldPermissions || []).length) {
       db.fieldPermissions = [
@@ -714,12 +788,26 @@
       ];
     }
   }
-  function load() {
+  function readLocalState() {
     try {
       const raw = JSON.parse(localStorage.getItem(KEY) || "null");
       if (raw && raw._v) return migrate(raw);
     } catch (e) {}
+    return null;
+  }
+
+  function stateSavedAt(st) {
+    if (!st) return 0;
+    const local = Number(st._localSavedAt);
+    if (local > 0) return local;
+    return st._updatedAt ? new Date(st._updatedAt).getTime() : 0;
+  }
+
+  function load() {
+    const saved = readLocalState();
+    if (saved) return saved;
     const fresh = seed();
+    fresh._localSavedAt = Date.now();
     try { localStorage.setItem(KEY, JSON.stringify(fresh)); } catch (e) {}
     return fresh;
   }
@@ -729,27 +817,58 @@
     return (typeof VG !== "undefined" && VG.apiBase != null) ? String(VG.apiBase) : "";
   }
 
-  async function pushStateToApi() {
-    if (!_usePostgres) return;
+  async function pushStateToApi(opts) {
+    if (!_usePostgres) return false;
     try {
+      DB._localSavedAt = DB._localSavedAt || Date.now();
       const res = await fetch(apiBase() + "/api/state", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(DB),
+        keepalive: !!(opts && opts.keepalive),
       });
       if (!res.ok) throw new Error("PUT /api/state " + res.status);
+      const body = await res.json().catch(() => ({}));
+      if (body.updatedAt) DB._updatedAt = body.updatedAt;
+      try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {}
+      return true;
     } catch (e) {
       console.warn("[Veraglo store] PostgreSQL sync failed:", e.message || e);
+      return false;
     }
   }
 
   let persistTimer;
   function persist() {
+    DB._localSavedAt = Date.now();
     try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {}
     clearTimeout(persistTimer);
-    persistTimer = setTimeout(pushStateToApi, 400);
+    persistTimer = setTimeout(() => { pushStateToApi(); }, 400);
+  }
+
+  function flushPersist() {
+    clearTimeout(persistTimer);
+    persistTimer = null;
+    DB._localSavedAt = Date.now();
+    try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {}
+    if (_usePostgres) pushStateToApi({ keepalive: true });
+  }
+
+  if (typeof window !== "undefined") {
+    window.addEventListener("beforeunload", flushPersist);
+    window.addEventListener("pagehide", flushPersist);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") flushPersist();
+    });
   }
   function notify() { persist(); listeners.forEach((fn) => fn()); }
+
+  const SO_PRODUCTION_STAGES = new Set([
+    "Sent to Production", "Accepted by Production", "BOM Finalized", "Material Requirement Generated",
+    "Material Shortage Pending", "Material Required", "Material Partially Issued", "Material Fully Issued",
+    "Production In Progress", "Production Completed", "Sent to Finished Goods Store", "Sent to Quality",
+    "QC Pending", "QC Accepted", "Ready for Dispatch", "Partially Dispatched", "Fully Dispatched",
+  ]);
 
   let counter = Date.now();
   const uid = (p) => (p || "x") + (++counter).toString(36);
@@ -776,6 +895,8 @@
 
   function migrateAuth(db) {
     if (!Array.isArray(db.revokedSessions)) db.revokedSessions = [];
+    if (!Array.isArray(db.passwordResetRequests)) db.passwordResetRequests = [];
+    if (!Array.isArray(db.passwordResetLog)) db.passwordResetLog = [];
     (db.erpUsers || []).forEach((u) => {
       if (u.isDeleted == null) u.isDeleted = false;
       if (u.isDeleted) {
@@ -960,6 +1081,14 @@
 
     create(coll, obj, actor) {
       if (coll === "items") {
+        if (!obj.name || !String(obj.name).trim()) {
+          if (VG.toast) VG.toast("Item Name is required", "error");
+          return null;
+        }
+        if (obj.description && String(obj.description).length > ITEM_DESC_MAX) {
+          if (VG.toast) VG.toast("Item Description exceeds maximum length", "error");
+          return null;
+        }
         if (typeof VG !== "undefined" && VG.skuEngine && !obj.skuGeneratedAt && !obj._skuPrepared) {
           const prep = VG.skuEngine.prepareCreate(obj, actor, { module: obj._skuModule || "Item Master" });
           if (!prep.ok) {
@@ -986,6 +1115,15 @@
       if (lockErr) return null;
       const prev = this.get(coll, id);
       if (coll === "items" && prev) {
+        const merged = { ...prev, ...patch };
+        if (!merged.name || !String(merged.name).trim()) {
+          if (VG.toast) VG.toast("Item Name is required", "error");
+          return null;
+        }
+        if (merged.description && String(merged.description).length > ITEM_DESC_MAX) {
+          if (VG.toast) VG.toast("Item Description exceeds maximum length", "error");
+          return null;
+        }
         if (typeof VG !== "undefined" && VG.skuEngine) {
           const skuPrep = VG.skuEngine.prepareUpdate(prev, patch, actor);
           if (!skuPrep.ok) {
@@ -1034,6 +1172,28 @@
       });
       if (DB.auditLog.length > 500) DB.auditLog = DB.auditLog.slice(-500);
       persist();
+    },
+
+    recordDocumentConversion(entry) {
+      const e = entry || {};
+      const fromLabel = [e.fromType, e.fromNo].filter(Boolean).join(" ");
+      const toLabel = [e.toType, e.toNo].filter(Boolean).join(" ");
+      const summary = "Converted " + (fromLabel || "—") + " → " + (toLabel || "—")
+        + (e.statusChange ? " · Status: " + e.statusChange : "")
+        + (e.confirmed ? " · Confirmed" : "");
+      this.audit(e.actor || "system", "convert", e.toType || "document", e.toNo || e.toId || "-", summary, {
+        module: e.module || "sales",
+        oldValue: fromLabel,
+        newValue: toLabel + (e.statusChange ? " (" + e.statusChange + ")" : ""),
+        fromType: e.fromType,
+        fromNo: e.fromNo,
+        fromId: e.fromId,
+        toType: e.toType,
+        toNo: e.toNo,
+        toId: e.toId,
+        statusChange: e.statusChange,
+        confirmed: !!e.confirmed,
+      });
     },
 
     /* ----- stock engine ----- */
@@ -1163,10 +1323,40 @@
       this.update("salesOrders", soId, { timeline }, by);
     },
     _setSOStage(soId, stage, actor, note) {
+      if (SO_PRODUCTION_STAGES.has(stage)) this.ensureWorkOrderForSalesOrder(soId, actor);
       const patch = { stage };
       if (stage === "Invoiced") patch.status = "Invoiced";
+      else patch.status = stage;
       this.update("salesOrders", soId, patch, actor);
       if (note) this._soTimeline(soId, "stage", actor, stage + " — " + note);
+    },
+    ensureWorkOrderForSalesOrder(soId, actor) {
+      const so = this.get("salesOrders", soId);
+      if (!so) return null;
+      const existing = (DB.workOrders || []).find((w) => w.salesOrderId === soId && w.status !== "Cancelled");
+      if (existing) return existing;
+      return this.createProductionRequestFromSO(soId, actor);
+    },
+    backfillMissingWorkOrders(actor) {
+      const act = actor || "system";
+      let created = 0;
+      (DB.salesOrders || []).forEach((so) => {
+        const st = so.stage || so.status || "";
+        if (!SO_PRODUCTION_STAGES.has(st)) return;
+        let wo = (DB.workOrders || []).find((w) => w.salesOrderId === so.id && w.status !== "Cancelled");
+        if (!wo) {
+          wo = this.createProductionRequestFromSO(so.id, act);
+          if (wo) created++;
+        }
+        if (!wo) return;
+        if (st === "Accepted by Production" && (wo.status === "Received from Sales" || wo.status === "BOM Pending")) {
+          this.update("workOrders", wo.id, {
+            status: "Production Planned", productionStatus: "Planned",
+            acceptedAt: wo.acceptedAt || Date.now(), acceptedBy: wo.acceptedBy || act,
+          }, act);
+        }
+      });
+      if (created) console.info("[Veraglo] Backfilled " + created + " missing work order(s) from sales orders");
     },
     salesOrderStatuses() {
       return [
@@ -1225,7 +1415,7 @@
       const wo = this.create("workOrders", {
         no: this.nextNo("WO", so.date), date: todayISO(), salesOrderId: soId, salesOrderNo: so.no,
         customerId: so.customerId, customerPoRef: so.customerPoRef || "", priority: so.priority || "Normal",
-        product: line.desc || line.sku || "Order " + so.no, sku: line.sku || "", technicalSpec: so.technicalSpec || line.spec || "",
+        product: line.name || line.desc || line.sku || "Order " + so.no, sku: line.sku || "", technicalSpec: so.technicalSpec || line.spec || "",
         productionInstructions: so.specialInstructions || "", drawingRef: so.drawingRef || "", documentRef: so.documents || "",
         finishedItemId: fgItem ? fgItem.id : "", bomId: bom ? bom.id : "", bomNo: bom ? bom.no : "",
         qtyPlanned: qty, qtyProduced: 0, targetDate: so.deliveryDate || "", requiredDate: so.deliveryDate || "",
@@ -1238,9 +1428,12 @@
     sendSalesOrderToProduction(soId, actor) {
       const so = this.get("salesOrders", soId);
       if (!so) return null;
-      const wo = this.createProductionRequestFromSO(soId, actor);
+      const wo = this.ensureWorkOrderForSalesOrder(soId, actor);
       if (!wo) return null;
-      this._setSOStage(soId, "Sent to Production", actor, "Work order request " + wo.no + " generated");
+      const stage = so.stage || so.status || "";
+      if (stage !== "Sent to Production") {
+        this._setSOStage(soId, "Sent to Production", actor, "Work order request " + wo.no + " generated");
+      }
       return this.get("workOrders", wo.id);
     },
     approveSalesOrderRevision(soId, actor) {
@@ -1373,7 +1566,7 @@
         const min = Number(item.minStock) || 0;
         const shortage = Math.max(0, (Number(r.qty) || 0) - Math.max(0, available - reserved));
         return {
-          itemId: r.itemId, sku: item.sku || "", description: item.name || "", category: item.category || "Raw Material",
+          itemId: r.itemId, sku: item.sku || "", itemName: item.name || "", description: item.description || "", category: item.category || "Raw Material",
           processStage: r.processStage || "", requiredQty: Number(r.qty) || 0, wastagePct: Number(r.scrapPct) || 0,
           totalRequiredQty: Number(r.qty) || 0, unit: r.unit || item.unit || "Nos", alternateItemId: r.altItemId || "", alternateAllowed: !!r.altItemId,
           availableStock: available, wipStock: wip, reservedStock: reserved, minStock: min, shortageQty: shortage,
@@ -1632,7 +1825,7 @@
         const alt = ln.alternateItemId ? this.get("items", ln.alternateItemId) : null;
         return {
           workOrderNo: mr.workOrderNo, salesOrderNo: mr.salesOrderNo || "", bomNo: mr.bomNo || "", bomRevision: mr.bomRevision || "",
-          sku: item.sku || ln.sku || "", description: item.name || ln.description || "", category: ln.category || item.category || "",
+          sku: item.sku || ln.sku || "", itemName: item.name || ln.itemName || "", description: item.description || ln.description || "", category: ln.category || item.category || "",
           unit: ln.unit || item.unit || "Nos", requiredQty: required, availableStock: available, reservedStock: reserved, freeStock: free,
           qtyCanIssueNow, shortageQty, expectedAvailabilityDate: ln.expectedAvailabilityDate || "", purchaseRequestStatus: ln.purchaseRequestNo ? "Pending (" + ln.purchaseRequestNo + ")" : "",
           locationRackBin: ln.rackBin || item.locationId || "loc0", altItemAvailable: alt ? this.onHand(alt.id) > 0 : false, remarks: ln.pendingReason || ln.remarks || "",
@@ -1936,30 +2129,79 @@
       }
       return inv;
     },
-    createInvoiceFromSO(soId, actor) {
+    buildInvoiceDraftFromSO(soId) {
       const so = this.get("salesOrders", soId);
       if (!so) return null;
-      const existing = (DB.invoices || []).find((i) => i.salesOrderId === soId && i.status !== "Cancelled");
-      if (existing) return existing;
-      const t = so.totals || {};
-      const grand = Number(t.final != null ? t.final : t.grand) || 0;
       const qRow = so.quotationId ? this.get("quotations", so.quotationId) : null;
-      const inv = this.create("invoices", {
-        no: this.nextNo("INV", todayISO()), date: todayISO(), type: "Tax Invoice",
-        customerId: so.customerId, salesOrderId: soId, salesOrderNo: so.no,
-        quotationId: so.quotationId || "", quotationNo: (qRow && qRow.no) || "",
-        enquiryId: so.enquiryId || "", billing: so.billing, shipping: so.shipping,
-        billingAddressId: so.billingAddressId || "", shippingAddressId: so.shippingAddressId || "",
-        gstin: so.gstin, currency: so.currency || "INR", exchangeRate: so.exchangeRate != null ? so.exchangeRate : 1,
-        lines: so.lines || [], totals: t, paymentTermsId: so.paymentTermsId || "", deliveryTermsId: so.deliveryTermsId || "",
-        amount: grand, amountPaid: 0, dueDate: extraDueDate(30), status: "Posted", preparedBy: actor,
-        eInvoiceStatus: "", ewayBillNo: "",
-      }, actor);
-      this._setSOStage(soId, "Invoiced", actor, "Tax invoice " + inv.no);
-      (DB.shipments || []).filter((s) => s.salesOrderId === soId && !s.invoiceId).forEach((s) => {
-        this.update("shipments", s.id, { invoiceId: inv.id, invoiceNo: inv.no }, actor);
+      if (typeof VG !== "undefined" && VG.buildInvoiceDraft) {
+        return VG.buildInvoiceDraft({
+          ...so,
+          salesOrderId: so.id,
+          salesOrderNo: so.no,
+          quotationId: so.quotationId || "",
+          quotationNo: (qRow && qRow.no) || "",
+          preparedBy: so.preparedBy || "",
+          terms: so.terms || (qRow && qRow.terms) || "",
+          warranty: so.warranty || (qRow && qRow.warranty) || "",
+          remarks: so.remarks || (qRow && qRow.remarks) || "",
+        });
+      }
+      return { ...so, salesOrderId: so.id, salesOrderNo: so.no, type: "Tax Invoice", invoiceType: "domestic" };
+    },
+    saveInvoice(payload, actor, existingId) {
+      if (typeof VG === "undefined" || !VG.normalizeInvoice || !VG.computeInvoiceTotals) {
+        return null;
+      }
+      let inv = VG.normalizeInvoice(payload);
+      inv.lines = VG.applyGstTreatmentToLines(inv.lines, inv.gstTreatment);
+      const totals = VG.computeInvoiceTotals(inv);
+      const fxTotals = VG.computeFxTotals(inv, totals);
+      const grand = Number(totals.final != null ? totals.final : totals.grand) || 0;
+      inv.totals = totals;
+      inv.fxTotals = fxTotals;
+      inv.amount = grand;
+      inv.exportDeclaration = inv.exportDeclaration || (VG.EXPORT_DECLARATIONS && VG.EXPORT_DECLARATIONS[inv.gstTreatment]) || "";
+      if (VG.isExportInvoiceType && VG.isExportInvoiceType(inv.invoiceType) && !inv.templateId) inv.templateId = "tpl2exp";
+      const cleanLines = (inv.lines || []).map((l) => {
+        const { key, ...rest } = l;
+        return rest;
       });
-      return inv;
+      const body = { ...inv, lines: cleanLines, preparedBy: inv.preparedBy || actor };
+      if (existingId) {
+        this.update("invoices", existingId, body, actor);
+        this.audit(actor, "update", "invoices", (this.get("invoices", existingId) || {}).no || existingId, "Invoice updated · " + (VG.invoiceTypeLabel ? VG.invoiceTypeLabel(inv) : inv.invoiceType));
+        notify();
+        return this.get("invoices", existingId);
+      }
+      if (body.salesOrderId) {
+        const dup = (DB.invoices || []).find((i) => i.salesOrderId === body.salesOrderId && i.status !== "Cancelled");
+        if (dup) return dup;
+      }
+      const created = this.create("invoices", {
+        no: this.nextNo("INV", body.date || todayISO()),
+        date: body.date || todayISO(),
+        type: "Tax Invoice",
+        status: "Posted",
+        amountPaid: 0,
+        dueDate: body.dueDate || extraDueDate(30),
+        eInvoiceStatus: "",
+        ewayBillNo: "",
+        ...body,
+      }, actor);
+      if (created.salesOrderId) {
+        this._setSOStage(created.salesOrderId, "Invoiced", actor, "Tax invoice " + created.no);
+        (DB.shipments || []).filter((s) => s.salesOrderId === created.salesOrderId && !s.invoiceId).forEach((s) => {
+          this.update("shipments", s.id, { invoiceId: created.id, invoiceNo: created.no }, actor);
+        });
+      }
+      this.audit(actor, "create", "invoices", created.no, (VG.invoiceTypeLabel ? VG.invoiceTypeLabel(created) : "Tax Invoice") + " posted");
+      return created;
+    },
+    createInvoiceFromSO(soId, actor, extra) {
+      const draft = this.buildInvoiceDraftFromSO(soId);
+      if (!draft) return null;
+      if (extra && typeof extra === "object") Object.assign(draft, extra);
+      return this.saveInvoice(draft, actor);
     },
     _randToken(len) {
       const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -2165,18 +2407,34 @@
     isReady: () => _ready,
     backend: () => (_usePostgres ? "postgresql" : "localStorage"),
 
+    async flushPersist() {
+      flushPersist();
+      if (_usePostgres) await pushStateToApi();
+    },
+
     async init() {
+      const localState = readLocalState();
       const base = apiBase();
       try {
         const res = await fetch(base + "/api/state");
         if (res.status === 404) {
-          DB = load();
+          DB = localState || load();
+          if (!DB._localSavedAt) DB._localSavedAt = Date.now();
           _usePostgres = true;
           await pushStateToApi();
         } else if (res.ok) {
-          DB = migrate(await res.json());
+          const serverState = migrate(await res.json());
           _usePostgres = true;
-          try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {}
+          const localTs = stateSavedAt(localState);
+          const serverTs = stateSavedAt(serverState);
+          if (localState && localTs > serverTs) {
+            console.warn("[Veraglo store] Local data is newer than server — restoring and syncing to PostgreSQL");
+            DB = localState;
+            await pushStateToApi();
+          } else {
+            DB = serverState;
+            try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {}
+          }
         } else {
           DB = load();
         }
@@ -2185,9 +2443,11 @@
         DB = load();
         _usePostgres = false;
       }
+      this.backfillMissingWorkOrders();
       if (typeof VG !== "undefined" && VG.ROLES) this.syncAllRolesToRuntime();
       _ready = true;
       notify();
+      if (_usePostgres) await pushStateToApi();
       return { backend: this.backend() };
     },
 
@@ -2463,12 +2723,21 @@
 
     isSessionRevoked(session) {
       if (!session) return true;
-      return (DB.revokedSessions || []).some((r) =>
-        r.userId === "*" || r.sessionId === "*global*"
-        || r.sessionId === session.sessionId
-        || (r.sessionId === "*" && r.userId && session.userId === r.userId)
-        || (r.email && session.email && r.email === session.email && r.sessionId === "*")
-      );
+      const since = Number(session.since) || 0;
+      return (DB.revokedSessions || []).some((r) => {
+        const at = Number(r.revokedAt) || 0;
+        if (r.sessionId && r.sessionId !== "*" && r.sessionId !== "*global*") {
+          return r.sessionId === session.sessionId;
+        }
+        if (r.sessionId === "*global*") return since < at;
+        if (r.sessionId === "*" && r.userId && r.userId !== "*") {
+          return session.userId === r.userId && since < at;
+        }
+        if (r.sessionId === "*" && r.email && session.email) {
+          return session.email === r.email && since < at;
+        }
+        return false;
+      });
     },
 
     revokeAllSessions(actor) {
@@ -2499,8 +2768,9 @@
     },
 
     endSession(sessionId) {
+      const before = (DB.connectedSessions || []).length;
       DB.connectedSessions = (DB.connectedSessions || []).filter((s) => s.sessionId !== sessionId);
-      notify();
+      if (DB.connectedSessions.length !== before) persist();
     },
 
     sessionsForUser(userId) {
@@ -2618,7 +2888,17 @@
         pinnedModules: perUser.pinnedModules || all.pinnedModules || [],
         hiddenModules: perUser.hiddenModules || [],
         moduleOrder: perUser.moduleOrder || all.moduleOrder || [],
+        recentModules: perUser.recentModules || all.recentModules || [],
+        lastModuleId: perUser.lastModuleId || all.lastModuleId || "",
       };
+    },
+    recordModuleOpen(roleKey, moduleId, actor) {
+      if (!roleKey || !moduleId) return;
+      const prefs = this.dashboardPrefs(roleKey);
+      let recent = (prefs.recentModules || []).filter((id) => id !== moduleId);
+      recent.unshift(moduleId);
+      recent = recent.slice(0, 6);
+      this.saveDashboardPrefs(roleKey, { recentModules: recent, lastModuleId: moduleId }, actor || roleKey);
     },
     saveDashboardPrefs(roleKey, patch, actor) {
       const dash = { ...(DB.settings.dashboard || {}), byRole: { ...((DB.settings.dashboard || {}).byRole || {}) } };

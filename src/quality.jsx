@@ -3,9 +3,10 @@
   const { useState } = React;
   const ui = VG.ui, fx = VG.fx, store = VG.store, inr = VG.fmt.inr, today = VG.fmt.todayISO;
   const { Icon, Button, Pill, Card } = ui;
-  const { Field, Text, Area, Num, Select, Modal, RecordTable, PageHead, StatusTag, printDocument, DocActions } = fx;
+  const { Field, Text, Area, Num, Select, Modal, InternalScreen, RecordTable, PageHead, StatusTag, printDocument, DocActions } = fx;
 
-  const itemName = (id) => (VG.itemMfr && VG.itemMfr.label(id)) || "—";
+  const itemName = (id) => (VG.itemDisplay && VG.itemDisplay.tableLabel(id)) || (VG.itemMfr && VG.itemMfr.label(id)) || "—";
+  const itemNameSkuPdf = (id) => (VG.itemDisplay && VG.itemDisplay.itemNameSkuCell(id)) || itemName(id);
   const suppName = (id) => (store.get("suppliers", id) || {}).name || "—";
   const locName = (id) => (store.get("locations", id) || {}).name || "—";
 
@@ -18,7 +19,7 @@
     const inner = `
       <div class="vg-cols">
         <div class="vg-card"><b>Inspection</b>No: ${q.no}<br>Date: ${q.date}<br>Source: ${q.source || "Incoming"}<br>Status: ${q.status}</div>
-        <div class="vg-card"><b>Material</b>${itemName(q.itemId)}<br>Batch: ${q.batch || "—"}<br>GRN: ${q.receiptNo || "—"}</div>
+        <div class="vg-card"><b>Material</b>${itemNameSkuPdf(q.itemId)}<br>Batch: ${q.batch || "—"}<br>GRN: ${q.receiptNo || "—"}</div>
         <div class="vg-card"><b>Supplier</b>${suppName(q.supplierId)}</div>
       </div>
       <table class="vg-tbl"><thead><tr><th>Received Qty</th><th>Sample</th><th class="vg-right">Accepted</th><th class="vg-right">Rejected</th><th>Result</th></tr></thead>
@@ -57,7 +58,7 @@
     }
     const decided = insp.status !== "Pending";
     return (
-      <Modal open onClose={onClose} size="xl" dirty={dirty && !decided} title={"Inspection " + insp.no} subtitle={itemName(insp.itemId)}
+      <InternalScreen onBack={onClose} backLabel="Back to inspections" dirty={dirty && !decided} title={"Inspection " + insp.no} subtitle={itemName(insp.itemId)}
         footer={<><DocActions build={() => qcReportDoc({ ...insp, ...f })} />{!decided && <Button icon="check" onClick={submit}>Record result</Button>}</>}>
         <div className="grid sm:grid-cols-3 gap-3 mb-4 text-sm">
           <Card className="p-3"><div className="text-[11px] uppercase opacity-55 mb-1">Material</div>{itemName(insp.itemId)}<div className="opacity-60 text-xs mt-1">Batch {insp.batch || "—"}</div></Card>
@@ -84,7 +85,7 @@
             </div>
           </div>
         )}
-      </Modal>
+      </InternalScreen>
     );
   }
 
@@ -106,13 +107,16 @@
       { key: "qtyReceived", label: "Qty" },
       { key: "status", label: "Status", render: (r) => <StatusTag value={r.status} map={QC_STATUS} /> },
     ];
+    if (view) {
+      const insp = store.get("qcInspections", view.id) || view;
+      return <InspectModal insp={insp} onClose={() => setView(null)} roleKey={roleKey} can={can} />;
+    }
     return (
       <div>
         <PageHead title={title || "Incoming Inspection"} desc="Material held from Stores awaiting quality clearance" />
-        <RecordTable title="Inspections" columns={cols} rows={rows} can={can} printTitle="QC Inspections" searchKeys={["no", "receiptNo"]}
+        <RecordTable tableId="qc-inspections" title="Inspections" columns={cols} rows={rows} can={can} printTitle="QC Inspections" searchKeys={["no", "receiptNo"]}
           filters={[{ key: "status", label: "All status", options: ["Pending", "Accepted", "Rejected", "Partial"] }]}
           onView={(r) => setView(r)} empty="No inspections yet — they appear automatically when Stores receive QC-required material" />
-        {view && <InspectModal insp={view} onClose={() => setView(null)} roleKey={roleKey} can={can} />}
       </div>
     );
   }
@@ -183,28 +187,30 @@
       { key: "priority", label: "Priority", render: (r) => <Pill color={r.priority === "Critical" ? "#ef4444" : r.priority === "High Priority" ? "#f59e0b" : "#6366f1"}>{r.priority || "Normal"}</Pill> },
       { key: "status", label: "Status", render: (r) => <StatusTag value={r.status} map={{ "Pending Inspection": "#f59e0b", "Under Inspection": "#a855f7", Accepted: "#34d399", Rejected: "#ef4444", "Partially Accepted": "#22d3ee", "Rework Required": "#f97316", Hold: "#94a3b8" }} /> },
     ];
+    if (view) {
+      const qc = store.get("qcIssues", view.id) || view;
+      return (
+        <InternalScreen onBack={() => setView(null)} backLabel="Back to final QC" title={"Final QC " + qc.no} subtitle={qc.workOrderNo}
+          footer={<>
+            {can("approve") && <Button icon="check" onClick={() => { store.recordFinalQcResult(qc.id, { status: "Accepted", qtyInspected: qc.qtyForQc, acceptQty: qc.qtyForQc, inspectorName: roleKey }, roleKey); setView(null); VG.toast("QC accepted · sent to dispatch"); }}>Accept</Button>}
+            {can("approve") && <Button variant="soft" onClick={() => { store.recordFinalQcResult(qc.id, { status: "Rework Required", qtyInspected: qc.qtyForQc, reworkQty: qc.qtyForQc, inspectorName: roleKey, remarks: "Rework required" }, roleKey); setView(null); VG.toast("Marked rework required"); }}>Rework</Button>}
+            {can("approve") && <Button variant="ghost" onClick={() => { store.recordFinalQcResult(qc.id, { status: "Rejected", qtyInspected: qc.qtyForQc, rejectQty: qc.qtyForQc, inspectorName: roleKey, remarks: "Rejected in final QC" }, roleKey); setView(null); VG.toast("Rejected"); }}>Reject</Button>}
+          </>}>
+          <div className="space-y-2 text-sm">
+            <div>WO: <b>{qc.workOrderNo}</b></div>
+            <div>SKU: <b>{qc.sku || "—"}</b></div>
+            <div>Qty received: <b>{qc.qtyForQc}</b></div>
+            <div>Required dispatch date: <b>{qc.requiredDispatchDate || "—"}</b></div>
+            <div className="text-xs opacity-65">Accepted moves to Dispatch queue automatically.</div>
+          </div>
+        </InternalScreen>
+      );
+    }
     return (
       <div>
         <PageHead title="Final QC Inspection" desc="Finished goods inspection before dispatch handover" />
-        <RecordTable title="QC issues" columns={cols} rows={rows} can={can} printTitle="Final QC" searchKeys={["no", "workOrderNo", "sku"]}
+        <RecordTable tableId="qc-final" title="QC issues" columns={cols} rows={rows} can={can} printTitle="Final QC" searchKeys={["no", "workOrderNo", "sku"]}
           onView={(r) => setView(r)} empty="No final QC queue yet" />
-        {view && (
-          <Modal open onClose={() => setView(null)} size="lg" title={"Final QC " + view.no} subtitle={view.workOrderNo}
-            footer={<>
-              <Button variant="soft" onClick={() => setView(null)}>Close</Button>
-              {can("approve") && <Button icon="check" onClick={() => { store.recordFinalQcResult(view.id, { status: "Accepted", qtyInspected: view.qtyForQc, acceptQty: view.qtyForQc, inspectorName: roleKey }, roleKey); setView(null); VG.toast("QC accepted · sent to dispatch"); }}>Accept</Button>}
-              {can("approve") && <Button variant="soft" onClick={() => { store.recordFinalQcResult(view.id, { status: "Rework Required", qtyInspected: view.qtyForQc, reworkQty: view.qtyForQc, inspectorName: roleKey, remarks: "Rework required" }, roleKey); setView(null); VG.toast("Marked rework required"); }}>Rework</Button>}
-              {can("approve") && <Button variant="ghost" onClick={() => { store.recordFinalQcResult(view.id, { status: "Rejected", qtyInspected: view.qtyForQc, rejectQty: view.qtyForQc, inspectorName: roleKey, remarks: "Rejected in final QC" }, roleKey); setView(null); VG.toast("Rejected"); }}>Reject</Button>}
-            </>}>
-            <div className="space-y-2 text-sm">
-              <div>WO: <b>{view.workOrderNo}</b></div>
-              <div>SKU: <b>{view.sku || "—"}</b></div>
-              <div>Qty received: <b>{view.qtyForQc}</b></div>
-              <div>Required dispatch date: <b>{view.requiredDispatchDate || "—"}</b></div>
-              <div className="text-xs opacity-65">Accepted moves to Dispatch queue automatically.</div>
-            </div>
-          </Modal>
-        )}
       </div>
     );
   }

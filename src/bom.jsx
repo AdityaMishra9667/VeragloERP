@@ -3,7 +3,7 @@
   const { useState, useEffect, useMemo, useRef } = React;
   const ui = VG.ui, fx = VG.fx, store = VG.store, inr = VG.fmt.inr, today = VG.fmt.todayISO;
   const { Icon, Button, Pill, Card } = ui;
-  const { Field, Text, Area, Num, DateF, Select, Checkbox, MasterSelect, Modal, RecordTable, PageHead, StatusTag, printDocument, DocActions } = fx;
+  const { Field, Text, Area, Num, DateF, Select, Checkbox, MasterSelect, Modal, InternalScreen, RecordTable, PageHead, StatusTag, printDocument, DocActions } = fx;
 
   const itemLabel = (id) => (VG.itemMfr && VG.itemMfr.label(id)) || "—";
   const itemSku = (id) => (store.get("items", id) || {}).sku || "—";
@@ -65,15 +65,18 @@
     const rows = (bom.lines || []).map((l, i) => {
       const it = store.get("items", l.itemId) || {};
       const lineCost = (Number(l.qty) || 0) * (Number(it.rate) || 0);
-      return `<tr><td>${i + 1}</td><td>${it.sku || ""}</td><td>${it.name || ""}</td><td>${itemMfr(l.itemId)}</td><td class="vg-right">${l.qty}</td><td>${l.unit || it.unit || ""}</td><td class="vg-right">${l.scrapPct || 0}%</td><td>${l.issueMethod || "Manual"}</td><td class="vg-right">${inr(lineCost)}</td></tr>`;
+      const nameCell = VG.itemDisplay ? VG.itemDisplay.itemNameSkuCell(it) : ((it.sku || "") + " — " + (it.name || ""));
+      const desc = VG.itemDisplay ? VG.itemDisplay.nl2br(VG.itemDisplay.itemDescription(it)) : "";
+      return `<tr><td>${i + 1}</td><td>${nameCell}</td><td>${desc}</td><td>${itemMfr(l.itemId)}</td><td class="vg-right">${l.qty}</td><td>${l.unit || it.unit || ""}</td><td class="vg-right">${l.scrapPct || 0}%</td><td>${l.issueMethod || "Manual"}</td><td class="vg-right">${inr(lineCost)}</td></tr>`;
     }).join("");
+    const fgNameCell = VG.itemDisplay ? VG.itemDisplay.itemNameSkuCell(fg) : (sku + " — " + (bom.fgName || fg.name || ""));
     const inner = `
       <div class="vg-cols">
-        <div class="vg-card"><b>Finished product</b>${sku} — ${bom.fgName || fg.name || ""}<br>${bom.fgDescription || ""}<br>Output: ${bom.qtyOutput || 1} ${bom.unit || fg.unit || "Nos"}</div>
+        <div class="vg-card"><b>Finished product</b>${fgNameCell}<br>${bom.fgDescription || (VG.itemDisplay && VG.itemDisplay.nl2br(VG.itemDisplay.itemDescription(fg))) || ""}<br>Output: ${bom.qtyOutput || 1} ${bom.unit || fg.unit || "Nos"}</div>
         <div class="vg-card"><b>BOM</b>${bom.no}<br>${bom.revision || "Rev-00"} · ${bom.status}<br>${bom.isDefault ? "Default BOM" : ""}</div>
         <div class="vg-card"><b>Routing</b>${bom.department || "—"} · ${bom.line || "—"}<br>Cycle: ${bom.cycleTimeMin || "—"} min</div>
       </div>
-      <table class="vg-tbl"><thead><tr><th>#</th><th>SKU</th><th>Component</th><th>Mfr</th><th class="vg-right">Qty</th><th>Unit</th><th class="vg-right">Wastage</th><th>Issue</th><th class="vg-right">Cost</th></tr></thead><tbody>${rows || "<tr><td colspan=9>No components</td></tr>"}</tbody></table>
+      <table class="vg-tbl"><thead><tr><th>#</th><th>Item Name / SKU</th><th>Item Description</th><th>Mfr</th><th class="vg-right">Qty</th><th>Unit</th><th class="vg-right">Wastage</th><th>Issue</th><th class="vg-right">Cost</th></tr></thead><tbody>${rows || "<tr><td colspan=9>No components</td></tr>"}</tbody></table>
       <div class="vg-totals"><div class="grand"><span>Std material cost / unit</span><span>${inr(cost)}</span></div></div>
       ${bom.remarks ? `<div class="vg-terms"><b>Remarks:</b> ${bom.remarks}</div>` : ""}`;
     return { title: "Bill of Materials", subtitle: bom.no + " · " + (bom.revision || "Rev-00"), inner, docType: "BOM" };
@@ -278,13 +281,14 @@
       onClose();
     }
 
+    if (showRevModal) {
+      return <BomRevisionModal open onClose={() => setShowRevModal(false)} onSubmit={(meta) => persist(meta)} />;
+    }
     return (
-      <>
-        <Modal open={open} onClose={onClose} size="full" dirty={dirty}
+        <InternalScreen onBack={onClose} backLabel="Back to BOM list" dirty={dirty}
           title={isEdit ? "BOM " + (f.no || "") + " · " + (f.revision || "Rev-00") : "New Bill of Materials"}
           subtitle={isEdit ? (componentsLocked ? "Components locked — authorized revision required" : "Controlled manufacturing master document") : "Finished goods SKU auto-generated · saved to item master"}
           footer={<>
-            <Button variant="soft" onClick={onClose}>Close</Button>
             <Button variant="soft" icon="eye" onClick={() => printDocument(bomDoc({ ...f, no: f.no || "DRAFT" }), "preview")}>Preview</Button>
             {isEdit && canStructure && f.approvalStatus === "Pending" && (
               <Button variant="soft" icon="shield" onClick={approveBom}>Approve revision</Button>
@@ -461,11 +465,7 @@
               </BomSection>
             )}
           </div>
-        </Modal>
-        {showRevModal && (
-          <BomRevisionModal open onClose={() => setShowRevModal(false)} onSubmit={(meta) => persist(meta)} />
-        )}
-      </>
+        </InternalScreen>
     );
   }
 
@@ -491,6 +491,49 @@
         render: (r) => inr(store.calcBomCost ? store.calcBomCost(r.id) : 0),
       });
     }
+    if (edit) {
+      return <BomForm open record={edit.id ? edit : null} onClose={() => setEdit(null)} roleKey={roleKey} can={can} />;
+    }
+    if (view) {
+      const bom = store.get("boms", view.id) || view;
+      return (
+        <InternalScreen onBack={() => setView(null)} backLabel="Back to BOM list" title={"BOM " + bom.no} subtitle={(bom.fgSku || "") + " · " + (bom.revision || "Rev-00")}
+          footer={<>
+            <DocActions docType="BOM" build={() => bomDoc(bom)} />
+            {(can("edit") || can("approve")) && <Button onClick={() => { setView(null); setEdit(bom); }}>Open BOM</Button>}
+          </>}>
+          <div className="flex flex-wrap gap-2 mb-4">
+            <StatusTag value={bom.status} map={BOM_STATUS} />
+            <Pill color="#6366f1">{bom.fgSku || itemSku(bom.finishedItemId)}</Pill>
+            {bom.approvalStatus === "Pending" && <Pill color="#f59e0b">Pending approval</Pill>}
+          </div>
+          <div className="text-sm grid sm:grid-cols-3 gap-3 mb-4">
+            <Card className="p-3 border border-white/20"><div className="text-[11px] uppercase opacity-55">Finished product</div>{bom.fgName || itemLabel(bom.finishedItemId)}</Card>
+            <Card className="p-3 border border-white/20"><div className="text-[11px] uppercase opacity-55">Components</div>{(bom.lines || []).length}</Card>
+            <Card className="p-3 border border-white/20"><div className="text-[11px] uppercase opacity-55">Std cost / unit</div>{inr(store.calcBomCost(bom.id))}</Card>
+          </div>
+          <div className="overflow-x-auto border border-white/20 rounded-xl">
+            <table className="w-full text-xs">
+              <thead className="opacity-55 text-[10px] uppercase border-b border-white/20 vg-sticky-thead"><tr>
+                <th className="text-left py-2 px-3">SKU</th><th className="text-left py-2 px-3">Component</th><th className="text-right py-2 px-3">Qty</th><th className="py-2 px-3">Unit</th><th className="text-right py-2 px-3">Wastage</th><th className="py-2 px-3">Issue</th>
+              </tr></thead>
+              <tbody>
+                {(bom.lines || []).map((l, i) => (
+                  <tr key={i} className="border-t border-white/10">
+                    <td className="py-2 px-3 font-mono">{itemSku(l.itemId)}</td>
+                    <td className="py-2 px-3">{itemLabel(l.itemId)}</td>
+                    <td className="text-right py-2 px-3">{l.qty}</td>
+                    <td className="py-2 px-3">{l.unit}</td>
+                    <td className="text-right py-2 px-3">{l.scrapPct || 0}%</td>
+                    <td className="py-2 px-3">{l.issueMethod || "Manual"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </InternalScreen>
+      );
+    }
     return (
       <div>
         <PageHead
@@ -499,7 +542,7 @@
             ? "Active approved BOMs linked to work orders · issue components from shop floor"
             : "Controlled manufacturing master — auto SKU · revision control · component locking"}
         />
-        <RecordTable title="BOM register" columns={cols} rows={rows} can={can} printTitle="BOM Register" searchKeys={["no", "name", "revision", "fgSku", "fgName"]}
+        <RecordTable tableId="bom-register" title="BOM register" columns={cols} rows={rows} can={can} printTitle="BOM Register" searchKeys={["no", "name", "revision", "fgSku", "fgName"]}
           filters={[{ key: "status", label: "All status", options: ["Draft", "Active", "Obsolete"] }]}
           onNew={can("add") ? () => setEdit({}) : null} newLabel="New BOM"
           onEdit={can("edit") || can("approve") ? (r) => setEdit(r) : null}
@@ -511,44 +554,6 @@
             }
           } : null}
         />
-        {edit && <BomForm open record={edit.id ? edit : null} onClose={() => setEdit(null)} roleKey={roleKey} can={can} />}
-        {view && (
-          <Modal open onClose={() => setView(null)} size="xl" title={"BOM " + view.no} subtitle={(view.fgSku || "") + " · " + (view.revision || "Rev-00")}
-            footer={<>
-              <DocActions docType="BOM" build={() => bomDoc(view)} />
-              {(can("edit") || can("approve")) && <Button onClick={() => { setView(null); setEdit(view); }}>Open BOM</Button>}
-            </>}>
-            <div className="flex flex-wrap gap-2 mb-4">
-              <StatusTag value={view.status} map={BOM_STATUS} />
-              <Pill color="#6366f1">{view.fgSku || itemSku(view.finishedItemId)}</Pill>
-              {view.approvalStatus === "Pending" && <Pill color="#f59e0b">Pending approval</Pill>}
-            </div>
-            <div className="text-sm grid sm:grid-cols-3 gap-3 mb-4">
-              <Card className="p-3 border border-white/20"><div className="text-[11px] uppercase opacity-55">Finished product</div>{view.fgName || itemLabel(view.finishedItemId)}</Card>
-              <Card className="p-3 border border-white/20"><div className="text-[11px] uppercase opacity-55">Components</div>{(view.lines || []).length}</Card>
-              <Card className="p-3 border border-white/20"><div className="text-[11px] uppercase opacity-55">Std cost / unit</div>{inr(store.calcBomCost(view.id))}</Card>
-            </div>
-            <div className="overflow-x-auto border border-white/20 rounded-xl">
-              <table className="w-full text-xs">
-                <thead className="opacity-55 text-[10px] uppercase border-b border-white/20"><tr>
-                  <th className="text-left py-2 px-3">SKU</th><th className="text-left py-2 px-3">Component</th><th className="text-right py-2 px-3">Qty</th><th className="py-2 px-3">Unit</th><th className="text-right py-2 px-3">Wastage</th><th className="py-2 px-3">Issue</th>
-                </tr></thead>
-                <tbody>
-                  {(view.lines || []).map((l, i) => (
-                    <tr key={i} className="border-t border-white/10">
-                      <td className="py-2 px-3 font-mono">{itemSku(l.itemId)}</td>
-                      <td className="py-2 px-3">{itemLabel(l.itemId)}</td>
-                      <td className="text-right py-2 px-3">{l.qty}</td>
-                      <td className="py-2 px-3">{l.unit}</td>
-                      <td className="text-right py-2 px-3">{l.scrapPct || 0}%</td>
-                      <td className="py-2 px-3">{l.issueMethod || "Manual"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Modal>
-        )}
       </div>
     );
   }

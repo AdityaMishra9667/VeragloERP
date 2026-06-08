@@ -8,6 +8,8 @@ import { access, constants } from "fs/promises";
 import * as db from "./db.js";
 import { createAdminUser, generatePassword, hasLoginUsers } from "./auth-utils.js";
 import { ensureDeploymentReady } from "./first-run.js";
+import * as weather from "./weather.js";
+import * as passwordReset from "./password-reset.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.join(__dirname, "..");
@@ -100,6 +102,117 @@ app.post("/api/setup/bootstrap-admin", async (req, res) => {
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: "bootstrap_failed", message: e.message });
+  }
+});
+
+/** Forgot password — public, rate-limited, no user enumeration. */
+app.get("/api/auth/forgot-password/settings", async (_req, res) => {
+  try {
+    const state = (await db.getState()) || {};
+    const cfg = passwordReset.forgotPasswordSettings(state);
+    res.json({
+      ok: true,
+      enabled: cfg.enabled,
+      otpExpiryMins: cfg.otpExpiryMins,
+      linkExpiryMins: cfg.linkExpiryMins,
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post("/api/auth/forgot-password/request", async (req, res) => {
+  try {
+    const state = (await db.getState()) || { _v: 11, erpUsers: [], settings: {} };
+    const baseUrl = process.env.APP_URL || `${req.protocol}://${req.get("host")}`;
+    const result = await passwordReset.requestPasswordReset(state, {
+      identifier: req.body && req.body.identifier,
+      ip: req.ip || req.headers["x-forwarded-for"] || "",
+      baseUrl,
+    });
+    if (result.disabled) return res.status(403).json(result);
+    await db.saveState(state);
+    res.json(result);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ ok: false, error: "request_failed" });
+  }
+});
+
+app.post("/api/auth/forgot-password/verify-otp", async (req, res) => {
+  try {
+    const state = (await db.getState()) || { passwordResetRequests: [] };
+    const result = passwordReset.verifyResetOtp(state, {
+      requestId: req.body && req.body.requestId,
+      otp: req.body && req.body.otp,
+      ip: req.ip || "",
+    });
+    await db.saveState(state);
+    if (!result.ok) return res.status(400).json(result);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post("/api/auth/forgot-password/verify-link", async (req, res) => {
+  try {
+    const state = (await db.getState()) || { passwordResetRequests: [] };
+    const token = (req.body && req.body.token) || req.query.token;
+    const result = passwordReset.verifyResetLink(state, { token, ip: req.ip || "" });
+    await db.saveState(state);
+    if (!result.ok) return res.status(400).json(result);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post("/api/auth/forgot-password/reset", async (req, res) => {
+  try {
+    const state = (await db.getState()) || { erpUsers: [] };
+    const result = await passwordReset.completePasswordReset(state, {
+      requestId: req.body && req.body.requestId,
+      password: req.body && req.body.password,
+      ip: req.ip || "",
+    });
+    await db.saveState(state);
+    if (!result.ok) return res.status(400).json(result);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+/** Login weather theme — public, cached, non-blocking for sign-in. */
+app.get("/api/weather/settings", async (_req, res) => {
+  try {
+    const state = (await db.getState()) || {};
+    res.json({ ok: true, ...weather.weatherLoginSettings(state) });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get("/api/weather/current", async (req, res) => {
+  try {
+    const state = (await db.getState()) || {};
+    const cfg = weather.weatherLoginSettings(state);
+    if (!cfg.enabled) {
+      return res.json({ ok: false, disabled: true, reason: "Weather login theme disabled" });
+    }
+    const source = req.query.source || cfg.locationSource || "company";
+    const data = await weather.getCurrentWeather({
+      source,
+      state,
+      manualCity: req.query.city || cfg.manualCity,
+      lat: req.query.lat,
+      lon: req.query.lon,
+      city: req.query.city,
+    });
+    res.json({ ...data, settings: { wallpapers: cfg.wallpapers, defaultWallpaper: cfg.defaultWallpaper } });
+  } catch (e) {
+    res.status(200).json({ ok: false, error: e.message, unavailable: true });
   }
 });
 

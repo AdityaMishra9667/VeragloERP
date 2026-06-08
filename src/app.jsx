@@ -55,58 +55,66 @@
       }
     }
 
+    const Shell = VG.LoginWeatherShell || (({ children, header }) => (
+      <div className="relative min-h-screen"><div className="relative z-10">{header}{children}</div></div>
+    ));
     return (
-      <div className="relative min-h-screen w-full overflow-hidden">
-        <img src={HERO} alt="" className="absolute inset-0 w-full h-full object-cover" />
-        <div className="absolute inset-0" style={{ background: "linear-gradient(110deg, rgba(8,13,24,.92) 0%, rgba(8,13,24,.72) 38%, rgba(8,13,24,.30) 100%)" }} />
-        <div className="relative z-10 min-h-screen flex flex-col">
-          <header className="flex items-center justify-between px-6 sm:px-10 py-6">
+      <Shell
+        header={(
+          <header className="flex items-center justify-between">
             <img src={LOGO} alt="Veraglo" className="h-9 w-auto drop-shadow" />
             <button type="button" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} className="glass rounded-xl p-2.5 text-white/90">
               <Icon name={theme === "dark" ? "sun" : "moon"} size={18} />
             </button>
           </header>
-          <div className="flex-1 flex items-center justify-center px-6 pb-14">
-            <div className="login-panel rounded-2xl p-7 sm:p-8 w-full max-w-md">
-              <h2 className="text-2xl font-display font-semibold text-slate-900">Create administrator</h2>
-              <p className="text-sm login-muted mt-1">No default users or passwords. Set up the first account for this installation.</p>
-              <form onSubmit={submit} className="mt-6 space-y-4">
-                <div>
-                  <label className="text-xs login-label">Full name</label>
-                  <input value={name} onChange={(e) => setName(e.target.value)} required className="login-input mt-1.5 w-full rounded-xl px-3.5 py-3 text-sm" />
-                </div>
-                <div>
-                  <label className="text-xs login-label">Work email</label>
-                  <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" required
-                    placeholder="you@company.com" className="login-input mt-1.5 w-full rounded-xl px-3.5 py-3 text-sm" />
-                </div>
-                <div>
-                  <label className="text-xs login-label">Password</label>
-                  <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" required
-                    className="login-input mt-1.5 w-full rounded-xl px-3.5 py-3 text-sm" />
-                </div>
-                <div>
-                  <label className="text-xs login-label">Confirm password</label>
-                  <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" required
-                    className="login-input mt-1.5 w-full rounded-xl px-3.5 py-3 text-sm" />
-                </div>
-                <Button type="submit" icon="check" className="w-full !py-3" disabled={busy}>{busy ? "Creating…" : "Create account & continue"}</Button>
-              </form>
+        )}
+      >
+        <div className="login-panel rounded-2xl p-7 sm:p-8 w-full max-w-md">
+          <h2 className="text-2xl font-display font-semibold text-slate-900">Create administrator</h2>
+          <p className="text-sm login-muted mt-1">No default users or passwords. Set up the first account for this installation.</p>
+          <form onSubmit={submit} className="mt-6 space-y-4">
+            <div>
+              <label className="text-xs login-label">Full name</label>
+              <input value={name} onChange={(e) => setName(e.target.value)} required className="login-input mt-1.5 w-full rounded-xl px-3.5 py-3 text-sm" />
             </div>
-          </div>
+            <div>
+              <label className="text-xs login-label">Work email</label>
+              <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" required
+                placeholder="you@company.com" className="login-input mt-1.5 w-full rounded-xl px-3.5 py-3 text-sm" />
+            </div>
+            <div>
+              <label className="text-xs login-label">Password</label>
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" required
+                className="login-input mt-1.5 w-full rounded-xl px-3.5 py-3 text-sm" />
+            </div>
+            <div>
+              <label className="text-xs login-label">Confirm password</label>
+              <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" required
+                className="login-input mt-1.5 w-full rounded-xl px-3.5 py-3 text-sm" />
+            </div>
+            <Button type="submit" icon="check" className="w-full !py-3" disabled={busy}>{busy ? "Creating…" : "Create account & continue"}</Button>
+          </form>
         </div>
-      </div>
+      </Shell>
     );
   }
 
   /* ---------------- Login ---------------- */
   function Login({ onLogin, theme, setTheme, needsSetup }) {
+  function Login({ onLogin, theme, setTheme, needsSetup, onForgotPassword }) {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [busy, setBusy] = useState(false);
     const [authHint, setAuthHint] = useState("");
 
     useEffect(() => {
+    const [forgotEnabled, setForgotEnabled] = useState(true);
+
+    useEffect(() => {
+      fetch((VG.apiBase || "") + "/api/auth/forgot-password/settings")
+        .then((r) => r.ok ? r.json() : null)
+        .then((data) => { if (data) setForgotEnabled(data.enabled !== false); })
+        .catch(() => {});
       fetch((VG.apiBase || "") + "/api/auth/status")
         .then((r) => r.ok ? r.json() : null)
         .then((data) => {
@@ -125,14 +133,17 @@
       Promise.resolve(onLogin(email.trim(), password)).finally(() => setBusy(false));
     }
 
-    return (
+    const Shell = VG.LoginWeatherShell || (({ children, header, hero }) => (
       <div className="relative min-h-screen w-full overflow-hidden">
         <img src={HERO} alt="" className="absolute inset-0 w-full h-full object-cover" />
         <div className="absolute inset-0" style={{ background: "linear-gradient(110deg, rgba(8,13,24,.92) 0%, rgba(8,13,24,.72) 38%, rgba(8,13,24,.30) 100%)" }} />
-        <div className="absolute inset-0 bg-gradient-to-t from-ink-950/90 via-transparent to-ink-950/40" />
-
-        <div className="relative z-10 min-h-screen flex flex-col">
-          <header className="flex items-center justify-between px-6 sm:px-10 py-6">
+        <div className="relative z-10 min-h-screen flex flex-col px-6 sm:px-10 py-6">{header}{hero}{children}</div>
+      </div>
+    ));
+    return (
+      <Shell
+        header={(
+          <header className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <img src={LOGO} alt="Veraglo" className="h-9 w-auto drop-shadow" />
               <span className="text-white/90 font-display font-semibold tracking-wide hidden sm:block">Veraglo ERP</span>
@@ -141,31 +152,60 @@
               <Icon name={theme === "dark" ? "sun" : "moon"} size={18} />
             </button>
           </header>
-
-          <div className="flex-1 grid lg:grid-cols-2 items-center gap-10 px-6 sm:px-10 pb-14">
-            {/* Left: brand promise */}
-            <div className="min-w-0 max-w-xl text-white animate-fade-up hidden lg:block">
-              <Pill color="#a5b4fc">Enterprise Resource Planning</Pill>
-              <h1 className="mt-4 text-4xl xl:text-5xl font-display font-bold leading-[1.1] text-balance">
-                One workspace for your whole factory floor.
-              </h1>
-              <p className="mt-4 text-white/70 text-lg leading-relaxed">
-                Sales, production, quality, inventory, dispatch, accounts and people —
-                each team gets its own focused, premium environment with role-based access.
-              </p>
-              <div className="mt-7 flex flex-wrap gap-2">
-                {["Role-based access", "15 modules", "Light & dark", "Real-time KPIs"].map((f) => (
-                  <span key={f} className="glass rounded-full px-3.5 py-1.5 text-sm text-white/85">{f}</span>
-                ))}
-              </div>
+        )}
+        hero={(
+          <>
+            <Pill color="var(--login-accent, #a5b4fc)">Enterprise Resource Planning</Pill>
+            <h1 className="mt-4 text-4xl xl:text-5xl font-display font-bold leading-[1.1] text-balance">
+              One workspace for your whole factory floor.
+            </h1>
+            <p className="mt-4 text-lg leading-relaxed opacity-80">
+              Sales, production, quality, inventory, dispatch, accounts and people —
+              each team gets its own focused, premium environment with role-based access.
+            </p>
+            <div className="mt-7 flex flex-wrap gap-2">
+              {["Role-based access", "15 modules", "Weather-aware login", "Real-time KPIs"].map((f) => (
+                <span key={f} className="glass rounded-full px-3.5 py-1.5 text-sm opacity-90">{f}</span>
+              ))}
             </div>
+          </>
+        )}
+      >
+        <div className="login-panel rounded-2xl p-7 sm:p-8">
+          <div className="lg:hidden flex items-center gap-2 mb-5">
+            <img src={LOGO} alt="" className="h-8 w-auto" />
+            <span className="font-display font-semibold text-slate-900">Veraglo ERP</span>
+          </div>
+          <h2 className="text-2xl font-display font-semibold text-slate-900">Welcome back</h2>
+          <p className="text-sm login-muted mt-1">Sign in to continue to your ERP workspace</p>
+          <p className="text-xs login-muted mt-3 leading-relaxed opacity-80">
+            Manage sales, inventory, production, quality, dispatch, accounts and people from one connected platform.
+          </p>
+          <p className="text-[11px] login-muted mt-2 italic opacity-65">Designed for smarter manufacturing operations.</p>
 
-            {/* Right: login card — light panel for readable inputs on dark hero */}
-            <div className="min-w-0 w-full max-w-md justify-self-center lg:justify-self-end animate-scale-in">
-              <div className="login-panel rounded-2xl p-7 sm:p-8">
-                <div className="lg:hidden flex items-center gap-2 mb-5">
-                  <img src={LOGO} alt="" className="h-8 w-auto" />
-                  <span className="font-display font-semibold text-slate-900">Veraglo ERP</span>
+          <form onSubmit={submit} className="mt-6 space-y-4">
+            <div>
+              <label className="text-xs login-label">Email</label>
+              <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="username" required
+                placeholder="you@company.com"
+                className="login-input mt-1.5 w-full rounded-xl px-3.5 py-3 text-sm focus:ring-2"
+                style={{ "--tw-ring-color": "var(--login-accent, var(--accent))" }} />
+            </div>
+            <div>
+              <label className="text-xs login-label">Password</label>
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password"
+                placeholder="Enter password"
+                className="login-input mt-1.5 w-full rounded-xl px-3.5 py-3 text-sm focus:ring-2"
+                style={{ "--tw-ring-color": "var(--login-accent, var(--accent))" }} />
+              {onForgotPassword && forgotEnabled && (
+                <div className="mt-2 text-right">
+                  <button
+                    type="button"
+                    onClick={onForgotPassword}
+                    className="text-xs font-medium text-indigo-600 hover:text-indigo-800 underline underline-offset-2 transition"
+                  >
+                    Forgot password?
+                  </button>
                 </div>
                 <h2 className="text-2xl font-display font-semibold text-slate-900">Welcome back</h2>
                 <p className="text-sm login-muted mt-1">Sign in to your workspace</p>
@@ -195,10 +235,23 @@
                   {authHint && <p className="text-[11px] text-center text-amber-700 mt-2">{authHint}</p>}
                 </form>
               </div>
+              )}
             </div>
+
+            <Button type="submit" icon="logout" className="w-full !py-3" disabled={busy}>{busy ? "Signing in…" : "Sign in to workspace"}</Button>
+            {needsSetup ? (
+              <p className="text-[11px] text-center text-amber-700">No administrator exists yet — refresh the page to open <b>Create administrator</b>.</p>
+            ) : (
+              <p className="text-[11px] text-center login-muted">Use the email and password from your administrator setup.</p>
+            )}
+            {authHint && <p className="text-[11px] text-center text-amber-700 mt-2">{authHint}</p>}
+          </form>
+          <div className="mt-6 pt-4 border-t border-slate-200/80 text-center text-[10px] login-muted space-y-1">
+            <div>Veraglo ERP {VG.buildId || VG_BUILD || "2.0"}</div>
+            <a href="mailto:support@veraglo.com" className="hover:text-indigo-600 transition">support@veraglo.com</a>
           </div>
         </div>
-      </div>
+      </Shell>
     );
   }
 
@@ -238,7 +291,9 @@
     );
   }
 
-  function Launcher({ roleKey, email, onOpen, onLogout, theme, setTheme, onOpenSearch }) {
+  function Launcher(props) {
+    if (VG.WelcomeHome) return <VG.WelcomeHome {...props} />;
+    const { roleKey, email, onOpen, onLogout, theme, setTheme, onOpenSearch } = props;
     VG.useDB();
     const role = VG.ROLES[roleKey];
     const mods = VG.modulesForRole(roleKey);
@@ -532,7 +587,7 @@
           </span>
           <div className="leading-tight min-w-0">
             <div className="text-sm font-semibold truncate">{mod ? mod.name : "Workspace"}</div>
-            <div className="text-[11px] opacity-55 truncate">Veraglo ERP · {role.label}</div>
+            <div className="text-[11px] opacity-55 truncate">Veraglo ERP · {role.label}{VG.buildId ? <span title="UI build"> · {VG.buildId}</span> : null}</div>
           </div>
         </div>
 
@@ -634,7 +689,7 @@
         <div className="flex-1 min-w-0 flex flex-col">
           <Topbar roleKey={roleKey} email={email} mod={mod} onHome={onHome} onToggleMobile={() => setMobileOpen(true)}
             theme={theme} setTheme={setTheme} onLogout={onLogout} onOpenSearch={onOpenSearch} />
-          <main className="flex-1 p-4 sm:p-6 max-w-[1500px] w-full mx-auto">
+          <main id="vg-main-content" className="relative flex-1 p-3 sm:p-5 w-full min-w-0 max-w-none min-h-0">
             {mod ? <VG.ModuleWorkspace key={moduleId} mod={mod} roleKey={roleKey} /> : <div className="opacity-60">Module not found.</div>}
           </main>
         </div>
@@ -665,17 +720,43 @@
       }
     }
     if (lic.ok) return null;
-    return (
+    const Shell = VG.LoginWeatherShell || (({ children, header }) => (
       <div className="relative min-h-screen flex items-center justify-center p-6">
         <img src={HERO} alt="" className="absolute inset-0 w-full h-full object-cover" />
         <div className="absolute inset-0 bg-ink-950/90" />
-        <div className="relative z-10 w-full max-w-lg glass-dark rounded-2xl p-8 animate-scale-in">
-          <div className="flex items-center gap-3 mb-6">
-            <img src={LOGO} alt="" className="h-10" />
-            <div>
-              <h1 className="text-xl font-display font-bold">Activate Veraglo ERP</h1>
-              <p className="text-sm opacity-60">Install on this computer with your license</p>
+        <div className="relative z-10 w-full">{header}{children}</div>
+      </div>
+    ));
+    return (
+      <Shell
+        showWidget={false}
+        header={(
+          <header className="flex items-center justify-between px-6 sm:px-10 py-6">
+            <img src={LOGO} alt="Veraglo" className="h-9 w-auto drop-shadow" />
+          </header>
+        )}
+      >
+        <div className="flex items-center justify-center px-6 pb-14">
+          <div className="w-full max-w-lg glass-dark rounded-2xl p-8 animate-scale-in">
+            <div className="flex items-center gap-3 mb-6">
+              <img src={LOGO} alt="" className="h-10" />
+              <div>
+                <h1 className="text-xl font-display font-bold">Activate Veraglo ERP</h1>
+                <p className="text-sm opacity-60">Install on this computer with your license</p>
+              </div>
             </div>
+            {lic.expired && <Card className="p-3 mb-4 border border-amber-500/40 text-sm text-amber-200">{lic.reason}</Card>}
+            <Card className="p-4 mb-4 border border-indigo-500/30 text-sm">
+              <p className="font-medium text-indigo-100">New installation?</p>
+              <p className="text-xs opacity-70 mt-1">Start the built-in evaluation trial to reach login and create your administrator account.</p>
+              <Button className="mt-3 !py-2" icon="check" onClick={beginTrial} disabled={startingTrial}>
+                {startingTrial ? "Starting…" : "Continue with 14-day evaluation trial"}
+              </Button>
+            </Card>
+            {VG.ActivationForm ? <VG.ActivationForm onDone={() => onActivated && onActivated()} compact /> : <p className="text-sm opacity-60">Loading activation…</p>}
+            {trialEnd && (
+              <p className="text-xs opacity-45 mt-4 text-center">Evaluation trial available until {trialEnd}.</p>
+            )}
           </div>
           {lic.expired && <Card className="p-3 mb-4 border border-amber-500/40 text-sm text-amber-200">{lic.reason}</Card>}
           <Card className="p-4 mb-4 border border-indigo-500/30 text-sm">
@@ -690,7 +771,7 @@
             <p className="text-xs opacity-45 mt-4 text-center">Evaluation trial available until {trialEnd}.</p>
           )}
         </div>
-      </div>
+      </Shell>
     );
   }
 
@@ -721,6 +802,28 @@
     const [searchOpen, setSearchOpen] = useState(false);
     const [licensed, setLicensed] = useState(true);
     const [needsSetup, setNeedsSetup] = useState(false);
+    const [forgotPassword, setForgotPassword] = useState(false);
+    const [resetToken, setResetToken] = useState(() => {
+      try {
+        const p = new URLSearchParams(window.location.search);
+        return p.get("reset") || "";
+      } catch (e) { return ""; }
+    });
+
+    useEffect(() => {
+      if (!resetToken) return;
+      setForgotPassword(true);
+    }, [resetToken]);
+
+    function closeForgotPassword() {
+      setForgotPassword(false);
+      setResetToken("");
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("reset");
+        window.history.replaceState({}, "", url.pathname + url.search + url.hash);
+      } catch (e) {}
+    }
 
     useEffect(() => {
       if (!VG.store) return;
@@ -746,11 +849,14 @@
       return VG.store.subscribe(check);
     }, []);
 
+    const logoutGuard = useRef(false);
     useEffect(() => {
       if (!session || !VG.store) return;
       const check = () => {
+        if (logoutGuard.current) return;
         const v = VG.store.validateSession(session);
         if (!v.ok) {
+          logoutGuard.current = true;
           VG.toast(v.reason || "Session ended", "error");
           logout(true);
         }
@@ -806,10 +912,14 @@
       setSession(s); setModuleId(null); persist(s);
     }
     function logout(silent) {
-      if (session && VG.store && VG.store.endSession) VG.store.endSession(session.sessionId);
+      if (logoutGuard.current && !session) return;
+      const sid = session && session.sessionId;
+      logoutGuard.current = true;
       setSession(null); setModuleId(null);
+      if (sid && VG.store && VG.store.endSession) VG.store.endSession(sid);
       clearAuthCache();
       setAccent("#6366f1");
+      logoutGuard.current = false;
       if (!silent) VG.toast("Signed out", "info");
     }
     function openModule(id) {
@@ -817,6 +927,9 @@
       if (!allowed || !VG.can(session.roleKey, "view", id)) {
         VG.toast("You do not have permission to open this module", "error");
         return;
+      }
+      if (VG.store && VG.store.recordModuleOpen) {
+        VG.store.recordModuleOpen(session.roleKey, id, session.roleKey);
       }
       setModuleId(id); persist({ moduleId: id });
     }
@@ -829,17 +942,37 @@
     if (!licensed) screen = <ActivationScreen onActivated={() => setLicensed(true)} />;
     else if (!session && needsSetup) screen = <InitialSetup onComplete={login} theme={theme} setTheme={setTheme} />;
     else if (!session) screen = <Login onLogin={login} theme={theme} setTheme={setTheme} needsSetup={needsSetup} />;
+    else if (!session && forgotPassword && VG.ForgotPasswordFlow) {
+      screen = (
+        <VG.ForgotPasswordFlow
+          theme={theme}
+          setTheme={setTheme}
+          onBack={closeForgotPassword}
+          initialToken={resetToken}
+        />
+      );
+    }
+    else if (!session) screen = (
+      <Login
+        onLogin={login}
+        theme={theme}
+        setTheme={setTheme}
+        needsSetup={needsSetup}
+        onForgotPassword={() => setForgotPassword(true)}
+      />
+    );
     else if (!moduleId) screen = (VG.WelcomeHome ? <VG.WelcomeHome roleKey={session.roleKey} email={session.email} onOpen={openModule} onLogout={logout} theme={theme} setTheme={setTheme} onOpenSearch={openSearch} /> : <Launcher roleKey={session.roleKey} email={session.email} onOpen={openModule} onLogout={logout} theme={theme} setTheme={setTheme} onOpenSearch={openSearch} />);
     else screen = <Workspace roleKey={session.roleKey} email={session.email} moduleId={moduleId} onOpen={openModule} onHome={goHome} onLogout={logout} theme={theme} setTheme={setTheme} onOpenSearch={openSearch} />;
     const SearchModal = VG.UniversalSearch;
     const FX = VG.fx;
     return (
-      <>
+      <div id="vg-app-root" className="min-h-screen relative">
         {screen}
         {session && SearchModal && <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} roleKey={session.roleKey} />}
         {FX && <FX.Toaster />}
         {FX && <FX.Confirmer />}
-      </>
+        {FX && FX.BannerHost && <FX.BannerHost />}
+      </div>
     );
   }
 
@@ -861,6 +994,10 @@
   }
 
   VG.bootApp = function bootApp() {
+    if (VG._uiLayout !== "full-page") {
+      console.error("[Veraglo] Outdated floating-modal UI detected. Pull latest main and hard-refresh (Ctrl+Shift+R).");
+      if (VG.toast) VG.toast("Outdated UI scripts loaded — git pull origin main, restart server, hard refresh", "warn");
+    }
     const el = document.getElementById("root");
     const root = ReactDOM.createRoot(el);
     root.render(
