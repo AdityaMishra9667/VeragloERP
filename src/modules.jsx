@@ -365,7 +365,7 @@
 
   function ModuleBreadcrumb({ mod, sectionLabel, groupLabel, onHome }) {
     return (
-      <nav className="vg-module-crumb flex flex-wrap items-center gap-1.5 text-[11px] mb-2 opacity-60" aria-label="Breadcrumb">
+      <nav className="vg-module-crumb vg-workspace-inset flex flex-wrap items-center gap-1.5 text-[11px] pt-2 pb-1 opacity-60" aria-label="Breadcrumb">
         <button type="button" onClick={onHome} className="hover:opacity-100 transition font-medium" style={{ color: "var(--accent)" }}>
           {mod.name}
         </button>

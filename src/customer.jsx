@@ -964,7 +964,7 @@
       return <CustomerForm open record={form.id ? form : null} roleKey={roleKey} can={can} onClose={() => setForm(null)} onSaved={() => {}} />;
     }
     return (
-      <div>
+      <div className="vg-list-page w-full max-w-none">
         <PageHead title="Customer Master" desc="Click any customer name for the full Customer 360° dashboard" />
         <RecordTable tableId="customers" title="Customers" columns={cols} rows={rows} can={can} printTitle="Customer Master"
           searchKeys={["code", "legalName", "tradeName", "gstin", "pan"]}
