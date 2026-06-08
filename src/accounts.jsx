@@ -3,7 +3,7 @@
   const { useState } = React;
   const ui = VG.ui, fx = VG.fx, store = VG.store, inr = VG.fmt.inr, today = VG.fmt.todayISO;
   const { Icon, Button, Pill, Card } = ui;
-  const { Field, Num, Modal, RecordTable, PageHead, StatusTag, printDocument, DocActions } = fx;
+  const { Field, Num, Modal, InternalScreen, RecordTable, PageHead, StatusTag, printDocument, DocActions } = fx;
 
   const custName = (id) => (store.get("customers", id) || {}).name || "—";
   const INV_STATUS = { Posted: "#22d3ee", "Partially Paid": "#f59e0b", Paid: "#34d399", Cancelled: "#ef4444" };
@@ -112,6 +112,23 @@
       { key: "status", label: "Status", render: (r) => <StatusTag value={r.status} map={INV_STATUS} /> },
       { key: "act", label: "Action", render: (r) => r.status !== "Paid" && can("edit") ? <Button variant="soft" className="!py-1" onClick={() => setPay(r)}>Payment</Button> : null },
     ];
+    if (view) {
+      const inv = store.get("invoices", view.id) || view;
+      return (
+        <>
+          <InternalScreen onBack={() => setView(null)} backLabel="Back to receivables" title={"Invoice " + inv.no} subtitle={custName(inv.customerId)}
+            footer={<><DocActions build={() => invDoc(inv)} />{inv.status !== "Paid" && can("edit") && <Button icon="rupee" onClick={() => setPay(inv)}>Record payment</Button>}</>}>
+            <StatusTag value={inv.status} map={INV_STATUS} />
+            <div className="mt-4 text-sm grid sm:grid-cols-3 gap-3">
+              <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Amount</div>{inr(inv.amount)}</Card>
+              <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Paid</div>{inr(inv.amountPaid || 0)}</Card>
+              <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Due</div>{inv.dueDate || "—"}</Card>
+            </div>
+          </InternalScreen>
+          {pay && <PaymentModal inv={pay} roleKey={roleKey} onClose={() => { setPay(null); setView(store.get("invoices", inv.id)); }} />}
+        </>
+      );
+    }
     return (
       <div>
         <PageHead title="Receivables" desc="Raise tax invoices from dispatched orders and record payments" />
@@ -138,19 +155,8 @@
             ))}
           </Card>
         )}
-        <RecordTable title="Customer invoices" columns={cols} rows={invRows} can={can} printTitle="Invoices" searchKeys={["no", "salesOrderNo"]}
+        <RecordTable tableId="accounts-receivables" title="Customer invoices" columns={cols} rows={invRows} can={can} printTitle="Invoices" searchKeys={["no", "salesOrderNo"]}
           filters={[{ key: "status", label: "All status", options: ["Posted", "Partially Paid", "Paid"] }]} onView={(r) => setView(r)} />
-        {view && (
-          <Modal open onClose={() => setView(null)} size="xl" title={"Invoice " + view.no} subtitle={custName(view.customerId)}
-            footer={<><DocActions build={() => invDoc(view)} />{view.status !== "Paid" && can("edit") && <Button icon="rupee" onClick={() => setPay(view)}>Record payment</Button>}</>}>
-            <StatusTag value={view.status} map={INV_STATUS} />
-            <div className="mt-4 text-sm grid sm:grid-cols-3 gap-3">
-              <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Amount</div>{inr(view.amount)}</Card>
-              <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Paid</div>{inr(view.amountPaid || 0)}</Card>
-              <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Due</div>{view.dueDate || "—"}</Card>
-            </div>
-          </Modal>
-        )}
         {pay && <PaymentModal inv={pay} roleKey={roleKey} onClose={() => setPay(null)} />}
         {printPick && VG.InvoicePrintCopiesModal && <VG.InvoicePrintCopiesModal inv={printPick.inv} mode={printPick.mode} onClose={() => setPrintPick(null)} />}
       </div>

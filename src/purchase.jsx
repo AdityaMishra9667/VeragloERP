@@ -3,7 +3,7 @@
   const { useState } = React;
   const ui = VG.ui, fx = VG.fx, store = VG.store, inr = VG.fmt.inr, today = VG.fmt.todayISO;
   const { Icon, Button, Pill, Card } = ui;
-  const { Field, Text, Area, Num, DateF, Select, MasterSelect, Modal, RecordTable, PageHead, StatusTag, printDocument, DocActions } = fx;
+  const { Field, Text, Area, Num, DateF, Select, MasterSelect, Modal, InternalScreen, RecordTable, PageHead, StatusTag, printDocument, DocActions } = fx;
 
   const itemName = (id) => (VG.itemDisplay && VG.itemDisplay.tableLabel(id)) || (VG.itemMfr && VG.itemMfr.label(id)) || "—";
   const itemNameSkuPdf = (id) => (VG.itemDisplay && VG.itemDisplay.itemNameSkuCell(id)) || itemName(id);
@@ -110,24 +110,27 @@
       { key: "total", label: "Value", render: (r) => inr(r.total), csv: (r) => r.total },
       { key: "status", label: "Status", render: (r) => <StatusTag value={r.status} map={PO_STATUS} /> },
     ];
+    const po = view ? (store.get("purchaseOrders", view.id) || view) : null;
+    if (po) {
+      return (
+        <InternalScreen onBack={() => setView(null)} backLabel="Back to purchase orders" title={"Purchase Order " + po.no} subtitle={suppName(po.supplierId)}
+          footer={<><DocActions build={() => poDoc(po)} />{can("edit") && po.status === "Open" && <Button variant="soft" icon="check" onClick={() => { store.update("purchaseOrders", po.id, { status: "Approved", approvedBy: roleKey }, roleKey); setView(store.get("purchaseOrders", po.id)); VG.toast("PO " + po.no + " approved"); }}>Approve</Button>}<Button icon="download" onClick={() => VG.goTo("inventory", "receipt")}>Record receipt</Button></>}>
+          <div className="flex items-center gap-2 mb-4"><StatusTag value={po.status} map={PO_STATUS} /><span className="text-sm opacity-60 ml-auto">{po.date}{po.prNo ? " · from " + po.prNo : ""}</span></div>
+          <div className="overflow-x-auto rounded-xl glass">
+            <table className="w-full text-xs"><thead className="text-[10px] uppercase opacity-55 vg-sticky-thead"><tr className="text-left border-b border-white/10"><th className="px-3 py-2">Item</th><th className="px-3 py-2 text-right">Qty</th><th className="px-3 py-2 text-right">Rate</th><th className="px-3 py-2 text-right">Amount</th></tr></thead>
+              <tbody>{(po.lines || []).map((l, i) => <tr key={i} className="border-b border-white/5"><td className="px-3 py-2">{itemName(l.itemId)}</td><td className="px-3 py-2 text-right">{l.qty} {l.uom}</td><td className="px-3 py-2 text-right">{inr(l.rate)}</td><td className="px-3 py-2 text-right font-medium">{inr((Number(l.qty) || 0) * (Number(l.rate) || 0))}</td></tr>)}</tbody>
+            </table>
+          </div>
+          <div className="flex justify-end mt-3 text-sm"><div className="w-56"><div className="flex justify-between font-semibold text-base border-t border-white/10 pt-1"><span>Total</span><span>{inr(po.total || 0)}</span></div></div></div>
+        </InternalScreen>
+      );
+    }
     return (
       <div>
         <PageHead title="Purchase Orders" desc="Issued orders awaiting goods receipt from Stores" />
-        <RecordTable title="Purchase orders" columns={cols} rows={rows} can={can} printTitle="Purchase Orders" searchKeys={["no"]}
+        <RecordTable tableId="purchase-orders" title="Purchase orders" columns={cols} rows={rows} can={can} printTitle="Purchase Orders" searchKeys={["no"]}
           filters={[{ key: "status", label: "All status", options: ["Open", "Approved", "Received", "Closed", "Cancelled"] }]}
           onView={(r) => setView(r)} empty="No purchase orders — approve a request to create one" />
-        {view && (
-          <Modal open onClose={() => setView(null)} size="xl" title={"Purchase Order " + view.no} subtitle={suppName(view.supplierId)}
-            footer={<><DocActions build={() => poDoc(view)} />{can("edit") && view.status === "Open" && <Button variant="soft" icon="check" onClick={() => { store.update("purchaseOrders", view.id, { status: "Approved", approvedBy: roleKey }, roleKey); setView((v) => ({ ...v, status: "Approved", approvedBy: roleKey })); VG.toast("PO " + view.no + " approved"); }}>Approve</Button>}<Button icon="download" onClick={() => VG.goTo("inventory", "receipt")}>Record receipt</Button></>}>
-            <div className="flex items-center gap-2 mb-4"><StatusTag value={view.status} map={PO_STATUS} /><span className="text-sm opacity-60 ml-auto">{view.date}{view.prNo ? " · from " + view.prNo : ""}</span></div>
-            <div className="overflow-x-auto rounded-xl glass">
-              <table className="w-full text-xs"><thead className="text-[10px] uppercase opacity-55"><tr className="text-left border-b border-white/10"><th className="px-3 py-2">Item</th><th className="px-3 py-2 text-right">Qty</th><th className="px-3 py-2 text-right">Rate</th><th className="px-3 py-2 text-right">Amount</th></tr></thead>
-                <tbody>{(view.lines || []).map((l, i) => <tr key={i} className="border-b border-white/5"><td className="px-3 py-2">{itemName(l.itemId)}</td><td className="px-3 py-2 text-right">{l.qty} {l.uom}</td><td className="px-3 py-2 text-right">{inr(l.rate)}</td><td className="px-3 py-2 text-right font-medium">{inr((Number(l.qty) || 0) * (Number(l.rate) || 0))}</td></tr>)}</tbody>
-              </table>
-            </div>
-            <div className="flex justify-end mt-3 text-sm"><div className="w-56"><div className="flex justify-between font-semibold text-base border-t border-white/10 pt-1"><span>Total</span><span>{inr(view.total || 0)}</span></div></div></div>
-          </Modal>
-        )}
       </div>
     );
   }

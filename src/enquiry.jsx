@@ -3,7 +3,7 @@
   const { useState, useEffect, useMemo } = React;
   const ui = VG.ui, fx = VG.fx, store = VG.store, inr = VG.fmt.inr, today = VG.fmt.todayISO;
   const { Icon, Button, Pill, Card } = ui;
-  const { Field, Text, Area, Num, DateF, Select, MasterSelect, Modal, RecordTable, PageHead, StatusTag } = fx;
+  const { Field, Text, Area, Num, DateF, Select, MasterSelect, Modal, InternalScreen, RecordTable, PageHead, StatusTag } = fx;
 
   const uid = () => "enq" + Math.random().toString(36).slice(2, 10);
   const custName = (id) => (store.get("customers", id) || {}).name || "—";
@@ -275,11 +275,8 @@
 
     return (
       <>
-        <Modal open={open} onClose={onClose} size="full" dirty={dirty} title={(isEdit ? "Edit " : "New ") + "Enquiry"} subtitle={isEdit ? e.no : "Complete customer, project & requirement details"}
-          footer={<>
-            <Button variant="soft" onClick={onClose}>Close</Button>
-            <Button icon="check" onClick={save}>{isEdit ? "Update" : "Save Enquiry"}</Button>
-          </>}>
+        <InternalScreen onBack={onClose} backLabel="Back to enquiries" dirty={dirty} title={(isEdit ? "Edit " : "New ") + "Enquiry"} subtitle={isEdit ? e.no : "Complete customer, project & requirement details"}
+          footer={<Button icon="check" onClick={save}>{isEdit ? "Update" : "Save Enquiry"}</Button>}>
           <div className="flex flex-wrap gap-1 mb-4">
             {tabs.map(([k, l]) => (
               <button key={k} type="button" onClick={() => setTab(k)} className={"px-3 py-1.5 rounded-lg text-xs font-medium " + (tab === k ? "bg-white/15" : "opacity-55 hover:opacity-80")}>{l}</button>
@@ -359,7 +356,7 @@
               <Field label="General remarks" className="sm:col-span-2"><Area value={e.remarks} onChange={(v) => set("remarks", v)} rows={3} /></Field>
             </div>
           )}
-        </Modal>
+        </InternalScreen>
         {showNewCustomer && VG.CustomerForm && (
           <VG.CustomerForm open record={null} roleKey={roleKey} can={can} onClose={() => setShowNewCustomer(false)}
             onSaved={(saved) => {
@@ -554,8 +551,7 @@
 
     return (
       <>
-        <Modal open onClose={onClose} size="xl" title={e.no} subtitle={e.projectName || e.subject}
-          footer={<Button variant="soft" onClick={onClose}>Close</Button>}>
+        <InternalScreen onBack={onClose} backLabel="Back to enquiries" title={e.no} subtitle={e.projectName || e.subject}>
           <div className="flex flex-wrap items-center gap-2 mb-4">
             <StatusTag value={e.status} map={ENQ_STATUS_COLORS} />
             {e.priority && e.priority !== "Normal" && <Pill color={e.priority === "Urgent" ? "#ef4444" : "#f59e0b"}>{e.priority}</Pill>}
@@ -624,7 +620,7 @@
               ))}</ul>
             </Card>
           )}
-        </Modal>
+        </InternalScreen>
         {modal === "offer" && <OfferSentModal open enquiry={e} roleKey={roleKey} onClose={() => setModal(null)} onDone={refresh} />}
         {modal === "followup" && <FollowupModal open enquiry={e} roleKey={roleKey} onClose={() => setModal(null)} onDone={refresh} />}
         {modal === "clarification" && <ClarificationModal open enquiry={e} roleKey={roleKey} onClose={() => setModal(null)} onDone={refresh} />}
@@ -728,6 +724,16 @@
       { key: "assignedTo", label: "Owner", render: (r) => <span className="text-xs opacity-70">{r.assignedTo || r.owner || "—"}</span> },
     ];
 
+    if (builder) {
+      return <EnquiryBuilder open onClose={() => setBuilder(null)} record={builder.id ? builder : null} roleKey={roleKey} can={can} onSaved={() => {}} />;
+    }
+    if (view) {
+      const eLive = normalizeEnquiry(store.get("enquiries", view.id) || view);
+      return (
+        <EnquiryView enquiry={eLive} onClose={() => setView(null)} roleKey={roleKey} can={can}
+          onChange={() => setView(normalizeEnquiry(store.get("enquiries", view.id)))} />
+      );
+    }
     return (
       <div>
         <PageHead title="Enquiry Management" desc="Capture enquiries, track offers, follow-ups and conversion to sales orders" />
@@ -739,7 +745,7 @@
             <button type="button" className="opacity-50 hover:opacity-100" onClick={() => setStatusFilter("")}>Clear</button>
           </div>
         )}
-        <RecordTable title="Enquiries" columns={cols} rows={rows} can={can} printTitle="Enquiries"
+        <RecordTable tableId="enquiries" title="Enquiries" columns={cols} rows={rows} can={can} printTitle="Enquiries"
           searchKeys={["no", "projectName", "companyName", "subject", "customerRfqNo"]}
           filters={[{ key: "status", label: "All status", options: ENQ_STATUSES }, { key: "priority", label: "All priority", options: PRIORITIES }, { key: "type", label: "All types", options: ["Sales", "Purchase"] }]}
           onNew={can("add") ? () => setBuilder({ date: today(), status: "New Enquiry", customerType: "Existing", lines: [blankLine()] }) : null}
@@ -756,8 +762,6 @@
           </button>
           {showReports && <EnquiryReports can={can} />}
         </div>
-        {builder && <EnquiryBuilder open onClose={() => setBuilder(null)} record={builder.id ? builder : null} roleKey={roleKey} can={can} onSaved={() => {}} />}
-        {view && <EnquiryView enquiry={view} onClose={() => setView(null)} roleKey={roleKey} can={can} onChange={() => setView((v) => normalizeEnquiry(store.get("enquiries", v.id)))} />}
       </div>
     );
   }

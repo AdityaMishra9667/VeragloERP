@@ -650,7 +650,7 @@
         <div className="flex-1 min-w-0 flex flex-col">
           <Topbar roleKey={roleKey} email={email} mod={mod} onHome={onHome} onToggleMobile={() => setMobileOpen(true)}
             theme={theme} setTheme={setTheme} onLogout={onLogout} onOpenSearch={onOpenSearch} />
-          <main className="flex-1 p-4 sm:p-6 max-w-[1500px] w-full mx-auto">
+          <main className="flex-1 p-3 sm:p-5 w-full min-w-0 max-w-none">
             {mod ? <VG.ModuleWorkspace key={moduleId} mod={mod} roleKey={roleKey} /> : <div className="opacity-60">Module not found.</div>}
           </main>
         </div>

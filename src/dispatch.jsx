@@ -3,7 +3,7 @@
   const { useState } = React;
   const ui = VG.ui, fx = VG.fx, store = VG.store, inr = VG.fmt.inr, today = VG.fmt.todayISO;
   const { Icon, Button, Pill, Card } = ui;
-  const { Field, Text, Area, DateF, Modal, RecordTable, PageHead, StatusTag, printDocument, DocActions } = fx;
+  const { Field, Text, Area, DateF, Modal, InternalScreen, RecordTable, PageHead, StatusTag, printDocument, DocActions } = fx;
 
   const custName = (id) => (store.get("customers", id) || {}).name || "—";
   const SH_STATUS = { Pending: "#f59e0b", Packing: "#a78bfa", "In-transit": "#22d3ee", Delivered: "#34d399", Cancelled: "#ef4444" };
@@ -92,6 +92,9 @@
         </div>
       ) },
     ];
+    if (view) {
+      return <ShipmentDetailPage view={view} onBack={() => setView(null)} roleKey={roleKey} can={can} />;
+    }
     return (
       <div>
         <PageHead title="Shipments" desc="Create from ready sales orders · dispatch · confirm delivery" />
@@ -106,43 +109,46 @@
             }}>{q.workOrderNo} · QC</Button>)}
           </Card>
         )}
-        <RecordTable title="Shipments" columns={cols} rows={rows} can={can} printTitle="Shipments" searchKeys={["no", "salesOrderNo", "destination"]}
+        <RecordTable tableId="dispatch-shipments" title="Shipments" columns={cols} rows={rows} can={can} printTitle="Shipments" searchKeys={["no", "salesOrderNo", "destination"]}
           filters={[{ key: "status", label: "All status", options: ["Pending", "Packing", "In-transit", "Delivered"] }]}
           onView={(r) => setView(r)} empty="No shipments — create from a sales order ready to dispatch" />
-        {view && (
-          <Modal open onClose={() => setView(null)} size="xl" title={"Shipment " + view.no} subtitle={custName(view.customerId)}
-            footer={<><DocActions build={() => shDoc(view)} />
-              {(view.status === "Pending" || view.status === "Packing") && can("edit") && <Button icon="truck" onClick={async () => {
-                await VG.forwardStatus({
-                  fromType: "Shipment", fromNo: view.no, fromId: view.id, actor: roleKey,
-                  confirmMessage: "Are you sure you want to mark Shipment " + view.no + " as dispatched?",
-                  successMessage: "Shipment " + view.no + " dispatched successfully.",
-                  statusChange: "In-transit",
-                  run: () => store.dispatchShipment(view.id, roleKey),
-                  onDone: () => setView(store.get("shipments", view.id)),
-                });
-              }}>Mark dispatched</Button>}
-              {view.status === "In-transit" && can("edit") && <Button icon="check" onClick={async () => {
-                await VG.forwardStatus({
-                  fromType: "Shipment", fromNo: view.no, fromId: view.id, actor: roleKey,
-                  confirmMessage: "Are you sure you want to confirm delivery for Shipment " + view.no + "?",
-                  successMessage: "Shipment " + view.no + " marked as delivered.",
-                  statusChange: "Delivered",
-                  run: () => store.deliverShipment(view.id, roleKey),
-                  onDone: () => setView(store.get("shipments", view.id)),
-                });
-              }}>Confirm delivery</Button>}
-            </>}>
-            <StatusTag value={view.status} map={SH_STATUS} />
-            <div className="grid sm:grid-cols-3 gap-3 mt-4 text-sm">
-              <Card className="p-3"><div className="text-[11px] uppercase opacity-55">SO</div>{view.salesOrderNo}</Card>
-              <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Vehicle</div>{view.vehicle || "—"}</Card>
-              <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Destination</div>{view.destination || "—"}</Card>
-            </div>
-          </Modal>
-        )}
         {createSO && <ShipmentForm open={true} so={createSO} roleKey={roleKey} onClose={() => setCreateSO(null)} />}
       </div>
+    );
+  }
+
+  function ShipmentDetailPage({ view, onBack, roleKey, can }) {
+    VG.useDB();
+    const sh = store.get("shipments", view.id) || view;
+    return (
+      <InternalScreen onBack={onBack} backLabel="Back to shipments" title={"Shipment " + sh.no} subtitle={custName(sh.customerId)}
+        footer={<><DocActions build={() => shDoc(sh)} />
+          {(sh.status === "Pending" || sh.status === "Packing") && can("edit") && <Button icon="truck" onClick={async () => {
+            await VG.forwardStatus({
+              fromType: "Shipment", fromNo: sh.no, fromId: sh.id, actor: roleKey,
+              confirmMessage: "Are you sure you want to mark Shipment " + sh.no + " as dispatched?",
+              successMessage: "Shipment " + sh.no + " dispatched successfully.",
+              statusChange: "In-transit",
+              run: () => store.dispatchShipment(sh.id, roleKey),
+            });
+          }}>Mark dispatched</Button>}
+          {sh.status === "In-transit" && can("edit") && <Button icon="check" onClick={async () => {
+            await VG.forwardStatus({
+              fromType: "Shipment", fromNo: sh.no, fromId: sh.id, actor: roleKey,
+              confirmMessage: "Are you sure you want to confirm delivery for Shipment " + sh.no + "?",
+              successMessage: "Shipment " + sh.no + " marked as delivered.",
+              statusChange: "Delivered",
+              run: () => store.deliverShipment(sh.id, roleKey),
+            });
+          }}>Confirm delivery</Button>}
+        </>}>
+        <StatusTag value={sh.status} map={SH_STATUS} />
+        <div className="grid sm:grid-cols-3 gap-3 mt-4 text-sm">
+          <Card className="p-3"><div className="text-[11px] uppercase opacity-55">SO</div>{sh.salesOrderNo}</Card>
+          <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Vehicle</div>{sh.vehicle || "—"}</Card>
+          <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Destination</div>{sh.destination || "—"}</Card>
+        </div>
+      </InternalScreen>
     );
   }
 

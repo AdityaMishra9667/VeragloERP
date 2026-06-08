@@ -3,7 +3,7 @@
   const { useState } = React;
   const ui = VG.ui, fx = VG.fx, store = VG.store, inr = VG.fmt.inr, today = VG.fmt.todayISO;
   const { Icon, Button, Pill, Card } = ui;
-  const { Field, Text, Area, Num, DateF, Select, MasterSelect, Modal, RecordTable, PageHead, StatusTag, printDocument, DocActions } = fx;
+  const { Field, Text, Area, Num, DateF, Select, MasterSelect, Modal, InternalScreen, RecordTable, PageHead, StatusTag, printDocument, DocActions } = fx;
 
   const custName = (id) => (store.get("customers", id) || {}).name || "—";
   const canSeeCustomer = (roleKey) => store.canViewCustomerForRole ? store.canViewCustomerForRole(roleKey) : (roleKey === "admin");
@@ -93,49 +93,45 @@
         </div>
       ) },
     ];
-    return (
-      <div>
-        <PageHead title="Work Orders" desc="Release → material planning → production completion → QC handoff" />
-        <RecordTable title="Work orders" columns={cols} rows={rows} can={can} printTitle="Work Orders" searchKeys={["no", "salesOrderNo", "product"]}
-          filters={[{ key: "status", label: "All status", options: Object.keys(WO_STATUS) }]}
-          onView={(r) => setView(r)} empty="No work orders — release from a confirmed sales order on the dashboard" />
-        {view && (() => {
-          const bom = view.bomId ? store.get("boms", view.bomId) : (store.getDefaultBom && store.getDefaultBom(view.finishedItemId || (store.findItemBySku && store.findItemBySku(view.sku) || {}).id));
-          const reqs = bom && store.explodeBom ? store.explodeBom(bom.id, view.qtyPlanned || 1) : [];
-          return (
-          <Modal open onClose={() => setView(null)} size="xl" title={"Work Order " + view.no} subtitle={custName(view.customerId)}
+    if (view) {
+      const wo = store.get("workOrders", view.id) || view;
+      const bom = wo.bomId ? store.get("boms", wo.bomId) : (store.getDefaultBom && store.getDefaultBom(wo.finishedItemId || (store.findItemBySku && store.findItemBySku(wo.sku) || {}).id));
+      const reqs = bom && store.explodeBom ? store.explodeBom(bom.id, wo.qtyPlanned || 1) : [];
+      return (
+        <>
+          <InternalScreen onBack={() => setView(null)} backLabel="Back to work orders" title={"Work Order " + wo.no} subtitle={custName(wo.customerId)}
             footer={<>
-              <DocActions build={() => woDoc(view)} />
+              <DocActions build={() => woDoc(wo)} />
               {can("edit") && bom && (
-                <Button variant="soft" icon="check" onClick={() => { store.useExistingBomForWorkOrder(view.id, bom.id, roleKey); VG.toast("BOM attached to WO"); setView(store.get("workOrders", view.id)); }}>Use this BOM</Button>
+                <Button variant="soft" icon="check" onClick={() => { store.useExistingBomForWorkOrder(wo.id, bom.id, roleKey); VG.toast("BOM attached to WO"); setView(store.get("workOrders", wo.id)); }}>Use this BOM</Button>
               )}
               {!bom && can("edit") && (
                 <Button variant="soft" icon="plus" onClick={() => {
-                  const created = store.createWorkOrderSpecificBom(view.id, { name: "WO " + view.no + " BOM", qtyOutput: 1, lines: [] }, roleKey);
+                  const created = store.createWorkOrderSpecificBom(wo.id, { name: "WO " + wo.no + " BOM", qtyOutput: 1, lines: [] }, roleKey);
                   if (created) VG.toast("WO-specific BOM created: " + created.no);
-                  setView(store.get("workOrders", view.id));
+                  setView(store.get("workOrders", wo.id));
                 }}>Create WO BOM</Button>
               )}
-              {view.bomId && can("approve") && (
-                <Button variant="soft" icon="shield" onClick={() => { store.approveBomForWorkOrder(view.id, roleKey); VG.toast("BOM approved for WO"); setView(store.get("workOrders", view.id)); }}>Approve BOM</Button>
+              {wo.bomId && can("approve") && (
+                <Button variant="soft" icon="shield" onClick={() => { store.approveBomForWorkOrder(wo.id, roleKey); VG.toast("BOM approved for WO"); setView(store.get("workOrders", wo.id)); }}>Approve BOM</Button>
               )}
-              {view.bomId && can("edit") && (
-                <Button variant="soft" icon="edit" onClick={() => { const reason = window.prompt("Revision reason (mandatory):", ""); if (!reason) return; store.reviseWorkOrderBom(view.id, { reason }, roleKey); VG.toast("BOM revision raised"); setView(store.get("workOrders", view.id)); }}>Revise BOM</Button>
+              {wo.bomId && can("edit") && (
+                <Button variant="soft" icon="edit" onClick={() => { const reason = window.prompt("Revision reason (mandatory):", ""); if (!reason) return; store.reviseWorkOrderBom(wo.id, { reason }, roleKey); VG.toast("BOM revision raised"); setView(store.get("workOrders", wo.id)); }}>Revise BOM</Button>
               )}
-              {bom && (view.status === "Production Planned" || view.status === "Production In Progress" || view.status === "Released" || view.status === "Running") && can("edit") && (
+              {bom && (wo.status === "Production Planned" || wo.status === "Production In Progress" || wo.status === "Released" || wo.status === "Running") && can("edit") && (
                 <Button variant="soft" icon="logout" onClick={() => {
-                  const res = store.issueBomForWorkOrder(view.id, roleKey, { allowPartial: true });
+                  const res = store.issueBomForWorkOrder(wo.id, roleKey, { allowPartial: true });
                   if (!res.ok) VG.toast(res.reason || "Issue failed", "error");
                   else VG.toast("Issued " + res.issued.length + " component(s)" + (res.skipped.length ? " · " + res.skipped.length + " short" : ""), res.skipped.length ? "warn" : "success");
                 }}>Issue BOM materials</Button>
               )}
-              {view.status !== "Completed" && can("edit") && <Button icon="check" onClick={() => { setView(null); setComplete(view); }}>Mark complete</Button>}
+              {wo.status !== "Completed" && can("edit") && <Button icon="check" onClick={() => { setComplete(wo); }}>Mark complete</Button>}
             </>}>
-            <StatusTag value={view.status} map={WO_STATUS} />
+            <StatusTag value={wo.status} map={WO_STATUS} />
             <div className="grid sm:grid-cols-4 gap-3 mt-4 text-sm">
-              <Card className="p-3"><div className="text-[11px] uppercase opacity-55">SO</div>{view.salesOrderNo}</Card>
-              <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Product</div>{view.product}</Card>
-              <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Qty</div>{view.qtyProduced || 0} / {view.qtyPlanned}</Card>
+              <Card className="p-3"><div className="text-[11px] uppercase opacity-55">SO</div>{wo.salesOrderNo}</Card>
+              <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Product</div>{wo.product}</Card>
+              <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Qty</div>{wo.qtyProduced || 0} / {wo.qtyPlanned}</Card>
               <Card className="p-3"><div className="text-[11px] uppercase opacity-55">BOM</div>{bom ? <span className="font-mono text-xs">{bom.no}</span> : <span className="text-rose-400/80">None</span>}</Card>
             </div>
             {reqs.length > 0 && (
@@ -153,10 +149,17 @@
                 </div>
               </div>
             )}
-          </Modal>
-          );
-        })()}
-        {complete && <CompleteModal wo={complete} onClose={(ok) => { setComplete(null); if (ok) setView(null); }} roleKey={roleKey} />}
+          </InternalScreen>
+          {complete && <CompleteModal wo={complete} onClose={(ok) => { setComplete(null); if (ok) setView(null); }} roleKey={roleKey} />}
+        </>
+      );
+    }
+    return (
+      <div>
+        <PageHead title="Work Orders" desc="Release → material planning → production completion → QC handoff" />
+        <RecordTable tableId="production-work-orders" title="Work orders" columns={cols} rows={rows} can={can} printTitle="Work Orders" searchKeys={["no", "salesOrderNo", "product"]}
+          filters={[{ key: "status", label: "All status", options: Object.keys(WO_STATUS) }]}
+          onView={(r) => setView(r)} empty="No work orders — release from a confirmed sales order on the dashboard" />
       </div>
     );
   }

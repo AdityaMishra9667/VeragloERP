@@ -3,7 +3,7 @@
   const { useState, useMemo, useEffect, useRef } = React;
   const ui = VG.ui, fx = VG.fx, store = VG.store, inr = VG.fmt.inr, today = VG.fmt.todayISO;
   const { Icon, Button, Pill, Card } = ui;
-  const { Field, Text, Area, Num, DateF, Select, MasterSelect, Modal, RecordTable, PageHead, StatusTag, printDocument, DocActions } = fx;
+  const { Field, Text, Area, Num, DateF, Select, MasterSelect, Modal, InternalScreen, RecordTable, PageHead, StatusTag, printDocument, DocActions } = fx;
   const MasterForm = VG.MasterForm;
 
   const itemName = (id) => (VG.itemDisplay && VG.itemDisplay.tableLabel(id)) || (VG.itemMfr && VG.itemMfr.label(id)) || "—";
@@ -150,13 +150,10 @@
       onSaved();
     }
     return (
-      <Modal open={open} onClose={onClose} size="full" dirty={dirty && !disabled}
+      <InternalScreen onBack={onClose} backLabel="Back to items" dirty={dirty && !disabled}
         title={isEdit ? "Edit Item · " + (form.sku || "") : "New Item"}
         subtitle={isEdit ? form.name : "SKU auto-generated from Admin numbering rules — select category first"}
-        footer={<>
-          <Button variant="soft" onClick={onClose}>Close</Button>
-          {!disabled && <Button icon="check" onClick={save}>{isEdit ? "Save changes" : "Create item"}</Button>}
-        </>}>
+        footer={!disabled && <Button icon="check" onClick={save}>{isEdit ? "Save changes" : "Create item"}</Button>}>
         <div className="grid lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-5">
             <div>
@@ -259,7 +256,7 @@
             </Card>
           </div>
         </div>
-      </Modal>
+      </InternalScreen>
     );
   }
 
@@ -538,8 +535,8 @@
     }
     const avail = f.itemId ? store.onHand(f.itemId) : 0;
     return (
-      <Modal open={open} onClose={onClose} size="full" dirty={dirty} title="Material Receipt (GRN)" subtitle="Updates stock ledger on save"
-        footer={<><Button variant="soft" onClick={onClose}>Close</Button><Button variant="soft" icon="eye" onClick={() => printDocument(receiptDoc({ ...f, no: f.no || "DRAFT", totalValue: total }), "preview")}>Preview GRN</Button><Button icon="check" onClick={save}>Post receipt</Button></>}>
+      <InternalScreen onBack={onClose} backLabel="Back to receipts" dirty={dirty} title="Material Receipt (GRN)" subtitle="Updates stock ledger on save"
+        footer={<><Button variant="soft" icon="eye" onClick={() => printDocument(receiptDoc({ ...f, no: f.no || "DRAFT", totalValue: total }), "preview")}>Preview GRN</Button><Button icon="check" onClick={save}>Post receipt</Button></>}>
         <div className="grid lg:grid-cols-3 gap-3">
           <Field label="Receipt date" required><DateF value={f.date} onChange={(v) => set("date", v)} /></Field>
           <Field label="Supplier (master)" required><MasterSelect collection="suppliers" value={f.supplierId} onChange={(v) => set("supplierId", v)} actorRole={roleKey} can={can("add")} /></Field>
@@ -570,7 +567,7 @@
           <Field label="Remarks" className="lg:col-span-3"><Area value={f.remarks} onChange={(v) => set("remarks", v)} rows={2} /></Field>
         </div>
         <div className="mt-2 text-right text-sm">Total value: <b>{inr(total)}</b></div>
-      </Modal>
+      </InternalScreen>
     );
   }
   function receiptDoc(r) {
@@ -636,8 +633,8 @@
       onClose();
     }
     return (
-      <Modal open={open} onClose={onClose} size="full" dirty={dirty} title="Material Issue" subtitle="Reduces stock on save · challan can be printed"
-        footer={<><Button variant="soft" onClick={onClose}>Close</Button><Button variant="soft" icon="eye" onClick={() => printDocument(issueChallanDoc({ ...f, no: f.no || "DRAFT", issuedBy: roleKey }), "preview")}>Preview challan</Button><Button icon="check" onClick={save}>Post issue</Button></>}>
+      <InternalScreen onBack={onClose} backLabel="Back to issues" dirty={dirty} title="Material Issue" subtitle="Reduces stock on save · challan can be printed"
+        footer={<><Button variant="soft" icon="eye" onClick={() => printDocument(issueChallanDoc({ ...f, no: f.no || "DRAFT", issuedBy: roleKey }), "preview")}>Preview challan</Button><Button icon="check" onClick={save}>Post issue</Button></>}>
         <div className="grid lg:grid-cols-3 gap-3">
           <Field label="Issue date" required><DateF value={f.date} onChange={(v) => set("date", v)} /></Field>
           <Field label="Issue type" required className="lg:col-span-2"><Select value={f.type} onChange={(v) => set("type", v)} options={ISSUE_TYPES.map((t) => ({ value: t, label: t }))} /></Field>
@@ -697,7 +694,7 @@
           </>}
           <Field label="Remarks" className="lg:col-span-3"><Area value={f.remarks} onChange={(v) => set("remarks", v)} rows={2} /></Field>
         </div>
-      </Modal>
+      </InternalScreen>
     );
   }
   function issueChallanPDF(m, mode) { printDocument(issueChallanDoc(m), mode); }
@@ -780,7 +777,7 @@
         <RecordTable title="Material requirements" columns={cols} rows={rows} can={can} printTitle="Material Requirements" searchKeys={["no", "workOrderNo"]} empty="No material requirements pending" />
         <RecordTable title="Finished goods transfer" columns={fgCols} rows={fgRows} can={can} printTitle="Finished Goods Transfer" searchKeys={["no", "workOrderNo"]} empty="No finished goods transfers" />
         {view && (
-          <Modal open onClose={() => setView(null)} size="xl" title={"Material Availability & Shortage · " + view.no} subtitle={view.workOrderNo}>
+          <InternalScreen onBack={() => setView(null)} backLabel="Back to requirements" title={"Material Availability & Shortage · " + view.no} subtitle={view.workOrderNo}>
             <div className="text-xs opacity-70 mb-3">WO: {view.workOrderNo} · SO: {view.salesOrderNo || "—"} · BOM: {view.bomNo || "—"} {view.bomRevision || ""}</div>
             <div className="overflow-x-auto rounded-xl glass">
               <table className="w-full text-xs">
@@ -801,7 +798,7 @@
                 </tbody>
               </table>
             </div>
-          </Modal>
+          </InternalScreen>
         )}
       </div>
     );

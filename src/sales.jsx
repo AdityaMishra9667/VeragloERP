@@ -3,7 +3,7 @@
   const { useState, useMemo, useEffect } = React;
   const ui = VG.ui, fx = VG.fx, store = VG.store, inr = VG.fmt.inr, today = VG.fmt.todayISO;
   const { Icon, Button, Pill, Card } = ui;
-  const { Field, Text, Area, Num, DateF, Select, Checkbox, MasterSelect, Modal, RecordTable, PageHead, StatusTag, printDocument, DocActions, TransactionLinesShell } = fx;
+  const { Field, Text, Area, Num, DateF, Select, Checkbox, MasterSelect, Modal, InternalScreen, RecordTable, PageHead, StatusTag, printDocument, DocActions, TransactionLinesShell } = fx;
 
   const QUO_STATUS = { Draft: "#94a3b8", "Pending Approval": "#f59e0b", Approved: "#34d399", Sent: "#60a5fa", Won: "#22c55e", Lost: "#ef4444", Revised: "#a78bfa" };
   const QUO_LIFECYCLE = {
@@ -151,9 +151,8 @@
     }
 
     return (
-      <Modal open={open} onClose={onClose} size="full" dirty={dirty} title={isEdit ? "Edit Quotation " + q.no : "New Quotation"} subtitle="All parties & items are selected from master data only"
+      <InternalScreen onBack={onClose} backLabel="Back to list" dirty={dirty} title={isEdit ? "Edit Quotation " + q.no : "New Quotation"} subtitle="All parties & items are selected from master data only"
         footer={<>
-          <Button variant="soft" onClick={onClose}>Close</Button>
           <Button variant="soft" icon="eye" onClick={() => quotationPDF({ ...q, no: q.no || "DRAFT", rev: q.rev || 0, status: q.status || "Draft", totals }, "preview")}>Preview PDF</Button>
           <Button variant="soft" icon="check" onClick={() => save(false)}>Save as Draft</Button>
           <Button icon="shield" onClick={() => save(true)}>Submit{needsApproval(q) ? " for approval" : ""}</Button>
@@ -235,7 +234,7 @@
             {needsApproval(q) && <div className="mt-3 text-[11px] rounded-lg p-2" style={{ background: "#f59e0b22", color: "#f59e0b" }}><Icon name="alert" size={12} className="inline mr-1" />Discount &gt; {DISCOUNT_LIMIT}% — needs approval</div>}
           </Card>
         </div>
-      </Modal>
+      </InternalScreen>
     );
   }
 
@@ -336,9 +335,8 @@
     }
 
     return (
-      <Modal open={open} onClose={onClose} size="full" dirty={dirty} title={isEdit ? "Edit Sales Order " + o.no : "New Sales Order"} subtitle="Create a confirmed order — items from item master"
+      <InternalScreen onBack={onClose} backLabel="Back to list" dirty={dirty} title={isEdit ? "Edit Sales Order " + o.no : "New Sales Order"} subtitle="Create a confirmed order — items from item master"
         footer={<>
-          <Button variant="soft" onClick={onClose}>Close</Button>
           <Button variant="soft" icon="eye" onClick={() => orderPDF({ ...o, no: o.no || "DRAFT", status: "Confirmed", totals }, "preview")}>Preview PDF</Button>
           <Button icon="check" onClick={save}>{isEdit ? "Save order" : "Create sales order"}</Button>
         </>}>
@@ -414,7 +412,7 @@
             <div className="flex justify-between text-base font-semibold border-t border-white/10 mt-2 pt-2"><span>Grand total</span><span>{inr(totals.grand)}</span></div>
           </Card>
         </div>
-      </Modal>
+      </InternalScreen>
     );
   }
 
@@ -681,7 +679,7 @@
     const lifecycle = quotationLifecycleStatus(q);
     const canConvert = q.status === "Approved" || q.status === "Sent" || q.status === "Won";
     return (
-      <Modal open={!!q} onClose={onClose} size="xl" title={"Quotation " + q.no} subtitle={"Rev " + (q.rev || 0) + " · " + custName(q.customerId)}
+      <InternalScreen onBack={onClose} backLabel="Back to quotations" title={"Quotation " + q.no} subtitle={"Rev " + (q.rev || 0) + " · " + custName(q.customerId)}
         footer={<>
           <DocActions docType="Quotation" build={() => quotationDoc(q)}
             onDocument={(mode) => { markQuotationOfferSent(q, roleKey, mode === "print" ? "Print" : mode === "download" ? "Download" : mode, q.contact || ""); onChange(); }}
@@ -752,7 +750,7 @@
               return <li key={i} className="flex gap-2"><Pill color="#a78bfa">{label}</Pill><span className="opacity-70">{h.date}{note ? " — " + note : ""}</span></li>;
             })}</ul></div>
         )}
-      </Modal>
+      </InternalScreen>
     );
   }
 
@@ -809,16 +807,25 @@
         csv: () => "",
       },
     ];
+    if (builder) {
+      return <QuotationBuilder open onClose={() => setBuilder(null)} roleKey={roleKey} can={can} initial={builder.id ? builder : null} onSaved={() => {}} />;
+    }
+    if (view) {
+      const qLive = store.get("quotations", view.id) || view;
+      return (
+        <QuotationView q={qLive} onClose={() => setView(null)} roleKey={roleKey} can={can} go={go}
+          onChange={() => setView(store.get("quotations", view.id) || view)}
+          onEdit={(q) => { setView(null); setBuilder(q); }} />
+      );
+    }
     return (
       <div>
         <PageHead title="Quotations" desc="Click quotation number to open · download PDF or email from the list" />
         {VG.CustomerFilterBanner ? <VG.CustomerFilterBanner /> : null}
-        <RecordTable title="All quotations" columns={cols} rows={rows} can={can} printTitle="Quotations"
+        <RecordTable tableId="sales-quotations" title="All quotations" columns={cols} rows={rows} can={can} printTitle="Quotations"
           searchKeys={["no", "status"]} filters={[{ key: "status", label: "All status", get: (r) => quotationLifecycleStatus(r).label, options: QUO_LIFECYCLE_FILTER }]}
           onNew={() => setBuilder({})} newLabel="New Quotation" onView={(r) => setView(r)}
           onEdit={can("edit") ? (r) => setBuilder(r) : null} onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete quotation " + r.no + "?", danger: true, confirmLabel: "Delete" })) { store.remove("quotations", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-        {builder && <QuotationBuilder open onClose={() => setBuilder(null)} roleKey={roleKey} can={can} initial={builder.id ? builder : null} onSaved={() => {}} />}
-        {view && <QuotationView q={store.get("quotations", view.id)} onClose={() => setView(null)} roleKey={roleKey} can={can} go={go} onChange={() => setView((v) => ({ ...v }))} onEdit={(q) => { setView(null); setBuilder(q); }} />}
       </div>
     );
   }
@@ -966,21 +973,17 @@
         onDone: () => setView((v) => v && store.get("salesOrders", r.id)),
       });
     }
-    return (
-      <div>
-        <PageHead title="Sales Orders" desc="Create and review in Sales. Send to Production only when ready." />
-        {VG.CustomerFilterBanner ? <VG.CustomerFilterBanner /> : null}
-        <RecordTable title="Sales orders" columns={cols} rows={rows} can={can} printTitle="Sales Orders" searchKeys={["no"]}
-          filters={[{ key: "status", label: "All status", options: ORDER_FLOW }]}
-          onNew={can("add") ? () => setBuilder({}) : null} newLabel="New Sales Order"
-          onView={(r) => setView(r)} onEdit={can("edit") ? (r) => setBuilder(r) : null}
-          empty="No sales orders yet — click New Sales Order or convert a quotation" />
-        {builder && (
-          <SalesOrderBuilder open onClose={() => setBuilder(null)} roleKey={roleKey} can={can}
-            initial={builder.id ? builder : null} onSaved={() => {}} />
-        )}
-        {view && (
-          <Modal open onClose={() => setView(null)} size="xl" title={"Sales Order " + view.no} subtitle={custName(view.customerId)}
+    const liveOrder = view ? (store.get("salesOrders", view.id) || view) : null;
+    if (builder) {
+      return (
+        <SalesOrderBuilder open onClose={() => setBuilder(null)} roleKey={roleKey} can={can}
+          initial={builder.id ? builder : null} onSaved={() => {}} />
+      );
+    }
+    if (liveOrder) {
+      const view = liveOrder;
+      return (
+          <InternalScreen onBack={() => setView(null)} backLabel="Back to sales orders" title={"Sales Order " + view.no} subtitle={custName(view.customerId)}
             footer={<>
               <DocActions docType="Sales Order" build={() => orderDoc(view)} />
               {can("add") && <Button variant="soft" icon="rupee" onClick={() => makeProforma(view)} disabled={!!findProformaFromSO(view)} title={findProformaFromSO(view) ? "Proforma already exists" : ""}>Generate Proforma</Button>}
@@ -1063,8 +1066,18 @@
                 {!(view.timeline || []).length && <div className="text-xs opacity-55">No timeline entries yet.</div>}
               </div>
             </div>
-          </Modal>
-        )}
+          </InternalScreen>
+      );
+    }
+    return (
+      <div>
+        <PageHead title="Sales Orders" desc="Create and review in Sales. Send to Production only when ready." />
+        {VG.CustomerFilterBanner ? <VG.CustomerFilterBanner /> : null}
+        <RecordTable tableId="sales-orders" title="Sales orders" columns={cols} rows={rows} can={can} printTitle="Sales Orders" searchKeys={["no"]}
+          filters={[{ key: "status", label: "All status", options: ORDER_FLOW }]}
+          onNew={can("add") ? () => setBuilder({}) : null} newLabel="New Sales Order"
+          onView={(r) => setView(r)} onEdit={can("edit") ? (r) => setBuilder(r) : null}
+          empty="No sales orders yet — click New Sales Order or convert a quotation" />
       </div>
     );
   }
@@ -1167,8 +1180,8 @@
       onClose();
     }
     return (
-      <Modal open={open} onClose={onClose} size="full" dirty={dirty} title={isEdit ? "Edit Proforma " + p.no : "Add Proforma Invoice"} subtitle="Create proforma manually with customer, commercial and tax details"
-        footer={<><Button variant="soft" onClick={onClose}>Close</Button><Button variant="soft" icon="eye" onClick={() => proformaPDF({ ...p, no: p.no || "DRAFT", totals }, "preview")}>Preview PDF</Button><Button icon="check" onClick={save}>{isEdit ? "Save Proforma" : "Create Proforma"}</Button></>}>
+      <InternalScreen onBack={onClose} backLabel="Back to list" dirty={dirty} title={isEdit ? "Edit Proforma " + p.no : "Add Proforma Invoice"} subtitle="Create proforma manually with customer, commercial and tax details"
+        footer={<><Button variant="soft" icon="eye" onClick={() => proformaPDF({ ...p, no: p.no || "DRAFT", totals }, "preview")}>Preview PDF</Button><Button icon="check" onClick={save}>{isEdit ? "Save Proforma" : "Create Proforma"}</Button></>}>
         <div className="grid lg:grid-cols-3 gap-3 mb-4">
           <Field label="Customer" required><MasterSelect collection="customers" value={p.customerId} onChange={pickCustomer} actorRole={roleKey} can={can("add")} /></Field>
           <Field label="Contact person"><Text value={p.contact} onChange={(v) => set("contact", v)} /></Field>
@@ -1225,7 +1238,7 @@
             <div className="flex justify-between text-base font-semibold border-t border-white/10 mt-2 pt-2"><span>Grand total</span><span>{inr(totals.grand)}</span></div>
           </Card>
         </div>
-      </Modal>
+      </InternalScreen>
     );
   }
 
@@ -1354,7 +1367,7 @@
     }
     return (
       <>
-        <Modal open={!!inv} onClose={onClose} size="xl" title={(VG.invoiceTypeLabel ? VG.invoiceTypeLabel(inv) : "Tax Invoice") + " " + inv.no} subtitle={custName(inv.customerId) + (inv.salesOrderNo ? " · SO " + inv.salesOrderNo : "") + (inv.currency && inv.currency !== "INR" ? " · " + inv.currency : "")}
+        <InternalScreen onBack={onClose} backLabel="Back to invoices" title={(VG.invoiceTypeLabel ? VG.invoiceTypeLabel(inv) : "Tax Invoice") + " " + inv.no} subtitle={custName(inv.customerId) + (inv.salesOrderNo ? " · SO " + inv.salesOrderNo : "") + (inv.currency && inv.currency !== "INR" ? " · " + inv.currency : "")}
           footer={<>
             <InvoiceDocActions inv={inv} />
             {onEdit && <Button variant="soft" icon="edit" onClick={onEdit}>Edit invoice</Button>}
@@ -1421,7 +1434,7 @@
               </table>
             </div>
           </Card>
-        </Modal>
+        </InternalScreen>
         {ewayOpen && <EwayBillModal inv={inv} regenerate={!!(inv.ewayBill && inv.ewayBill.no)} roleKey={roleKey} onClose={() => setEwayOpen(false)} onDone={onChange} />}
       </>
     );
@@ -1480,8 +1493,8 @@
     }
     const chargeLabel = inv.currency === "INR" ? " (₹)" : " (" + inv.currency + ")";
     return (
-      <Modal open={open} onClose={onClose} size="full" dirty={dirty} title={isEdit ? "Edit " + (VG.invoiceTypeLabel ? VG.invoiceTypeLabel(inv) : "Tax Invoice") + " " + inv.no : "Create Tax Invoice"} subtitle="Domestic & export invoices · multi-currency · LUT/Bond · Incoterms"
-        footer={<><Button variant="soft" onClick={onClose}>Close</Button>{can("print") && <Button variant="soft" icon="eye" onClick={() => printInvoiceDocument({ ...inv, totals, fxTotals }, "preview")}>Preview PDF</Button>}<Button icon="check" onClick={save}>{isEdit ? "Save invoice" : "Post invoice"}</Button></>}>
+      <InternalScreen onBack={onClose} backLabel="Back to list" dirty={dirty} title={isEdit ? "Edit " + (VG.invoiceTypeLabel ? VG.invoiceTypeLabel(inv) : "Tax Invoice") + " " + inv.no : "Create Tax Invoice"} subtitle="Domestic & export invoices · multi-currency · LUT/Bond · Incoterms"
+        footer={<>{can("print") && <Button variant="soft" icon="eye" onClick={() => printInvoiceDocument({ ...inv, totals, fxTotals }, "preview")}>Preview PDF</Button>}<Button icon="check" onClick={save}>{isEdit ? "Save invoice" : "Post invoice"}</Button></>}>
         <div className="grid lg:grid-cols-4 gap-3 mb-4">
           <Field label="Invoice type" required><Select value={inv.invoiceType || "domestic"} onChange={pickInvoiceType} options={VG.INVOICE_TYPES || [{ value: "domestic", label: "Domestic Tax Invoice" }]} /></Field>
           <Field label="GST treatment"><Select value={inv.gstTreatment || ""} onChange={pickGstTreatment} options={[{ value: "", label: "— Standard domestic —" }].concat(VG.EXPORT_GST_TREATMENTS || [])} /></Field>
@@ -1567,7 +1580,7 @@
             )}
           </Card>
         </div>
-      </Modal>
+      </InternalScreen>
     );
   }
 
@@ -1621,6 +1634,17 @@
         ) : null,
       },
     ];
+    if (build != null) {
+      return <InvoiceBuilder open onClose={() => setBuild(null)} roleKey={roleKey} can={can} initial={build} onSaved={(rec) => setView(rec)} />;
+    }
+    if (view) {
+      const invLive = store.get("invoices", view.id) || view;
+      return (
+        <InvoiceView inv={invLive} onClose={() => setView(null)} roleKey={roleKey} can={can}
+          onChange={() => { const fresh = store.get("invoices", view.id); if (fresh) setView(fresh); }}
+          onEdit={can("edit") ? () => { setBuild(store.get("invoices", view.id)); setView(null); } : null} />
+      );
+    }
     return (
       <div>
         <PageHead title="Tax Invoices" desc="Domestic & export invoices · multi-currency · LUT/Bond · E-Invoice & E-way" />
@@ -1636,7 +1660,7 @@
             </div>
           </Card>
         )}
-        <RecordTable title="All tax invoices" columns={cols} rows={rows} can={can} printTitle="Tax Invoices"
+        <RecordTable tableId="sales-invoices" title="All tax invoices" columns={cols} rows={rows} can={can} printTitle="Tax Invoices"
           searchKeys={["no", "salesOrderNo", "status", "invoiceType", "currency"]}
           filters={[
             { key: "status", label: "All status", get: (r) => invoiceDisplayStatus(r).label, options: Object.keys(INV_DOC_STATUS) },
@@ -1647,8 +1671,6 @@
           newLabel="New Tax Invoice"
           onEdit={can("edit") ? (r) => setBuild(r) : null}
           empty="No invoices yet — create from a sales order or click New Tax Invoice" />
-        {view && <InvoiceView inv={store.get("invoices", view.id)} onClose={() => setView(null)} roleKey={roleKey} can={can} onChange={() => { const fresh = store.get("invoices", view.id); if (fresh) setView(fresh); }} onEdit={can("edit") ? () => { setBuild(store.get("invoices", view.id)); setView(null); } : null} />}
-        {build != null && <InvoiceBuilder open onClose={() => setBuild(null)} roleKey={roleKey} can={can} initial={build} onSaved={(rec) => setView(rec)} />}
         {printPick && <InvoicePrintCopiesModal inv={printPick.inv} mode={printPick.mode} onClose={() => setPrintPick(null)} />}
       </div>
     );
@@ -1669,16 +1691,18 @@
       { key: "customerId", label: "Customer", render: (r) => custName(r.customerId), csv: (r) => custName(r.customerId) },
       { key: "date", label: "Date" }, { key: "grand", label: "Value", render: (r) => inr((r.totals || {}).grand || 0), csv: (r) => (r.totals || {}).grand },
     ];
+    if (build) {
+      return <ProformaBuilder open onClose={() => setBuild(null)} roleKey={roleKey} can={can} initial={build.id ? build : null} />;
+    }
     return (
       <div>
         <PageHead title="Proforma Invoices" desc="Generate from sales orders or add proforma manually with full details" />
         {VG.CustomerFilterBanner ? <VG.CustomerFilterBanner /> : null}
-        <RecordTable title="Proforma invoices" columns={cols} rows={rows} can={can} printTitle="Proforma Invoices" searchKeys={["no"]}
+        <RecordTable tableId="sales-proformas" title="Proforma invoices" columns={cols} rows={rows} can={can} printTitle="Proforma Invoices" searchKeys={["no"]}
           onView={(r) => proformaPDF(r, "preview")}
           onNew={can("add") ? () => setBuild({}) : null} newLabel="Add Proforma Invoice"
           onEdit={can("edit") ? (r) => setBuild(r) : null}
           empty="No proforma invoices — click Add Proforma Invoice" />
-        {build && <ProformaBuilder open onClose={() => setBuild(null)} roleKey={roleKey} can={can} initial={build.id ? build : null} />}
       </div>
     );
   }

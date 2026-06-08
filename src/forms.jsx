@@ -2,7 +2,7 @@
    master-data dropdowns (with inline create), validated fields, the record
    table (search / filter / export / print), and printable documents. VG.fx */
 (function (VG) {
-  const { useState, useEffect, useLayoutEffect, useRef, useMemo } = React;
+  const { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } = React;
   const { Icon, Button, Pill, Card } = VG.ui;
   const store = VG.store;
 
@@ -533,54 +533,162 @@
     VG.toast("Exported " + filename + ".csv");
   }
 
-  function RecordTable({ title, columns, rows, search = true, searchKeys, filters, can, onView, onEdit, onDelete, onNew, newLabel = "New", extra, printTitle, empty = "No records yet" }) {
-    const [q, setQ] = useState("");
-    const [fil, setFil] = useState({});
+  function RecordTable({
+    tableId, title, columns, rows, search = true, searchKeys, filters, can, onView, onEdit, onDelete, onNew,
+    newLabel = "New", extra, printTitle, empty = "No records yet", pageSize = 75, columnToggle = true,
+    stickyHeader = true, defaultDensity = "comfortable",
+  }) {
+    const stateKey = tableId || (title ? "tbl-" + String(title).replace(/\s+/g, "-").toLowerCase() : "");
+    const saved = stateKey && VG.getTableState ? VG.getTableState(stateKey) : {};
+    const [q, setQ] = useState(saved.q || "");
+    const [fil, setFil] = useState(saved.fil || {});
+    const [page, setPage] = useState(saved.page || 0);
+    const [density, setDensity] = useState(saved.density || defaultDensity);
+    const [hiddenCols, setHiddenCols] = useState(saved.hiddenCols || {});
+    const [colWidths, setColWidths] = useState(saved.colWidths || {});
+    const [colMenu, setColMenu] = useState(false);
+    const scrollRef = useRef(null);
+    const resizeRef = useRef(null);
+
+    const persist = useCallback((patch) => {
+      if (!stateKey || !VG.saveTableState) return;
+      VG.saveTableState(stateKey, {
+        q, fil, page, density, hiddenCols, colWidths,
+        scrollTop: scrollRef.current ? scrollRef.current.scrollTop : 0,
+        ...patch,
+      });
+    }, [stateKey, q, fil, page, density, hiddenCols, colWidths]);
+
+    useEffect(() => {
+      if (scrollRef.current && saved.scrollTop) scrollRef.current.scrollTop = saved.scrollTop;
+    }, [stateKey]);
+
+    useEffect(() => { persist(); }, [q, fil, page, density, hiddenCols, colWidths]);
+
     const ql = q.toLowerCase();
     let data = rows;
     if (q) data = data.filter((r) => (searchKeys ? searchKeys.map((k) => r[k]) : Object.values(r)).join(" ").toLowerCase().includes(ql));
     (filters || []).forEach((f) => { if (fil[f.key]) data = data.filter((r) => String(f.get ? f.get(r) : r[f.key]) === fil[f.key]); });
+
+    const totalPages = Math.max(1, Math.ceil(data.length / pageSize));
+    const safePage = Math.min(page, totalPages - 1);
+    useEffect(() => { if (safePage !== page) setPage(safePage); }, [safePage, page]);
+
+    const pageData = data.slice(safePage * pageSize, (safePage + 1) * pageSize);
+    const visibleCols = columns.filter((c) => !hiddenCols[c.key]);
     const showActions = onView || onEdit || onDelete;
+    const cellPy = density === "compact" ? "py-1.5" : "py-3";
+    const headPy = density === "compact" ? "py-1.5" : "py-2.5";
+
+    function startResize(key, e) {
+      e.preventDefault();
+      const startX = e.clientX;
+      const startW = colWidths[key] || 120;
+      resizeRef.current = { key, startX, startW };
+      const onMove = (ev) => {
+        if (!resizeRef.current) return;
+        const w = Math.max(60, resizeRef.current.startW + (ev.clientX - resizeRef.current.startX));
+        setColWidths((s) => ({ ...s, [resizeRef.current.key]: w }));
+      };
+      const onUp = () => {
+        resizeRef.current = null;
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+      };
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    }
+
+    function openViewSafe(r) {
+      if (!onView) return;
+      if (stateKey && VG.getOpenRecord && VG.registerOpenRecord) {
+        const openId = VG.getOpenRecord(stateKey);
+        if (openId === r.id) {
+          onView(r);
+          return;
+        }
+        VG.registerOpenRecord(stateKey, r.id);
+      }
+      persist({ scrollTop: scrollRef.current ? scrollRef.current.scrollTop : 0 });
+      onView(r);
+    }
+
     return (
-      <Card className="p-0 overflow-hidden">
-        <div className="flex flex-wrap items-center gap-2 p-4">
+      <Card className="p-0 overflow-hidden vg-record-table">
+        <div className="flex flex-wrap items-center gap-2 p-3 sm:p-4">
           {title && <div className="font-semibold text-sm mr-auto">{title}</div>}
           {search && (
             <div className="relative">
               <Icon name="search" size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 opacity-50" />
-              <input value={q} onChange={(e) => setQ(e.target.value)} className="rounded-lg glass pl-8 pr-3 py-2 text-sm bg-transparent outline-none placeholder:opacity-40 w-40 sm:w-56" placeholder="Search…" />
+              <input value={q} onChange={(e) => { setQ(e.target.value); setPage(0); }} className="rounded-lg glass pl-8 pr-3 py-2 text-sm bg-transparent outline-none placeholder:opacity-40 w-40 sm:w-56" placeholder="Search…" />
             </div>
           )}
           {(filters || []).map((f) => (
-            <select key={f.key} value={fil[f.key] || ""} onChange={(e) => setFil((s) => ({ ...s, [f.key]: e.target.value }))} className="vg-input rounded-lg glass px-2.5 py-2 text-sm outline-none">
+            <select key={f.key} value={fil[f.key] || ""} onChange={(e) => { setFil((s) => ({ ...s, [f.key]: e.target.value })); setPage(0); }} className="vg-input rounded-lg glass px-2.5 py-2 text-sm outline-none">
               <option value="" className="vg-option">{f.label}</option>
               {f.options.map((o) => <option key={o.value || o} value={o.value || o} className="vg-option">{o.label || o}</option>)}
             </select>
           ))}
-          <div className="flex items-center gap-2 ml-auto">
+          <div className="flex items-center gap-1.5 ml-auto flex-wrap justify-end">
+            <div className="flex rounded-lg glass overflow-hidden text-[11px]">
+              <button type="button" onClick={() => setDensity("compact")} className={"px-2 py-1.5 " + (density === "compact" ? "bg-white/15" : "opacity-55")} title="Compact rows">Compact</button>
+              <button type="button" onClick={() => setDensity("comfortable")} className={"px-2 py-1.5 " + (density === "comfortable" ? "bg-white/15" : "opacity-55")} title="Comfortable rows">Comfort</button>
+            </div>
+            {columnToggle && columns.length > 2 && (
+              <div className="relative">
+                <Button variant="ghost" icon="grid" className="!py-1.5 !text-xs" onClick={() => setColMenu((v) => !v)}>Columns</Button>
+                {colMenu && (
+                  <div className="absolute right-0 top-full mt-1 z-30 glass-dark rounded-xl shadow-glass p-2 min-w-[160px] text-xs" onMouseLeave={() => setColMenu(false)}>
+                    {columns.map((c) => (
+                      <label key={c.key} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer">
+                        <input type="checkbox" checked={!hiddenCols[c.key]} onChange={() => setHiddenCols((s) => ({ ...s, [c.key]: !s[c.key] }))} />
+                        {c.label || c.key}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             {extra}
-            {can && can("export") && <Button variant="soft" icon="download" className="hidden sm:inline-flex" onClick={() => exportCSV((printTitle || title || "export").replace(/\s+/g, "-"), columns, data)}>Export</Button>}
-            {can && can("print") && <Button variant="ghost" icon="printer" className="hidden md:inline-flex" onClick={() => printTable(printTitle || title, columns, data)}>Print</Button>}
+            {can && can("export") && <Button variant="soft" icon="download" className="hidden sm:inline-flex" onClick={() => exportCSV((printTitle || title || "export").replace(/\s+/g, "-"), visibleCols, data)}>Export</Button>}
+            {can && can("print") && <Button variant="ghost" icon="printer" className="hidden md:inline-flex" onClick={() => printTable(printTitle || title, visibleCols, data)}>Print</Button>}
             {onNew && can && can("add") && <Button icon="plus" onClick={onNew}>{newLabel}</Button>}
           </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
+        <div
+          ref={scrollRef}
+          className={"overflow-auto vg-record-table-scroll " + (stickyHeader ? "max-h-[min(72vh,calc(100dvh-14rem))]" : "")}
+          onScroll={() => { if (stateKey) persist(); }}
+        >
+          <table className="w-full text-sm vg-data-table" style={{ minWidth: "100%" }}>
+            <thead className={stickyHeader ? "vg-sticky-thead" : ""}>
               <tr className="text-left text-[11px] uppercase tracking-wider opacity-55 border-y border-white/10">
-                {columns.map((c) => <th key={c.key} className={"px-4 py-2.5 font-medium " + (c.thClass || "")}>{c.label}</th>)}
-                {showActions && <th className="px-4 py-2.5 font-medium text-right">Actions</th>}
+                {visibleCols.map((c) => (
+                  <th
+                    key={c.key}
+                    className={"px-3 sm:px-4 font-medium relative select-none " + headPy + " " + (c.thClass || "")}
+                    style={colWidths[c.key] ? { width: colWidths[c.key], minWidth: colWidths[c.key] } : undefined}
+                  >
+                    <span className="pr-2">{c.label}</span>
+                    <span
+                      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-white/20"
+                      onMouseDown={(e) => startResize(c.key, e)}
+                      title="Resize column"
+                    />
+                  </th>
+                ))}
+                {showActions && <th className={"px-3 sm:px-4 font-medium text-right " + headPy}>Actions</th>}
               </tr>
             </thead>
             <tbody>
-              {data.length === 0 && <tr><td colSpan={columns.length + 1} className="px-4 py-10 text-center opacity-50">{empty}</td></tr>}
-              {data.map((r) => (
+              {pageData.length === 0 && <tr><td colSpan={visibleCols.length + (showActions ? 1 : 0)} className="px-4 py-10 text-center opacity-50">{empty}</td></tr>}
+              {pageData.map((r) => (
                 <tr key={r.id} className="border-b border-white/5 chrome-hover transition">
-                  {columns.map((c) => <td key={c.key} className={"px-4 py-3 " + (c.tdClass || "")}>{c.render ? c.render(r) : r[c.key]}</td>)}
+                  {visibleCols.map((c) => <td key={c.key} className={"px-3 sm:px-4 " + cellPy + " " + (c.tdClass || "")} style={colWidths[c.key] ? { width: colWidths[c.key], minWidth: colWidths[c.key] } : undefined}>{c.render ? c.render(r) : r[c.key]}</td>)}
                   {showActions && (
-                    <td className="px-4 py-3">
+                    <td className={"px-3 sm:px-4 " + cellPy}>
                       <div className="flex items-center justify-end gap-1.5 opacity-80">
-                        {onView && <button title="View" onClick={() => onView(r)} className="p-1 rounded chrome-hover"><Icon name="eye" size={15} /></button>}
+                        {onView && <button title="View" onClick={() => openViewSafe(r)} className="p-1 rounded chrome-hover"><Icon name="eye" size={15} /></button>}
                         {onEdit && can && can("edit") && <button title="Edit" onClick={() => onEdit(r)} className="p-1 rounded chrome-hover"><Icon name="edit" size={15} /></button>}
                         {onDelete && can && can("delete") && <button title="Delete" onClick={() => onDelete(r)} className="p-1 rounded chrome-hover hover:text-rose-400"><Icon name="trash" size={15} /></button>}
                       </div>
@@ -591,7 +699,16 @@
             </tbody>
           </table>
         </div>
-        {data.length > 0 && <div className="px-4 py-2.5 text-[11px] opacity-50 border-t border-white/10">{data.length} record{data.length > 1 ? "s" : ""}</div>}
+        <div className="px-3 sm:px-4 py-2.5 text-[11px] opacity-50 border-t border-white/10 flex flex-wrap items-center gap-2 justify-between">
+          <span>{data.length} record{data.length !== 1 ? "s" : ""}{data.length !== rows.length ? " (filtered)" : ""}</span>
+          {totalPages > 1 && (
+            <div className="flex items-center gap-2">
+              <button type="button" disabled={safePage <= 0} onClick={() => setPage((p) => Math.max(0, p - 1))} className="px-2 py-1 rounded glass disabled:opacity-30">Prev</button>
+              <span>Page {safePage + 1} / {totalPages}</span>
+              <button type="button" disabled={safePage >= totalPages - 1} onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))} className="px-2 py-1 rounded glass disabled:opacity-30">Next</button>
+            </div>
+          )}
+        </div>
       </Card>
     );
   }

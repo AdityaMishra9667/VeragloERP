@@ -963,7 +963,7 @@
     return (
       <div>
         <PageHead title="Customer Master" desc="Click any customer name for the full Customer 360° dashboard" />
-        <RecordTable title="Customers" columns={cols} rows={rows} can={can} printTitle="Customer Master"
+        <RecordTable tableId="customers" title="Customers" columns={cols} rows={rows} can={can} printTitle="Customer Master"
           searchKeys={["code", "legalName", "tradeName", "gstin", "pan"]}
           filters={[{ key: "type", label: "All types", options: CUST_TYPES }, { key: "status", label: "All status", options: STATUSES }, { key: "approvalStatus", label: "All approval", options: ["Approved", "Pending", "Rejected"] }]}
           onNew={() => setForm({})} newLabel="New Customer" onView={(r) => setView(r.id)}

@@ -3,7 +3,7 @@
   const { useState, useEffect, useMemo, useRef } = React;
   const ui = VG.ui, fx = VG.fx, store = VG.store, inr = VG.fmt.inr, today = VG.fmt.todayISO;
   const { Icon, Button, Pill, Card } = ui;
-  const { Field, Text, Area, Num, DateF, Select, Checkbox, MasterSelect, Modal, RecordTable, PageHead, StatusTag, printDocument, DocActions } = fx;
+  const { Field, Text, Area, Num, DateF, Select, Checkbox, MasterSelect, Modal, InternalScreen, RecordTable, PageHead, StatusTag, printDocument, DocActions } = fx;
 
   const itemLabel = (id) => (VG.itemMfr && VG.itemMfr.label(id)) || "—";
   const itemSku = (id) => (store.get("items", id) || {}).sku || "—";
@@ -283,11 +283,10 @@
 
     return (
       <>
-        <Modal open={open} onClose={onClose} size="full" dirty={dirty}
+        <InternalScreen onBack={onClose} backLabel="Back to BOM list" dirty={dirty}
           title={isEdit ? "BOM " + (f.no || "") + " · " + (f.revision || "Rev-00") : "New Bill of Materials"}
           subtitle={isEdit ? (componentsLocked ? "Components locked — authorized revision required" : "Controlled manufacturing master document") : "Finished goods SKU auto-generated · saved to item master"}
           footer={<>
-            <Button variant="soft" onClick={onClose}>Close</Button>
             <Button variant="soft" icon="eye" onClick={() => printDocument(bomDoc({ ...f, no: f.no || "DRAFT" }), "preview")}>Preview</Button>
             {isEdit && canStructure && f.approvalStatus === "Pending" && (
               <Button variant="soft" icon="shield" onClick={approveBom}>Approve revision</Button>
@@ -464,7 +463,7 @@
               </BomSection>
             )}
           </div>
-        </Modal>
+        </InternalScreen>
         {showRevModal && (
           <BomRevisionModal open onClose={() => setShowRevModal(false)} onSubmit={(meta) => persist(meta)} />
         )}
@@ -494,6 +493,49 @@
         render: (r) => inr(store.calcBomCost ? store.calcBomCost(r.id) : 0),
       });
     }
+    if (edit) {
+      return <BomForm open record={edit.id ? edit : null} onClose={() => setEdit(null)} roleKey={roleKey} can={can} />;
+    }
+    if (view) {
+      const bom = store.get("boms", view.id) || view;
+      return (
+        <InternalScreen onBack={() => setView(null)} backLabel="Back to BOM list" title={"BOM " + bom.no} subtitle={(bom.fgSku || "") + " · " + (bom.revision || "Rev-00")}
+          footer={<>
+            <DocActions docType="BOM" build={() => bomDoc(bom)} />
+            {(can("edit") || can("approve")) && <Button onClick={() => { setView(null); setEdit(bom); }}>Open BOM</Button>}
+          </>}>
+          <div className="flex flex-wrap gap-2 mb-4">
+            <StatusTag value={bom.status} map={BOM_STATUS} />
+            <Pill color="#6366f1">{bom.fgSku || itemSku(bom.finishedItemId)}</Pill>
+            {bom.approvalStatus === "Pending" && <Pill color="#f59e0b">Pending approval</Pill>}
+          </div>
+          <div className="text-sm grid sm:grid-cols-3 gap-3 mb-4">
+            <Card className="p-3 border border-white/20"><div className="text-[11px] uppercase opacity-55">Finished product</div>{bom.fgName || itemLabel(bom.finishedItemId)}</Card>
+            <Card className="p-3 border border-white/20"><div className="text-[11px] uppercase opacity-55">Components</div>{(bom.lines || []).length}</Card>
+            <Card className="p-3 border border-white/20"><div className="text-[11px] uppercase opacity-55">Std cost / unit</div>{inr(store.calcBomCost(bom.id))}</Card>
+          </div>
+          <div className="overflow-x-auto border border-white/20 rounded-xl">
+            <table className="w-full text-xs">
+              <thead className="opacity-55 text-[10px] uppercase border-b border-white/20 vg-sticky-thead"><tr>
+                <th className="text-left py-2 px-3">SKU</th><th className="text-left py-2 px-3">Component</th><th className="text-right py-2 px-3">Qty</th><th className="py-2 px-3">Unit</th><th className="text-right py-2 px-3">Wastage</th><th className="py-2 px-3">Issue</th>
+              </tr></thead>
+              <tbody>
+                {(bom.lines || []).map((l, i) => (
+                  <tr key={i} className="border-t border-white/10">
+                    <td className="py-2 px-3 font-mono">{itemSku(l.itemId)}</td>
+                    <td className="py-2 px-3">{itemLabel(l.itemId)}</td>
+                    <td className="text-right py-2 px-3">{l.qty}</td>
+                    <td className="py-2 px-3">{l.unit}</td>
+                    <td className="text-right py-2 px-3">{l.scrapPct || 0}%</td>
+                    <td className="py-2 px-3">{l.issueMethod || "Manual"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </InternalScreen>
+      );
+    }
     return (
       <div>
         <PageHead
@@ -502,7 +544,7 @@
             ? "Active approved BOMs linked to work orders · issue components from shop floor"
             : "Controlled manufacturing master — auto SKU · revision control · component locking"}
         />
-        <RecordTable title="BOM register" columns={cols} rows={rows} can={can} printTitle="BOM Register" searchKeys={["no", "name", "revision", "fgSku", "fgName"]}
+        <RecordTable tableId="bom-register" title="BOM register" columns={cols} rows={rows} can={can} printTitle="BOM Register" searchKeys={["no", "name", "revision", "fgSku", "fgName"]}
           filters={[{ key: "status", label: "All status", options: ["Draft", "Active", "Obsolete"] }]}
           onNew={can("add") ? () => setEdit({}) : null} newLabel="New BOM"
           onEdit={can("edit") || can("approve") ? (r) => setEdit(r) : null}
@@ -514,44 +556,6 @@
             }
           } : null}
         />
-        {edit && <BomForm open record={edit.id ? edit : null} onClose={() => setEdit(null)} roleKey={roleKey} can={can} />}
-        {view && (
-          <Modal open onClose={() => setView(null)} size="xl" title={"BOM " + view.no} subtitle={(view.fgSku || "") + " · " + (view.revision || "Rev-00")}
-            footer={<>
-              <DocActions docType="BOM" build={() => bomDoc(view)} />
-              {(can("edit") || can("approve")) && <Button onClick={() => { setView(null); setEdit(view); }}>Open BOM</Button>}
-            </>}>
-            <div className="flex flex-wrap gap-2 mb-4">
-              <StatusTag value={view.status} map={BOM_STATUS} />
-              <Pill color="#6366f1">{view.fgSku || itemSku(view.finishedItemId)}</Pill>
-              {view.approvalStatus === "Pending" && <Pill color="#f59e0b">Pending approval</Pill>}
-            </div>
-            <div className="text-sm grid sm:grid-cols-3 gap-3 mb-4">
-              <Card className="p-3 border border-white/20"><div className="text-[11px] uppercase opacity-55">Finished product</div>{view.fgName || itemLabel(view.finishedItemId)}</Card>
-              <Card className="p-3 border border-white/20"><div className="text-[11px] uppercase opacity-55">Components</div>{(view.lines || []).length}</Card>
-              <Card className="p-3 border border-white/20"><div className="text-[11px] uppercase opacity-55">Std cost / unit</div>{inr(store.calcBomCost(view.id))}</Card>
-            </div>
-            <div className="overflow-x-auto border border-white/20 rounded-xl">
-              <table className="w-full text-xs">
-                <thead className="opacity-55 text-[10px] uppercase border-b border-white/20"><tr>
-                  <th className="text-left py-2 px-3">SKU</th><th className="text-left py-2 px-3">Component</th><th className="text-right py-2 px-3">Qty</th><th className="py-2 px-3">Unit</th><th className="text-right py-2 px-3">Wastage</th><th className="py-2 px-3">Issue</th>
-                </tr></thead>
-                <tbody>
-                  {(view.lines || []).map((l, i) => (
-                    <tr key={i} className="border-t border-white/10">
-                      <td className="py-2 px-3 font-mono">{itemSku(l.itemId)}</td>
-                      <td className="py-2 px-3">{itemLabel(l.itemId)}</td>
-                      <td className="text-right py-2 px-3">{l.qty}</td>
-                      <td className="py-2 px-3">{l.unit}</td>
-                      <td className="text-right py-2 px-3">{l.scrapPct || 0}%</td>
-                      <td className="py-2 px-3">{l.issueMethod || "Manual"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Modal>
-        )}
       </div>
     );
   }
