@@ -6,6 +6,7 @@
     <meta name="theme-color" content="#0b1220" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
+    <meta name="vg-build" content="6364129-internal-layout" />
     <title>Veraglo ERP — Enterprise Workspace</title>
     <link rel="icon" type="image/png" href="assets/veraglo-logo.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -731,6 +732,7 @@
             (0, eval)(out.code);
           }
           VG.apiBase = "";
+          VG.buildId = document.querySelector('meta[name="vg-build"]')?.content || "dev";
           var initInfo = await VG.store.init();
           if (VG.applyTypography) {
             var st = VG.store.settings();
