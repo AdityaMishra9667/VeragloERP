@@ -50,6 +50,7 @@ public class SecurityConfig {
                                 "/legacy/**"
                         ).permitAll()
                         .requestMatchers("/api/state").permitAll()
+                        .requestMatchers("/api/v1/**").authenticated()
                         .requestMatchers("/api/migration/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )

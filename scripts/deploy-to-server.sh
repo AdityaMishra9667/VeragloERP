@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deploy Veraglo ERP to a remote Ubuntu server (git pull + npm install + restart).
+# Deploy Veraglo ERP to a remote Ubuntu server (git pull + build + restart).
 #
 # Usage:
 #   export DEPLOY_HOST=13.203.208.226
@@ -7,6 +7,7 @@
 #   export DEPLOY_KEY=~/Downloads/your-key.pem   # optional
 #   export DEPLOY_BRANCH=main
 #   export DEPLOY_DIR=~/veraglo-payroll          # path on server
+#   export DEPLOY_RUNTIME=java                 # java (default) or node
 #   ./scripts/deploy-to-server.sh
 #
 set -euo pipefail
@@ -16,13 +17,15 @@ USER="${DEPLOY_USER:-ubuntu}"
 BRANCH="${DEPLOY_BRANCH:-main}"
 REMOTE_DIR="${DEPLOY_DIR:-~/veraglo-payroll}"
 PORT="${DEPLOY_PORT:-3000}"
+RUNTIME="${DEPLOY_RUNTIME:-java}"
+JAR_NAME="veraglo-erp-2.0.0-SNAPSHOT.jar"
 
 SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout=15)
 if [ -n "${DEPLOY_KEY:-}" ]; then
   SSH_OPTS+=(-i "$DEPLOY_KEY")
 fi
 
-echo "==> Deploying branch $BRANCH to ${USER}@${HOST}:${REMOTE_DIR}"
+echo "==> Deploying branch $BRANCH ($RUNTIME runtime) to ${USER}@${HOST}:${REMOTE_DIR}"
 
 ssh "${SSH_OPTS[@]}" "${USER}@${HOST}" bash -s <<EOF
 set -e
@@ -31,31 +34,67 @@ echo "==> git fetch && checkout ${BRANCH}"
 git fetch origin
 git checkout ${BRANCH}
 git pull origin ${BRANCH}
-echo "==> npm install (server)"
-cd server && npm install
-cd ..
+
 if command -v docker >/dev/null 2>&1 && [ -f docker-compose.yml ]; then
   echo "==> docker compose up -d (postgres)"
   docker compose up -d || true
+  for i in \$(seq 1 30); do
+    if docker compose exec -T postgres pg_isready -U veraglo -d veraglo_erp >/dev/null 2>&1; then
+      break
+    fi
+    sleep 1
+  done
 fi
-echo "==> restart API on port ${PORT}"
-if command -v pm2 >/dev/null 2>&1; then
-  pm2 restart veraglo-erp 2>/dev/null || pm2 start server/index.js --name veraglo-erp --cwd ${REMOTE_DIR}/server
-  pm2 save || true
+
+if [ "${RUNTIME}" = "java" ] && [ -d java-backend ]; then
+  echo "==> build Java backend"
+  if ! command -v mvn >/dev/null 2>&1; then
+    sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq maven openjdk-21-jre-headless
+  fi
+  export DATABASE_URL="jdbc:postgresql://localhost:5432/veraglo_erp"
+  export DB_USER="veraglo"
+  export DB_PASSWORD="veraglo"
+  export PORT="${PORT}"
+  export VERAGLO_FRONTEND_PATH="${REMOTE_DIR}"
+  (cd java-backend && mvn -q -DskipTests package)
+  JAR_PATH="${REMOTE_DIR}/java-backend/target/${JAR_NAME}"
+  echo "==> restart Java API on port ${PORT}"
+  if command -v pm2 >/dev/null 2>&1; then
+    pm2 delete veraglo-erp-java 2>/dev/null || true
+    pm2 delete veraglo-erp 2>/dev/null || true
+    pm2 start "java -jar ${JAR_PATH}" --name veraglo-erp-java --cwd ${REMOTE_DIR}
+    pm2 save || true
+  else
+    pkill -f "${JAR_NAME}" 2>/dev/null || pkill -f "node index.js" 2>/dev/null || true
+    sleep 1
+    nohup java -jar "\$JAR_PATH" > /tmp/veraglo-java-api.log 2>&1 &
+    sleep 4
+  fi
 else
-  pkill -f "node index.js" 2>/dev/null || true
-  sleep 1
-  cd server && nohup npm start > /tmp/veraglo-api.log 2>&1 &
-  sleep 2
+  echo "==> npm install (legacy Node server)"
+  cd server && npm install
+  cd ..
+  echo "==> restart Node API on port ${PORT}"
+  if command -v pm2 >/dev/null 2>&1; then
+    pm2 restart veraglo-erp 2>/dev/null || pm2 start server/index.js --name veraglo-erp --cwd ${REMOTE_DIR}/server
+    pm2 save || true
+  else
+    pkill -f "node index.js" 2>/dev/null || true
+    sleep 1
+    cd server && nohup npm start > /tmp/veraglo-api.log 2>&1 &
+    sleep 2
+  fi
 fi
+
 echo "==> health check"
-curl -sf "http://127.0.0.1:${PORT}/api/health" | head -c 200 || echo "(health check failed — check /tmp/veraglo-api.log)"
-curl -sf "http://127.0.0.1:${PORT}/api/weather/settings" | head -c 120 || echo "(weather endpoint missing — old build?)"
-curl -sf "http://127.0.0.1:${PORT}/api/auth/forgot-password/settings" | head -c 120 || echo "(forgot-password endpoint missing — old build?)"
+curl -sf "http://127.0.0.1:${PORT}/api/health" | head -c 240 || echo "(health check failed)"
+echo ""
+curl -sf "http://127.0.0.1:${PORT}/api/v1/customers?page=0&size=1" -H "Authorization: Bearer invalid" 2>/dev/null | head -c 80 || echo "(v1 customers endpoint present — requires JWT)"
 echo ""
 echo "Deploy complete."
 EOF
 
 echo ""
 echo "Public URL: http://${HOST}:${PORT}/"
-echo "Verify login: weather widget + Forgot password? link"
+echo "Runtime: ${RUNTIME}"
+echo "Phase 2 APIs: /api/v1/customers, /api/v1/items, /api/v1/sales-orders (JWT required)"

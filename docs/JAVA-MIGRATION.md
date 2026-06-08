@@ -80,6 +80,28 @@ Migration steps:
 3. **Normalize** — populate `customers`, `items`, `suppliers`, `users` tables
 4. **Validate** — compare record counts in `migration_runs` table
 
+## Phase 2 entity REST APIs
+
+JWT required (`Authorization: Bearer <token>` from `POST /api/auth/login`).
+
+| Resource | Endpoints |
+| --- | --- |
+| **Customers** | `GET/POST /api/v1/customers`, `GET/PUT/DELETE /api/v1/customers/{id}` |
+| **Items** | `GET/POST /api/v1/items`, `GET/PUT/DELETE /api/v1/items/{sku}` |
+| **Sales orders** | `GET/POST /api/v1/sales-orders`, `GET/PUT/DELETE /api/v1/sales-orders/{orderId}`, `PATCH /api/v1/sales-orders/{orderId}/stage` |
+
+Query params: `?q=search&status=Active&page=0&size=50` (sales orders also support `stage`).
+
+Example:
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:3000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@company.com","password":"yourpass"}' | jq -r .token)
+
+curl -H "Authorization: Bearer $TOKEN" http://localhost:3000/api/v1/customers
+```
+
 ## API compatibility
 
 During transition, these endpoints remain compatible with the React UI:
@@ -124,9 +146,12 @@ All 15 ERP modules remain in the React frontend. Backend normalization is phased
 
 ## Production deploy
 
-Update `scripts/deploy-to-server.sh` to build and run the Java JAR instead of `npm start`:
+Java is now the **default** production runtime:
 
 ```bash
-cd java-backend && mvn -q -DskipTests package
-pm2 restart veraglo-erp-java
+export DEPLOY_KEY=~/Downloads/your-key.pem
+export DEPLOY_RUNTIME=java
+./scripts/deploy-to-server.sh
 ```
+
+GitHub Actions workflow `deploy-production.yml` also defaults to Java. Requires `DEPLOY_SSH_KEY` secret.
