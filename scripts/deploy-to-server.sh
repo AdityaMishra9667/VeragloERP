@@ -5,7 +5,7 @@
 #   export DEPLOY_HOST=13.203.208.226
 #   export DEPLOY_USER=ubuntu
 #   export DEPLOY_KEY=~/Downloads/your-key.pem   # optional
-#   export DEPLOY_BRANCH=veragloerp-forgot-password-3d63
+#   export DEPLOY_BRANCH=main
 #   export DEPLOY_DIR=~/veraglo-payroll          # path on server
 #   ./scripts/deploy-to-server.sh
 #
@@ -13,7 +13,7 @@ set -euo pipefail
 
 HOST="${DEPLOY_HOST:-13.203.208.226}"
 USER="${DEPLOY_USER:-ubuntu}"
-BRANCH="${DEPLOY_BRANCH:-veragloerp-forgot-password-3d63}"
+BRANCH="${DEPLOY_BRANCH:-main}"
 REMOTE_DIR="${DEPLOY_DIR:-~/veraglo-payroll}"
 PORT="${DEPLOY_PORT:-3000}"
 

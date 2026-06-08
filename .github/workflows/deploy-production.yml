@@ -1,0 +1,63 @@
+# Deploy Veraglo ERP to the production Ubuntu server (git pull + npm install + restart).
+name: Deploy — production server
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Git branch to deploy"
+        required: false
+        default: "main"
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          script_stop: true
+          script: |
+            set -e
+            REMOTE_DIR="${{ secrets.DEPLOY_DIR || '~/veraglo-payroll' }}"
+            BRANCH="${{ github.event.inputs.branch || 'main' }}"
+            PORT="${{ secrets.DEPLOY_APP_PORT || '3000' }}"
+            cd ${REMOTE_DIR}
+            echo "==> git fetch && checkout ${BRANCH}"
+            git fetch origin
+            git checkout ${BRANCH}
+            git pull origin ${BRANCH}
+            echo "==> npm install (server)"
+            cd server && npm install
+            cd ..
+            if command -v docker >/dev/null 2>&1 && [ -f docker-compose.yml ]; then
+              echo "==> docker compose up -d (postgres)"
+              docker compose up -d || true
+            fi
+            echo "==> restart API on port ${PORT}"
+            if command -v pm2 >/dev/null 2>&1; then
+              pm2 restart veraglo-erp 2>/dev/null || pm2 start server/index.js --name veraglo-erp --cwd ${REMOTE_DIR}/server
+              pm2 save || true
+            else
+              pkill -f "node index.js" 2>/dev/null || true
+              sleep 1
+              cd server && nohup npm start > /tmp/veraglo-api.log 2>&1 &
+              sleep 2
+            fi
+            echo "==> health check"
+            curl -sf "http://127.0.0.1:${PORT}/api/health" | head -c 200
+            echo ""
+            curl -sf "http://127.0.0.1:${PORT}/api/weather/settings" | head -c 120
+            echo ""
+            curl -sf "http://127.0.0.1:${PORT}/api/auth/forgot-password/settings" | head -c 120
+            echo ""
+            echo "Deploy complete."
