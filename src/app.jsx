@@ -100,14 +100,11 @@
   }
 
   /* ---------------- Login ---------------- */
-  function Login({ onLogin, theme, setTheme, needsSetup }) {
   function Login({ onLogin, theme, setTheme, needsSetup, onForgotPassword }) {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [busy, setBusy] = useState(false);
     const [authHint, setAuthHint] = useState("");
-
-    useEffect(() => {
     const [forgotEnabled, setForgotEnabled] = useState(true);
 
     useEffect(() => {
@@ -207,34 +204,6 @@
                     Forgot password?
                   </button>
                 </div>
-                <h2 className="text-2xl font-display font-semibold text-slate-900">Welcome back</h2>
-                <p className="text-sm login-muted mt-1">Sign in to your workspace</p>
-
-                <form onSubmit={submit} className="mt-6 space-y-4">
-                  <div>
-                    <label className="text-xs login-label">Email</label>
-                    <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="username" required
-                      placeholder="you@company.com"
-                      className="login-input mt-1.5 w-full rounded-xl px-3.5 py-3 text-sm focus:ring-2"
-                      style={{ "--tw-ring-color": "var(--accent)" }} />
-                  </div>
-                  <div>
-                    <label className="text-xs login-label">Password</label>
-                    <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password"
-                      placeholder="Enter password"
-                      className="login-input mt-1.5 w-full rounded-xl px-3.5 py-3 text-sm focus:ring-2"
-                      style={{ "--tw-ring-color": "var(--accent)" }} />
-                  </div>
-
-                  <Button type="submit" icon="logout" className="w-full !py-3" disabled={busy}>{busy ? "Signing in…" : "Sign in to workspace"}</Button>
-                  {needsSetup ? (
-                    <p className="text-[11px] text-center text-amber-700">No administrator exists yet — refresh the page to open <b>Create administrator</b>.</p>
-                  ) : (
-                    <p className="text-[11px] text-center login-muted">Use the email and password from your administrator setup. Dev credentials from other machines do not carry over after deploy.</p>
-                  )}
-                  {authHint && <p className="text-[11px] text-center text-amber-700 mt-2">{authHint}</p>}
-                </form>
-              </div>
               )}
             </div>
 
@@ -242,7 +211,7 @@
             {needsSetup ? (
               <p className="text-[11px] text-center text-amber-700">No administrator exists yet — refresh the page to open <b>Create administrator</b>.</p>
             ) : (
-              <p className="text-[11px] text-center login-muted">Use the email and password from your administrator setup.</p>
+              <p className="text-[11px] text-center login-muted">Use the email and password from your administrator setup. Dev credentials from other machines do not carry over after deploy.</p>
             )}
             {authHint && <p className="text-[11px] text-center text-amber-700 mt-2">{authHint}</p>}
           </form>
