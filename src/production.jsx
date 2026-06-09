@@ -3,7 +3,7 @@
   const { useState } = React;
   const ui = VG.ui, fx = VG.fx, store = VG.store, inr = VG.fmt.inr, today = VG.fmt.todayISO;
   const { Icon, Button, Pill, Card } = ui;
-  const { Field, Text, Area, Num, DateF, Select, MasterSelect, Modal, InternalScreen, RecordTable, PageHead, StatusTag, printDocument, DocActions } = fx;
+  const { Field, Text, Area, Num, DateF, Select, MasterSelect, Modal, InternalScreen, RecordTable, PageHead, StatusTag, printDocument, DocActions, exportCSV } = fx;
 
   const custName = (id) => (store.get("customers", id) || {}).name || "—";
   const canSeeCustomer = (roleKey) => store.canViewCustomerForRole ? store.canViewCustomerForRole(roleKey) : (roleKey === "admin");
@@ -14,10 +14,6 @@
     "Material Returned": "#14b8a6", "Sent to Finished Goods Store": "#10b981", Closed: "#64748b", Planned: "#a78bfa", Released: "#22d3ee", Running: "#f59e0b", Completed: "#34d399"
   };
 
-  const { Field, Text, Area, Num, DateF, Select, MasterSelect, Modal, InternalScreen, RecordTable, PageHead, StatusTag, printDocument, DocActions, exportCSV } = fx;
-
-  const custName = (id) => (store.get("customers", id) || {}).name || "—";
-  const canSeeCustomer = (roleKey) => store.canViewCustomerForRole ? store.canViewCustomerForRole(roleKey) : (roleKey === "admin");
   const fmtTs = (ts) => ts ? new Date(ts).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "—";
   const fmtDate = (d) => d || "—";
   const priorityColor = (p) => (p === "Critical" ? "#ef4444" : p === "High Priority" ? "#f59e0b" : p === "Urgent" ? "#a855f7" : "#6366f1");
