@@ -5,7 +5,7 @@
 (function (VG) {
   const { useState, useEffect } = React;
   const KEY = "veraglo-erp-db";
-  const VERSION = 12;
+  const VERSION = 13;
   const ITEM_DESC_MAX = 30000;
   const AUTH_INACTIVE_MSG = "User account does not exist or has been deactivated.";
   const ITEM_MFR_DUP_MSG = "This manufacturer and part number already exist in Item Master. Duplicate item cannot be created.";
@@ -416,6 +416,7 @@
     migrateAuth(db);
     migrateManufacturers(db);
     migrateCompanyAddresses(db);
+    migrateBankAccounts(db);
     migrateEnquiries(db);
     migrateInvoices(db);
     migrateItems(db);
@@ -548,6 +549,92 @@
       if (!cust.gstRegType) cust.gstRegType = cust.gstin ? "Regular" : "Unregistered";
       if (!cust.currency) cust.currency = "INR";
     });
+  }
+
+  function uidBank() { return "ba" + Math.random().toString(36).slice(2, 10); }
+
+  function formatBankAccount(ba) {
+    if (!ba) return { bankName: "", accountNo: "", ifsc: "", swiftCode: "", branch: "", accountName: "", bankLine: "" };
+    const bankLine = ba.bankLine || [ba.bankName, ba.accountNo && "A/c " + ba.accountNo, ba.ifsc && "IFSC " + ba.ifsc].filter(Boolean).join(" · ");
+    return {
+      bankName: ba.bankName || "",
+      accountNo: ba.accountNo || "",
+      ifsc: ba.ifsc || "",
+      swiftCode: ba.swiftCode || "",
+      branch: ba.branch || "",
+      accountName: ba.accountName || "",
+      bankLine,
+    };
+  }
+
+  function migrateBankAccounts(db) {
+    const c = db.company || {};
+    if (!Array.isArray(c.bankAccounts) || !c.bankAccounts.length) {
+      const id = c.defaultBankAccountId || "ba-primary";
+      c.bankAccounts = [{
+        id,
+        label: c.bankName || "Primary account",
+        bankName: c.bankName || "",
+        accountName: c.accountHolder || c.legalName || c.name || "",
+        accountNo: c.accountNo || "",
+        ifsc: c.ifsc || "",
+        swiftCode: c.swiftCode || "",
+        branch: c.branch || "",
+        bankLine: c.bank || "",
+        isDefault: true,
+        active: true,
+      }];
+      c.defaultBankAccountId = id;
+    }
+    c.bankAccounts.forEach((ba) => {
+      if (!ba.id) ba.id = uidBank();
+      if (ba.active == null) ba.active = true;
+    });
+    if (!c.defaultBankAccountId || !c.bankAccounts.some((b) => b.id === c.defaultBankAccountId)) {
+      const def = c.bankAccounts.find((b) => b.isDefault) || c.bankAccounts[0];
+      if (def) { c.defaultBankAccountId = def.id; c.bankAccounts.forEach((b) => { b.isDefault = b.id === def.id; }); }
+    }
+    const defBa = c.bankAccounts.find((b) => b.id === c.defaultBankAccountId) || c.bankAccounts[0];
+    if (defBa) {
+      const f = formatBankAccount(defBa);
+      if (f.bankName) c.bankName = f.bankName;
+      if (f.accountNo) c.accountNo = f.accountNo;
+      if (f.ifsc) c.ifsc = f.ifsc;
+      if (f.bankLine) c.bank = f.bankLine;
+      if (f.swiftCode) c.swiftCode = f.swiftCode;
+    }
+    db.company = c;
+  }
+
+  function applyDefaultBankToDoc(src) {
+    const co = DB.company || {};
+    const accounts = co.bankAccounts || [];
+    if (!accounts.length) {
+      return {
+        remittanceBank: (src && src.remittanceBank) || co.bankName || co.bank || "",
+        remittanceAccount: (src && src.remittanceAccount) || co.accountNo || "",
+        swiftCode: (src && src.swiftCode) || co.swiftCode || "",
+        ifsc: (src && src.ifsc) || co.ifsc || "",
+      };
+    }
+    if (src && src.bankAccountId) {
+      const ba = accounts.find((b) => b.id === src.bankAccountId);
+      if (ba) {
+        const f = formatBankAccount(ba);
+        return {
+          bankAccountId: ba.id,
+          remittanceBank: src.remittanceBank || f.bankName,
+          remittanceAccount: src.remittanceAccount || f.accountNo,
+          swiftCode: src.swiftCode || f.swiftCode,
+          ifsc: src.ifsc || f.ifsc,
+        };
+      }
+    }
+    if (src && (src.remittanceBank || src.remittanceAccount)) return { ...src };
+    const def = accounts.find((b) => b.id === co.defaultBankAccountId) || accounts.find((b) => b.isDefault) || accounts[0];
+    if (!def) return {};
+    const f = formatBankAccount(def);
+    return { bankAccountId: def.id, remittanceBank: f.bankName, remittanceAccount: f.accountNo, swiftCode: f.swiftCode, ifsc: f.ifsc };
   }
 
   function migrateManufacturers(db) {
@@ -2529,7 +2616,39 @@
 
     /* ----- settings / company ----- */
     settings() { return DB.settings || (DB.settings = defaultSettings()); },
-    saveCompany(patch, actor) { DB.company = { ...DB.company, ...patch }; this.audit(actor, "update", "company", "profile", "Company profile updated"); notify(); },
+    saveCompany(patch, actor) {
+      DB.company = { ...DB.company, ...patch };
+      migrateBankAccounts(DB);
+      this.audit(actor, "update", "company", "profile", "Company profile updated");
+      notify();
+    },
+    listBankAccounts() { migrateBankAccounts(DB); return (DB.company.bankAccounts || []).filter((b) => b.active !== false); },
+    getBankAccount(id) {
+      migrateBankAccounts(DB);
+      return (DB.company.bankAccounts || []).find((b) => b.id === id) || null;
+    },
+    defaultBankAccount() {
+      migrateBankAccounts(DB);
+      const c = DB.company || {};
+      return (DB.company.bankAccounts || []).find((b) => b.id === c.defaultBankAccountId)
+        || (DB.company.bankAccounts || []).find((b) => b.isDefault)
+        || (DB.company.bankAccounts || [])[0]
+        || null;
+    },
+    formatBankAccount,
+    applyDefaultBankToDoc,
+    resolveDocumentBank(doc) {
+      const d = doc || {};
+      if (d.bankAccountId) {
+        const ba = this.getBankAccount(d.bankAccountId);
+        if (ba) return { ...formatBankAccount(ba), id: ba.id, label: ba.label };
+      }
+      if (d.remittanceBank || d.remittanceAccount) {
+        return { ...formatBankAccount({ bankName: d.remittanceBank, accountNo: d.remittanceAccount, swiftCode: d.swiftCode, ifsc: d.ifsc }), id: d.bankAccountId || "" };
+      }
+      const def = this.defaultBankAccount();
+      return def ? { ...formatBankAccount(def), id: def.id, label: def.label } : formatBankAccount(null);
+    },
     saveBackupConfig(patch, actor) {
       const b = this.settings().backup;
       DB.settings.backup = {

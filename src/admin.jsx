@@ -279,6 +279,123 @@
     );
   }
 
+  function BankAccountForm({ initial, isNew, onCancel, onSave, can }) {
+    const [e, setE] = useState(() => ({ ...initial }));
+    const set = (k, v) => setE((p) => ({ ...p, [k]: v }));
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Button variant="soft" icon="chevronLeft" onClick={onCancel}>Back to list</Button>
+          <span className="text-sm font-semibold">{isNew ? "Add bank account" : "Edit bank account"}</span>
+        </div>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <Field label="Label / nickname" required><Text value={e.label} onChange={(v) => set("label", v)} placeholder="HDFC Current · Export" /></Field>
+          <Field label="Bank name" required><Text value={e.bankName} onChange={(v) => set("bankName", v)} /></Field>
+          <Field label="Account holder"><Text value={e.accountName} onChange={(v) => set("accountName", v)} /></Field>
+          <Field label="Account number" required><Text value={e.accountNo} onChange={(v) => set("accountNo", v)} /></Field>
+          <Field label="IFSC"><Text value={e.ifsc} onChange={(v) => set("ifsc", v.toUpperCase())} /></Field>
+          <Field label="SWIFT (export)"><Text value={e.swiftCode} onChange={(v) => set("swiftCode", v.toUpperCase())} /></Field>
+          <Field label="Branch"><Text value={e.branch} onChange={(v) => set("branch", v)} /></Field>
+          <Field label="PDF line (optional)" className="lg:col-span-2"><Text value={e.bankLine} onChange={(v) => set("bankLine", v)} placeholder="Auto-built from fields if blank" /></Field>
+          <div className="flex items-end"><Checkbox checked={!!e.isDefault} onChange={(v) => set("isDefault", v)} label="Default for invoices" /></div>
+        </div>
+        {can("edit") && <Button icon="check" onClick={() => onSave({ ...e, label: e.label || e.bankName })}>Save account</Button>}
+      </div>
+    );
+  }
+
+  function BankAccountsTab({ c, setC, can }) {
+    const accounts = Array.isArray(c.bankAccounts) ? c.bankAccounts : [];
+    const [editId, setEditId] = useState(null);
+    const blank = () => ({
+      id: "ba" + Math.random().toString(36).slice(2, 10),
+      label: "",
+      bankName: "",
+      accountName: c.legalName || c.name || "",
+      accountNo: "",
+      ifsc: "",
+      swiftCode: "",
+      branch: "",
+      bankLine: "",
+      isDefault: !accounts.length,
+      active: true,
+    });
+    const editing = editId === "new" ? blank() : accounts.find((b) => b.id === editId);
+    function syncLegacy(list, defaultId) {
+      const def = list.find((b) => b.id === defaultId) || list.find((b) => b.isDefault) || list[0];
+      const f = store.formatBankAccount ? store.formatBankAccount(def) : def;
+      setC((p) => ({
+        ...p,
+        bankAccounts: list,
+        defaultBankAccountId: defaultId || (def && def.id) || "",
+        bankName: (f && f.bankName) || "",
+        accountNo: (f && f.accountNo) || "",
+        ifsc: (f && f.ifsc) || "",
+        swiftCode: (f && f.swiftCode) || "",
+        bank: (f && f.bankLine) || "",
+      }));
+    }
+    function saveAccount(form) {
+      if (!form.bankName || !form.accountNo) return VG.toast("Bank name and account number are required", "error");
+      const line = form.bankLine || [form.bankName, form.accountNo && "A/c " + form.accountNo, form.ifsc && "IFSC " + form.ifsc].filter(Boolean).join(" · ");
+      const row = { ...form, bankLine: line };
+      let list = accounts.slice();
+      const idx = list.findIndex((b) => b.id === row.id);
+      if (idx >= 0) list[idx] = row; else list.push(row);
+      if (row.isDefault) {
+        list = list.map((b) => ({ ...b, isDefault: b.id === row.id }));
+      }
+      const defaultId = (list.find((b) => b.isDefault) || list[0] || {}).id;
+      syncLegacy(list, defaultId);
+      setEditId(null);
+      VG.toast("Bank account saved");
+    }
+    function removeAccount(id) {
+      const list = accounts.filter((b) => b.id !== id);
+      if (!list.length) return VG.toast("At least one bank account is required", "warn");
+      if (!list.some((b) => b.isDefault)) list[0].isDefault = true;
+      syncLegacy(list, (list.find((b) => b.isDefault) || list[0]).id);
+      VG.toast("Bank account removed");
+    }
+    function setDefault(id) {
+      const list = accounts.map((b) => ({ ...b, isDefault: b.id === id }));
+      syncLegacy(list, id);
+      VG.toast("Default bank updated");
+    }
+    if (editing) {
+      return (
+        <BankAccountForm
+          initial={editing}
+          isNew={editId === "new"}
+          onCancel={() => setEditId(null)}
+          onSave={saveAccount}
+          can={can}
+        />
+      );
+    }
+    return (
+      <div className="space-y-4">
+        <p className="text-xs opacity-60">Manage multiple company bank accounts. The default account auto-fills on proforma &amp; tax invoices; users can pick another account per document.</p>
+        {can("edit") && <Button icon="plus" onClick={() => setEditId("new")}>Add bank account</Button>}
+        <div className="space-y-2">
+          {accounts.length === 0 && <div className="text-sm opacity-50 py-6 text-center">No bank accounts — add your first account.</div>}
+          {accounts.map((ba) => (
+            <div key={ba.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-white/10 p-3 glass">
+              <div className="flex-1 min-w-[200px]">
+                <div className="font-medium text-sm">{ba.label || ba.bankName}</div>
+                <div className="text-xs opacity-60 mt-0.5">{ba.bankName} · A/c {ba.accountNo}{ba.ifsc ? " · IFSC " + ba.ifsc : ""}</div>
+              </div>
+              {ba.isDefault && <Pill color="#34d399">Default</Pill>}
+              {can("edit") && !ba.isDefault && <Button variant="soft" className="!py-1.5 !text-xs" onClick={() => setDefault(ba.id)}>Set default</Button>}
+              {can("edit") && <Button variant="soft" icon="edit" className="!py-1.5" onClick={() => setEditId(ba.id)}>Edit</Button>}
+              {can("delete") && accounts.length > 1 && <Button variant="soft" icon="trash" className="!py-1.5 hover:text-rose-400" onClick={() => removeAccount(ba.id)}>Remove</Button>}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   /* ================= Company Profile ================= */
   function CompanyProfile({ roleKey, can }) {
     VG.useDB();
@@ -411,12 +528,7 @@
             </div>
           )}
           {tab === "bank" && (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              <Field label="Bank name"><Text value={c.bankName} onChange={(v) => set("bankName", v)} /></Field>
-              <Field label="Account number"><Text value={c.accountNo} onChange={(v) => set("accountNo", v)} /></Field>
-              <Field label="IFSC"><Text value={c.ifsc} onChange={(v) => set("ifsc", v)} /></Field>
-              <Field label="Bank line (PDF footer)" className="lg:col-span-3"><Text value={c.bank} onChange={(v) => set("bank", v)} /></Field>
-            </div>
+            <BankAccountsTab c={c} setC={setC} can={can} />
           )}
           {tab === "sign" && (
             <div className="grid sm:grid-cols-2 gap-4">

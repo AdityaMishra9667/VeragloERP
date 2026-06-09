@@ -804,7 +804,7 @@
   function companyFooter() {
     const c = store.company();
     const terms = c.terms || c.docFooter || "";
-    return `<div class="vg-foot vg-foot-document-end"><div>${c.bank || c.bankName || ""}${c.ifsc ? " · IFSC " + c.ifsc : ""}</div><div>${terms}</div><div>© ${new Date().getFullYear()} ${c.legalName || c.name}${c.jurisdiction ? " · " + c.jurisdiction : ""}</div></div>`;
+    return `<div class="vg-foot vg-foot-document-end"><div>${terms}</div><div>© ${new Date().getFullYear()} ${c.legalName || c.name}${c.jurisdiction ? " · " + c.jurisdiction : ""}</div></div>`;
   }
   function buildPrintCSS() {
     const base = VG.printBaseCSS ? VG.printBaseCSS() : "*{box-sizing:border-box;font-family:Inter,Arial,sans-serif}";

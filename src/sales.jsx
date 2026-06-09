@@ -74,8 +74,63 @@
     return d ? d.pickLineFields(it, base) : { itemId, sku: it.sku, name: it.name, desc: it.description || it.manufacturerDesc || "", hsn: it.hsn, unit: it.unit, ...base };
   }
   function lineDescUi(l) {
+    if (l && l.desc) return l.desc;
     const d = idsp();
     return d ? d.lineDescription(l, l.itemId) : (l.desc || "");
+  }
+  function LineDescriptionEditor({ line, onChange, compact }) {
+    const d = idsp();
+    const max = (d && d.DESC_MAX_CHARS) || 5000;
+    const placeholder = compact
+      ? "Optional — auto-filled from item master; shorten for invoice if needed"
+      : "Auto-filled from item master — edit before sending to customer";
+    return (
+      <Area
+        value={line.desc || ""}
+        onChange={(v) => {
+          if (v.length > max) return VG.toast("Description exceeds " + max + " characters", "warn");
+          onChange(v);
+        }}
+        rows={compact ? 2 : 3}
+        placeholder={placeholder}
+        className="!text-sm !py-1.5 min-h-[2.75rem]"
+      />
+    );
+  }
+  function BankAccountSection({ doc, onChange }) {
+    const accounts = store.listBankAccounts ? store.listBankAccounts() : [];
+    if (!accounts.length) return null;
+    function apply(patch) { onChange(patch); }
+    function pickAccount(id) {
+      const ba = store.getBankAccount(id);
+      if (!ba) return;
+      const f = store.formatBankAccount(ba);
+      apply({
+        bankAccountId: id,
+        remittanceBank: f.bankName,
+        remittanceAccount: f.accountNo,
+        swiftCode: f.swiftCode || "",
+        ifsc: f.ifsc || "",
+      });
+    }
+    const curId = doc.bankAccountId || (store.defaultBankAccount() || {}).id || "";
+    return (
+      <Card className="p-4 mb-4">
+        <div className="text-sm font-semibold mb-1">Bank details</div>
+        <p className="text-xs opacity-55 mb-3">Shown on proforma &amp; tax invoice PDFs. Default account from Admin — change per document if needed.</p>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <Field label="Bank account">
+            <Select value={curId} onChange={pickAccount} options={accounts.map((ba) => ({
+              value: ba.id,
+              label: (ba.label || ba.bankName || "Account") + (ba.isDefault ? " · default" : "") + (ba.accountNo ? " ····" + String(ba.accountNo).slice(-4) : ""),
+            }))} />
+          </Field>
+          <Field label="Bank name"><Text value={doc.remittanceBank || ""} onChange={(v) => apply({ remittanceBank: v })} /></Field>
+          <Field label="Account number"><Text value={doc.remittanceAccount || ""} onChange={(v) => apply({ remittanceAccount: v })} /></Field>
+          <Field label="IFSC / SWIFT"><Text value={doc.ifsc || doc.swiftCode || ""} onChange={(v) => apply({ ifsc: v, swiftCode: v })} /></Field>
+        </div>
+      </Card>
+    );
   }
   function mapIndustrialDocLines(lines, fmt) {
     const d = idsp();
@@ -198,7 +253,7 @@
                 <td className="min-w-[340px]">
                   <MasterSelect variant="line" collection="items" value={l.itemId} onChange={(id) => pickItem(l.key, id)} actorRole={roleKey} can={can("add")} />
                 </td>
-                <td className="min-w-[220px]"><div className="text-sm leading-snug py-1 pr-2 whitespace-pre-wrap">{lineDescUi(l) || <span className="opacity-40">—</span>}</div></td>
+                <td className="min-w-[220px]"><LineDescriptionEditor line={l} onChange={(v) => setLine(l.key, { desc: v })} /></td>
                 <td className="font-mono text-xs">{l.hsn || "—"}</td>
                 <td><Num data-line-qty value={l.qty} onChange={(v) => setLine(l.key, { qty: v })} /></td>
                 <td className="text-sm opacity-80">{l.unit}</td>
@@ -1139,6 +1194,7 @@
         date: today(), dueDate: today(), customerId: "", contact: "", gstin: "", salesOrderId: "", customerPoRef: "",
         billing: "", shipping: "", billingAddressId: "", shippingAddressId: "", paymentTermsId: "", deliveryTermsId: "", validityDays: 15, currency: "INR", exchangeRate: 1,
         placeOfSupply: "", freight: 0, packing: 0, insurance: 0, remarks: "", by: roleKey, lines: [blankLine()],
+        ...(store.applyDefaultBankToDoc ? store.applyDefaultBankToDoc({}) : {}),
       };
     });
     const set = (k, v) => { setDirty(true); setP((x) => ({ ...x, [k]: v })); };
@@ -1212,6 +1268,7 @@
           )}
           <Field label="Remarks / notes" className="lg:col-span-1"><Area value={p.remarks} onChange={(v) => set("remarks", v)} rows={2} /></Field>
         </div>
+        <BankAccountSection doc={p} onChange={(patch) => { setDirty(true); setP((x) => ({ ...x, ...patch })); }} />
         <TransactionLinesShell title="Line items" onAddLine={addLine} addLabel="Add line" minWidth={1180}
           headerRow={LINE_TABLE_HEAD}>
           {p.lines.map((l) => {
@@ -1219,7 +1276,7 @@
             return (
               <tr key={l.key} className="border-b border-white/5 align-top">
                 <td className="min-w-[340px]"><MasterSelect variant="line" collection="items" value={l.itemId} onChange={(id) => pickItem(l.key, id)} actorRole={roleKey} can={can("add")} /></td>
-                <td className="min-w-[220px]"><div className="text-sm leading-snug py-1 whitespace-pre-wrap">{lineDescUi(l) || <span className="opacity-40">—</span>}</div></td>
+                <td className="min-w-[220px]"><LineDescriptionEditor line={l} compact onChange={(v) => setLine(l.key, { desc: v })} /></td>
                 <td className="font-mono text-xs">{l.hsn || "—"}</td>
                 <td><Num data-line-qty value={l.qty} onChange={(v) => setLine(l.key, { qty: v })} /></td>
                 <td className="text-sm opacity-80">{l.unit}</td>
@@ -1518,6 +1575,7 @@
           <Field label="Delivery terms"><Select value={inv.deliveryTermsId} onChange={(v) => set("deliveryTermsId", v)} options={store.list("deliveryTerms").map((t) => ({ value: t.id, label: t.name }))} /></Field>
         </div>
         {VG.TransactionAddressCurrency ? <div className="grid lg:grid-cols-3 gap-3 mb-4"><VG.TransactionAddressCurrency customerId={inv.customerId} values={inv} onChange={patch} roleKey={roleKey} canEditCurrency={can("edit")} showExchangeMeta /></div> : null}
+        <BankAccountSection doc={inv} onChange={patch} />
         {isExport && (
           <Card className="p-4 mb-4">
             <div className="text-sm font-semibold mb-3">Export invoice details</div>
@@ -1539,9 +1597,6 @@
               <Field label="AD code"><Text value={inv.adCode} onChange={(v) => set("adCode", v)} /></Field>
               <Field label="Incoterms"><Select value={inv.incoterms || ""} onChange={(v) => set("incoterms", v)} options={(VG.INVOICE_INCOTERMS || ["EXW", "FOB", "CIF"]).map((x) => ({ value: x, label: x || "—" }))} /></Field>
               <Field label="Mode of shipment"><Select value={inv.shipmentMode || ""} onChange={(v) => set("shipmentMode", v)} options={(VG.SHIPMENT_MODES || ["Air", "Sea"]).map((x) => ({ value: x, label: x || "—" }))} /></Field>
-              <Field label="Bank (foreign remittance)"><Text value={inv.remittanceBank} onChange={(v) => set("remittanceBank", v)} /></Field>
-              <Field label="Account no."><Text value={inv.remittanceAccount} onChange={(v) => set("remittanceAccount", v)} /></Field>
-              <Field label="SWIFT code"><Text value={inv.swiftCode} onChange={(v) => set("swiftCode", v)} /></Field>
               <Field label="Net weight (kg)"><Num value={inv.netWeight} onChange={(v) => set("netWeight", v)} /></Field>
               <Field label="Gross weight (kg)"><Num value={inv.grossWeight} onChange={(v) => set("grossWeight", v)} /></Field>
               <Field label="No. of packages"><Num value={inv.packages} onChange={(v) => set("packages", v)} /></Field>
@@ -1556,7 +1611,7 @@
           {inv.lines.map((l) => { const c = computeLine(l); return (
             <tr key={l.key} className="border-b border-white/5 align-top">
               <td className="min-w-[340px]"><MasterSelect variant="line" collection="items" value={l.itemId} onChange={(id) => pickItem(l.key, id)} actorRole={roleKey} can={can("add")} /></td>
-              <td className="min-w-[220px]"><div className="text-sm leading-snug py-1">{l.desc || <span className="opacity-40">—</span>}</div></td>
+              <td className="min-w-[220px]"><LineDescriptionEditor line={l} compact onChange={(v) => setLine(l.key, { desc: v })} /></td>
               <td className="font-mono text-xs">{l.hsn || "—"}</td>
               <td><Num value={l.qty} onChange={(v) => setLine(l.key, { qty: v })} /></td>
               <td className="text-sm opacity-80">{l.unit}</td>
