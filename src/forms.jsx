@@ -547,13 +547,13 @@
   function TransactionLinesShell({ title, onAddLine, addLabel, headerRow, children, minWidth = 1120 }) {
     return (
       <div className="vg-line-table-wrap rounded-xl glass overflow-hidden mb-4 border border-white/5">
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/10 bg-black/15 sticky top-0 z-20 backdrop-blur-md">
+        <div className="vg-line-table-toolbar flex items-center justify-between px-4 py-2.5 sticky top-0 z-20 backdrop-blur-md">
           <span className="text-sm font-semibold">{title || "Line items"}</span>
           {onAddLine && <Button variant="soft" icon="plus" onClick={onAddLine} className="!py-1.5">{addLabel || "Add line"}</Button>}
         </div>
         <div className="overflow-x-auto overflow-y-auto max-h-[min(58vh,540px)] scroll-smooth">
           <table className="vg-line-table w-full text-sm border-separate border-spacing-0" style={{ minWidth }}>
-            <thead className="text-[10px] uppercase tracking-wider opacity-60 sticky top-0 z-10 backdrop-blur-md" style={{ background: "color-mix(in srgb, var(--vg-bg) 92%, transparent)" }}>
+            <thead className="vg-sticky-thead">
               {headerRow}
             </thead>
             <tbody>{children}</tbody>
@@ -708,7 +708,7 @@
         >
           <table className="w-full text-sm vg-data-table" style={{ minWidth: "100%" }}>
             <thead className={stickyHeader ? "vg-sticky-thead" : ""}>
-              <tr className="text-left text-[11px] uppercase tracking-wider opacity-55 border-y border-white/10">
+              <tr className="vg-table-head-row text-left text-[11px] uppercase tracking-wider">
                 {visibleCols.map((c) => (
                   <th
                     key={c.key}

@@ -1,4 +1,4 @@
-/* Veraglo ERP — post-login module home (clean grid, no notification clutter). */
+/* Veraglo ERP — post-login module home (5×3 grid, no vertical list). */
 (function (VG) {
   const { useState, useMemo, useEffect } = React;
   const { Icon } = VG.ui;
@@ -29,19 +29,20 @@
         type="button"
         onClick={() => onOpen(mod.id)}
         className={
-          "group relative text-left rounded-2xl p-5 sm:p-6 min-h-[156px] flex flex-col transition-all duration-200 "
-          + "hover:-translate-y-1 hover:shadow-xl active:scale-[0.98] animate-fade-up overflow-hidden vg-home-module-card "
-          + (highlight ? "ring-2 ring-white/25" : "")
+          "group relative w-full h-full text-left rounded-xl p-4 sm:p-5 min-h-[148px] flex flex-col transition-all duration-200 "
+          + "hover:-translate-y-0.5 hover:shadow-lg active:scale-[0.99] animate-fade-up overflow-hidden vg-home-module-card "
+          + (highlight ? "ring-2 ring-indigo-400/40" : "")
+          + (pinned ? " ring-1 ring-amber-400/25" : "")
         }
-        style={{ animationDelay: Math.min(i, 12) * 35 + "ms", "--mod-accent": mod.accent }}
+        style={{ animationDelay: Math.min(i, 14) * 30 + "ms", "--mod-accent": mod.accent }}
       >
-        <div className="absolute inset-0 bg-gradient-to-br from-white/[0.07] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+        <div className="absolute inset-0 bg-gradient-to-br from-white/[0.06] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
         <div className="relative flex items-start justify-between gap-2">
           <span
-            className="grid place-items-center w-14 h-14 rounded-2xl text-white shadow-lg shrink-0 transition-transform group-hover:scale-105"
+            className="grid place-items-center w-11 h-11 sm:w-12 sm:h-12 rounded-xl text-white shadow-md shrink-0 transition-transform group-hover:scale-105"
             style={{ background: mod.accent }}
           >
-            <Icon name={mod.icon} size={26} />
+            <Icon name={mod.icon} size={22} />
           </span>
           {onTogglePin && (
             <span
@@ -51,22 +52,23 @@
               onClick={(e) => { e.stopPropagation(); onTogglePin(mod.id); }}
               onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); onTogglePin(mod.id); } }}
               className={
-                "p-2 rounded-xl transition shrink-0 "
+                "p-1.5 rounded-lg transition shrink-0 "
                 + (pinned ? "text-amber-400 bg-amber-400/15" : "opacity-35 hover:opacity-100 hover:bg-white/10")
               }
             >
-              <Icon name="star" size={16} />
+              <Icon name="star" size={15} />
             </span>
           )}
         </div>
-        <div className="relative mt-4 flex-1 flex flex-col">
-          <div className="font-display font-semibold text-[15px] sm:text-base leading-snug text-balance">{mod.name}</div>
-          <div className="mt-1.5 text-xs sm:text-sm opacity-60 leading-relaxed line-clamp-2">{mod.tagline || mod.category}</div>
+        <div className="relative mt-3 flex-1 flex flex-col min-h-0">
+          <div className="font-display font-semibold text-sm sm:text-[15px] leading-snug text-balance break-words">{mod.name}</div>
+          {(mod.tagline || mod.category) && (
+            <div className="mt-1 text-[11px] sm:text-xs opacity-55 leading-relaxed line-clamp-2">{mod.tagline || mod.category}</div>
+          )}
         </div>
-        <div className="relative mt-3 flex items-center justify-between gap-2 text-[11px] font-medium opacity-45 group-hover:opacity-80 transition">
-          <span>{mod.category}</span>
+        <div className="relative mt-2 flex items-center justify-end text-[10px] font-medium opacity-0 group-hover:opacity-70 transition">
           <span className="inline-flex items-center gap-0.5">
-            Open <Icon name="chevronRight" size={13} className="group-hover:translate-x-0.5 transition-transform" />
+            Open <Icon name="chevronRight" size={12} className="group-hover:translate-x-0.5 transition-transform" />
           </span>
         </div>
       </button>
@@ -110,18 +112,24 @@
       );
     }, [sortedMods, query]);
 
-    const pinnedMods = filteredMods.filter((m) => pinnedSet.has(m.id));
-    const regularMods = filteredMods.filter((m) => !pinnedSet.has(m.id));
+    const gridMods = useMemo(() => {
+      if (query.trim()) return filteredMods;
+      const pinned = filteredMods.filter((m) => pinnedSet.has(m.id));
+      const rest = filteredMods.filter((m) => !pinnedSet.has(m.id));
+      return pinned.concat(rest);
+    }, [filteredMods, pinnedSet, query]);
+
     const recentMods = useMemo(() => {
       return (prefs.recentModules || [])
         .map((id) => modById[id])
         .filter(Boolean)
         .filter((m) => !query.trim() || filteredMods.some((x) => x.id === m.id))
-        .slice(0, 4);
+        .slice(0, 5);
     }, [prefs.recentModules, modById, filteredMods, query]);
 
     const lastMod = prefs.lastModuleId && modById[prefs.lastModuleId] ? modById[prefs.lastModuleId] : null;
     const displayName = (email || "").split("@")[0].replace(/\./g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    const pinnedCount = gridMods.filter((m) => pinnedSet.has(m.id)).length;
 
     return (
       <div className={"relative min-h-screen overflow-x-hidden text-slate-100 vg-module-home " + (entered ? "vg-welcome-in" : "opacity-0")}>
@@ -153,7 +161,7 @@
           </header>
 
           <main className="flex-1 overflow-y-auto px-4 sm:px-8 py-5 sm:py-6">
-            <div className="max-w-[1400px] mx-auto space-y-5">
+            <div className="max-w-[1440px] mx-auto space-y-5">
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
                   <h1 className="text-xl sm:text-2xl font-display font-bold text-white">
@@ -211,38 +219,32 @@
                 </section>
               )}
 
-              {pinnedMods.length > 0 && (
-                <section>
-                  <h2 className="text-[11px] font-semibold uppercase tracking-wider opacity-45 mb-2.5 flex items-center gap-2">
-                    <Icon name="star" size={13} className="text-amber-400" /> Favorite modules
-                  </h2>
-                  <div className="vg-home-module-grid">
-                    {pinnedMods.map((m, i) => (
-                      <ModuleHomeCard key={"pin-" + m.id} mod={m} onOpen={onOpen} i={i} pinned onTogglePin={togglePin} highlight={m.id === prefs.lastModuleId} />
-                    ))}
-                  </div>
-                </section>
-              )}
-
               <section>
-                <h2 className="text-[11px] font-semibold uppercase tracking-wider opacity-45 mb-2.5">
-                  {query ? `Results (${regularMods.length})` : "All modules"}
-                </h2>
-                {filteredMods.length === 0 ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+                  <h2 className="text-[11px] font-semibold uppercase tracking-wider opacity-45">
+                    {query ? `Results (${gridMods.length})` : "Modules"}
+                  </h2>
+                  {!query && pinnedCount > 0 && (
+                    <span className="text-[10px] opacity-40 flex items-center gap-1">
+                      <Icon name="star" size={11} className="text-amber-400" /> {pinnedCount} favorite{pinnedCount === 1 ? "" : "s"} shown first
+                    </span>
+                  )}
+                </div>
+                {gridMods.length === 0 ? (
                   <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-6 py-12 text-center text-sm opacity-55">
                     No modules match your search.
                   </div>
                 ) : (
                   <div className="vg-home-module-grid">
-                    {(query ? filteredMods : regularMods).map((m, i) => (
+                    {gridMods.map((m, i) => (
                       <ModuleHomeCard
                         key={m.id}
                         mod={m}
                         onOpen={onOpen}
-                        i={i + pinnedMods.length}
+                        i={i}
                         pinned={pinnedSet.has(m.id)}
                         onTogglePin={togglePin}
-                        highlight={!query && m.id === prefs.lastModuleId && !pinnedSet.has(m.id)}
+                        highlight={!query && m.id === prefs.lastModuleId}
                       />
                     ))}
                   </div>
