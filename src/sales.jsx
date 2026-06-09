@@ -1303,7 +1303,7 @@
     }
     return (
       <Modal open onClose={onClose} title="Print / Download Invoice" subtitle={(inv && inv.no) || ""}
-        footer={<><Button variant="soft" onClick={onClose}>Cancel</Button><Button icon={mode === "preview" ? "eye" : mode === "download" ? "download" : "printer"} onClick={run}>{mode === "preview" ? "Preview" : mode === "download" ? "Download PDF" : "Print"}</Button></>}>
+        actions={<Button icon={mode === "preview" ? "eye" : mode === "download" ? "download" : "printer"} onClick={run}>{mode === "preview" ? "Preview" : mode === "download" ? "Download PDF" : "Print"}</Button>}>
         <p className="text-sm opacity-70 mb-3">Select invoice copies. Each copy is printed on a separate page with the copy type shown at the top right.</p>
         <div className="grid sm:grid-cols-2 gap-2">
           {INVOICE_COPY_OPTIONS.map((opt) => (
@@ -1344,7 +1344,7 @@
     }
     return (
       <Modal open onClose={onClose} title="Generate E-way Bill" subtitle={inv.no + " · " + custName(inv.customerId)}
-        footer={<><Button variant="soft" onClick={onClose}>Cancel</Button><Button icon="truck" onClick={submit}>Generate E-way Bill</Button></>}>
+        actions={<Button icon="truck" onClick={submit}>Generate E-way Bill</Button>}>
         <div className="grid sm:grid-cols-2 gap-3">
           <Field label="Vehicle number"><Text value={f.vehicle} onChange={(v) => setF((p) => ({ ...p, vehicle: v }))} placeholder="e.g. MH12AB1234" /></Field>
           <Field label="Driver name"><Text value={f.driver} onChange={(v) => setF((p) => ({ ...p, driver: v }))} /></Field>
@@ -2068,7 +2068,7 @@
     }
     return (
       <Modal open={open} onClose={onClose} size="md" dirty={dirty} title={(record && record.id ? "Edit " : "New ") + title}
-        footer={<><Button variant="soft" onClick={onClose}>Cancel</Button><Button icon="check" onClick={submit}>Save</Button></>}>
+        actions={<Button icon="check" onClick={submit}>Save</Button>}>
         <div className="grid sm:grid-cols-2 gap-3">
           {fields.map((f) => (
             <Field key={f.k} label={f.l} required={f.req} error={err[f.k]} className={f.full || f.area ? "sm:col-span-2" : ""}>

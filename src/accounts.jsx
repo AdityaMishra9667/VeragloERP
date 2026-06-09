@@ -84,7 +84,7 @@
     }
     return (
       <Modal open onClose={() => onClose(false)} title="Record payment" subtitle={inv.no + " · Balance " + inr((inv.amount || 0) - (inv.amountPaid || 0))}
-        footer={<><Button variant="soft" onClick={() => onClose(false)}>Cancel</Button><Button icon="rupee" onClick={submit}>Post payment</Button></>}>
+        actions={<Button icon="rupee" onClick={submit}>Post payment</Button>}>
         <Field label="Amount (₹)" required><Num value={amt} onChange={setAmt} /></Field>
       </Modal>
     );

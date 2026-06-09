@@ -307,7 +307,7 @@
       <Modal open={open} onClose={onClose} size="lg" dirty={dirty && !disabled}
         title={isEdit ? "Edit Manufacturer · " + (form.code || "") : "New Manufacturer"}
         subtitle="Used on Item Master — duplicate prevention uses manufacturer name + part number"
-        footer={<><Button variant="soft" onClick={onClose}>Close</Button>{!disabled && <Button icon="check" onClick={save}>{isEdit ? "Save changes" : "Create manufacturer"}</Button>}</>}>
+        actions={!disabled ? <Button icon="check" onClick={save}>{isEdit ? "Save changes" : "Create manufacturer"}</Button> : null}>
         <div className="grid sm:grid-cols-2 gap-3">
           <Field label="Code"><Text value={form.code || (!isEdit ? store.nextManufacturerCode() : "")} onChange={() => {}} disabled /></Field>
           <Field label="Manufacturer name" required error={err.name}><Text value={form.name} onChange={(v) => set("name", v)} disabled={disabled} /></Field>
@@ -416,7 +416,7 @@
       <Modal open={open} onClose={onClose} size="lg" dirty={dirty && !disabled}
         title={isEdit ? "Edit Category · " + (form.code || "") : "New Category"}
         subtitle={isEdit ? form.name : "Category code continues automatically (CAT-8 → CAT-9)"}
-        footer={<><Button variant="soft" onClick={onClose}>Cancel</Button>{!disabled && <Button icon="check" onClick={save}>{isEdit ? "Save changes" : "Create category"}</Button>}</>}>
+        actions={!disabled ? <Button icon="check" onClick={save}>{isEdit ? "Save changes" : "Create category"}</Button> : null}>
         <div className="grid sm:grid-cols-2 gap-3">
           <Field label="Category code" hint={isEdit ? "Master category code" : "Auto-assigned from last saved code"}>
             <Text value={form.code || (!isEdit ? store.nextCategoryCode() : "")} onChange={() => {}} disabled />
@@ -532,10 +532,10 @@
     if (edit !== null) {
       return (
         <InternalScreen onBack={() => setEdit(null)} backLabel="Back to item locations" title={edit.id ? "Edit Item Location" : "New Item Location"} dirty={false}
-          footer={<><Button variant="soft" onClick={() => setEdit(null)}>Cancel</Button><Button icon="check" onClick={() => {
+          actions={<Button icon="check" onClick={() => {
             const form = edit;
             save(form);
-          }}>Save</Button></>}>
+          }}>Save</Button>}>
           <div className="grid sm:grid-cols-2 gap-3">
             <Field label="Code"><Text value={edit.code || ""} onChange={(v) => setEdit((p) => ({ ...p, code: v }))} /></Field>
             <Field label="Status"><Select value={edit.status || "Active"} onChange={(v) => setEdit((p) => ({ ...p, status: v }))} options={[{ value: "Active", label: "Active" }, { value: "Inactive", label: "Inactive" }]} /></Field>
@@ -1248,7 +1248,7 @@
     }
     return (
       <Modal open={open} onClose={onClose} size="lg" dirty={dirty} title={"New " + title} subtitle="Updates stock ledger"
-        footer={<><Button variant="soft" onClick={onClose}>Close</Button><Button icon="check" onClick={save}>Post</Button></>}>
+        actions={<Button icon="check" onClick={save}>Post</Button>}>
         <div className="grid sm:grid-cols-2 gap-3">
           <Field label="Date"><DateF value={f.date} onChange={(v) => set("date", v)} /></Field>
           <Field label="Item (master)" required><MasterSelect variant="line" collection="items" value={f.itemId} onChange={(v) => set("itemId", v)} actorRole={roleKey} can={can("add")} /></Field>

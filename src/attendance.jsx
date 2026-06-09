@@ -26,7 +26,7 @@
     }
     return (
       <Modal open onClose={() => onClose(false)} title={empName(f.employeeId)} subtitle={f.month}
-        footer={<><Button variant="soft" onClick={() => onClose(false)}>Cancel</Button><Button icon="check" onClick={save}>Save</Button></>}>
+        actions={<Button icon="check" onClick={save}>Save</Button>}>
         <div className="grid sm:grid-cols-2 gap-3">
           <Field label="Present days"><Num value={f.present} onChange={(v) => setF((p) => ({ ...p, present: v }))} /></Field>
           <Field label="Leave days"><Num value={f.leave} onChange={(v) => setF((p) => ({ ...p, leave: v }))} /></Field>

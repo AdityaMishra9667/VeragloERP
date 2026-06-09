@@ -464,7 +464,7 @@
     }
     return (
       <Modal open={open} onClose={onClose} dirty={dirty} title={isEdit ? "Edit Location" : "New Location"} subtitle="Plants, warehouses, racks and bins"
-        footer={<><Button variant="soft" onClick={onClose}>Close</Button><Button icon="check" onClick={save}>Save</Button></>}>
+        actions={<Button icon="check" onClick={save}>Save</Button>}>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <Field label="Code"><Text value={f.code} onChange={(v) => set("code", v)} /></Field>
           <Field label="Name" required><Text value={f.name} onChange={(v) => set("name", v)} /></Field>
@@ -576,7 +576,8 @@
     const loginRows = (f.email ? store.list("loginLog").filter((l) => l.email === f.email || l.roleKey === f.roleKey) : []).slice().reverse();
     return (
       <Modal open={open} onClose={onClose} size="lg" dirty={dirty} title={isEdit ? "Edit User · " + f.userId : "New User"} subtitle="ERP login accounts linked to roles"
-        footer={<><Button variant="soft" onClick={onClose}>Close</Button>{isEdit && <Button variant="soft" icon="activity" onClick={() => setHistory((h) => !h)}>{history ? "Hide history" : "Login history"}</Button>}{isEdit && <Button variant="soft" icon="users" onClick={() => setSessionsOpen((s) => !s)}>{sessionsOpen ? "Hide sessions" : "Active sessions"}</Button>}{isEdit && can("edit") && <Button variant="soft" onClick={() => { store.update("erpUsers", f.id, { failedLogins: 0, status: f.status === "Locked" ? "Active" : f.status }, roleKey); set("failedLogins", 0); VG.toast("Failed login count reset"); }}>Reset failed logins</Button>}{isEdit && can("edit") && <Button variant="soft" onClick={resetPassword} disabled={busy}>Reset password</Button>}<Button icon="check" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</Button></>}>
+        actions={<Button icon="check" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</Button>}
+        footer={<>{isEdit && <Button variant="soft" icon="activity" onClick={() => setHistory((h) => !h)}>{history ? "Hide history" : "Login history"}</Button>}{isEdit && <Button variant="soft" icon="users" onClick={() => setSessionsOpen((s) => !s)}>{sessionsOpen ? "Hide sessions" : "Active sessions"}</Button>}{isEdit && can("edit") && <Button variant="soft" onClick={() => { store.update("erpUsers", f.id, { failedLogins: 0, status: f.status === "Locked" ? "Active" : f.status }, roleKey); set("failedLogins", 0); VG.toast("Failed login count reset"); }}>Reset failed logins</Button>}{isEdit && can("edit") && <Button variant="soft" onClick={resetPassword} disabled={busy}>Reset password</Button>}</>}>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {isEdit && <Field label="User ID"><Text value={f.userId} disabled /></Field>}
           <Field label="Full name" required><Text value={f.name} onChange={(v) => set("name", v)} /></Field>
@@ -702,7 +703,8 @@
     const AccessPanel = VG.RoleAccessPanel;
     return (
       <Modal open={open} onClose={onClose} size="xl" dirty={dirty} title={duplicate ? "Duplicate Role" : isEdit ? "Edit Role · " + f.label : "New Role"} subtitle="Module access, actions, tabs and permission matrix"
-        footer={<><Button variant="soft" onClick={onClose}>Close</Button><Button variant="soft" onClick={() => setShowMatrix((s) => !s)}>{showMatrix ? "Hide matrix" : "Fine-grained matrix"}</Button><Button icon="check" onClick={save}>Save role</Button></>}>
+        actions={<Button icon="check" onClick={save}>Save role</Button>}
+        footer={<Button variant="soft" onClick={() => setShowMatrix((s) => !s)}>{showMatrix ? "Hide matrix" : "Fine-grained matrix"}</Button>}>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
           <Field label="Role key" required><Text value={f.key} onChange={(v) => set("key", v)} disabled={isEdit && f.builtIn} /></Field>
           <Field label="Display label" required><Text value={f.label} onChange={(v) => set("label", v)} /></Field>
@@ -806,7 +808,7 @@
     const modOpts = (VG.ADMIN_MODULES || []).map((m) => ({ value: m.id, label: m.label }));
     return (
       <Modal open={open} onClose={onClose} title={isEdit ? "Edit Field Rule" : "New Field Rule"}
-        footer={<><Button variant="soft" onClick={onClose}>Close</Button><Button icon="check" onClick={save}>Save</Button></>}>
+        actions={<Button icon="check" onClick={save}>Save</Button>}>
         <div className="grid sm:grid-cols-2 gap-3">
           <Field label="Module" required><Select value={f.module} onChange={(v) => set("module", v)} options={modOpts} /></Field>
           <Field label="Field name" required hint="e.g. discount, rate, creditLimit"><Text value={f.field} onChange={(v) => set("field", v)} /></Field>
@@ -870,7 +872,7 @@
     const roleOpts = store.listRoles().map((r) => ({ value: r.key, label: r.label }));
     return (
       <Modal open={open} onClose={onClose} title={isEdit ? "Edit Workflow" : "New Approval Workflow"}
-        footer={<><Button variant="soft" onClick={onClose}>Close</Button><Button icon="check" onClick={save}>Save</Button></>}>
+        actions={<Button icon="check" onClick={save}>Save</Button>}>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <Field label="Process" required className="lg:col-span-2"><Select value={f.process} onChange={(v) => set("process", v)} options={types.map((t) => ({ value: t, label: t }))} /></Field>
           <Field label="Approval levels"><Num value={f.levels} onChange={(v) => set("levels", v)} /></Field>
@@ -959,7 +961,7 @@
     const types = VG.ADMIN_DOC_TYPES || [];
     return (
       <Modal open={open} onClose={onClose} title={isEdit ? "Edit Number Series" : "New Number Series"}
-        footer={<><Button variant="soft" onClick={onClose}>Close</Button><Button icon="check" onClick={save}>Save</Button></>}>
+        actions={<Button icon="check" onClick={save}>Save</Button>}>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <Field label="Document type" required><Select value={f.docType} onChange={(v) => set("docType", v)} options={types.map((t) => ({ value: t, label: t }))} /></Field>
           <Field label="Prefix" required hint="e.g. GLS/QTN"><Text value={f.prefix} onChange={(v) => set("prefix", v)} /></Field>

@@ -37,7 +37,7 @@
     }
     return (
       <Modal open={open} onClose={() => onClose(false)} size="lg" title="Create shipment" subtitle={so ? so.no + " · " + custName(so.customerId) : ""}
-        footer={<><Button variant="soft" onClick={() => onClose(false)}>Cancel</Button><Button icon="truck" onClick={submit}>Create shipment</Button></>}>
+        actions={<Button icon="truck" onClick={submit}>Create shipment</Button>}>
         <div className="grid sm:grid-cols-2 gap-3">
           <Field label="Destination" className="sm:col-span-2"><Text value={f.destination} onChange={(v) => setF((p) => ({ ...p, destination: v }))} /></Field>
           <Field label="Vehicle"><Text value={f.vehicle} onChange={(v) => setF((p) => ({ ...p, vehicle: v }))} /></Field>

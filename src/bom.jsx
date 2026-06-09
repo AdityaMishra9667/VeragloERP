@@ -119,7 +119,7 @@
     }
     return (
       <Modal open={open} onClose={onClose} size="sm" title="BOM Revision"
-        footer={<><Button variant="soft" onClick={onClose}>Cancel</Button><Button icon="check" onClick={submit}>Save revision</Button></>}>
+        actions={<Button icon="check" onClick={submit}>Save revision</Button>}>
         <div className="space-y-3">
           <Field label="Reason for revision" required><Area value={reason} onChange={setReason} rows={3} placeholder="Why are components being changed?" /></Field>
           <Field label="Remarks"><Area value={remarks} onChange={setRemarks} rows={2} /></Field>

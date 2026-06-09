@@ -50,7 +50,7 @@
     }
     return (
       <Modal open={open} onClose={onClose} size="lg" dirty={dirty} title={isEdit ? "Edit Request " + f.no : "New Purchase Request"} subtitle="Items come from the item master only"
-        footer={<><Button variant="soft" onClick={onClose}>Close</Button><Button icon="check" onClick={save}>{isEdit ? "Save changes" : "Raise request"}</Button></>}>
+        actions={<Button icon="check" onClick={save}>{isEdit ? "Save changes" : "Raise request"}</Button>}>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <Field label="Date" required><DateF value={f.date} onChange={(v) => set("date", v)} /></Field>
           <Field label="Item (master)" required className="lg:col-span-2"><MasterSelect variant="line" collection="items" value={f.itemId} onChange={pickItem} actorRole={roleKey} can={can("add")} /></Field>

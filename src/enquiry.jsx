@@ -400,7 +400,7 @@
     }
     return (
       <Modal open={open} onClose={onClose} size="sm" title="Mark Offer Sent"
-        footer={<><Button variant="soft" onClick={onClose}>Cancel</Button><Button icon="send" onClick={submit}>Confirm sent</Button></>}>
+        actions={<Button icon="send" onClick={submit}>Confirm sent</Button>}>
         <div className="space-y-3">
           <Field label="Sent mode"><Select value={mode} onChange={setMode} options={OFFER_MODES.map((m) => ({ value: m, label: m }))} /></Field>
           <Field label="Customer email / contact used"><Text value={contact} onChange={setContact} /></Field>
@@ -424,7 +424,7 @@
     }
     return (
       <Modal open={open} onClose={onClose} size="sm" title="Add Follow-up"
-        footer={<><Button variant="soft" onClick={onClose}>Cancel</Button><Button icon="bell" onClick={submit}>Save follow-up</Button></>}>
+        actions={<Button icon="bell" onClick={submit}>Save follow-up</Button>}>
         <div className="grid sm:grid-cols-2 gap-3">
           <Field label="Follow-up date"><DateF value={f.date} onChange={(v) => set("date", v)} /></Field>
           <Field label="Time"><Text value={f.time} onChange={(v) => set("time", v)} placeholder="10:00" /></Field>
@@ -446,7 +446,7 @@
     }
     return (
       <Modal open={open} onClose={onClose} size="sm" title="Request Clarification"
-        footer={<><Button variant="soft" onClick={onClose}>Cancel</Button><Button icon="message" onClick={submit}>Submit</Button></>}>
+        actions={<Button icon="message" onClick={submit}>Submit</Button>}>
         <Field label="Clarification required"><Area value={note} onChange={setNote} rows={4} placeholder="What information is needed from customer?" /></Field>
       </Modal>
     );
@@ -467,7 +467,7 @@
     }
     return (
       <Modal open={open} onClose={onClose} size="sm" title="Upload Documents"
-        footer={<><Button variant="soft" onClick={onClose}>Cancel</Button><Button icon="upload" onClick={submit}>Attach</Button></>}>
+        actions={<Button icon="upload" onClick={submit}>Attach</Button>}>
         <div className="space-y-3">
           <Field label="Document type"><Select value={type} onChange={setType} options={["Drawing", "Specification", "RFQ", "Offer PDF", "Other"].map((t) => ({ value: t, label: t }))} /></Field>
           <Field label="File name / reference"><Text value={name} onChange={setName} placeholder="drawing-v2.pdf" /></Field>

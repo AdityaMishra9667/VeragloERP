@@ -34,7 +34,7 @@
     }
     return (
       <Modal open={open} onClose={onClose} size="lg" title={isEdit ? "Edit " + f.name : "New employee"}
-        footer={<><Button variant="soft" onClick={onClose}>Cancel</Button><Button icon="check" onClick={save}>Save</Button></>}>
+        actions={<Button icon="check" onClick={save}>Save</Button>}>
         <div className="grid sm:grid-cols-2 gap-3">
           <Field label="Full name" required><Text value={f.name} onChange={(v) => set("name", v)} /></Field>
           <Field label="Department"><Select value={f.department} onChange={(v) => set("department", v)} options={["Production", "Quality", "Sales", "Accounts", "HR", "Dispatch"].map((x) => ({ value: x, label: x }))} /></Field>

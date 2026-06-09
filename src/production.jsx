@@ -363,7 +363,7 @@
     }
     return (
       <Modal open onClose={() => onClose(false)} size="md" title={"Complete " + wo.no} subtitle="Posts production output and creates QC inspection"
-        footer={<><Button variant="soft" onClick={() => onClose(false)}>Cancel</Button><Button icon="check" onClick={submit}>Complete WO</Button></>}>
+        actions={<Button icon="check" onClick={submit}>Complete WO</Button>}>
         <div className="grid gap-3">
           <Field label="Quantity produced" required><Num value={qty} onChange={setQty} /></Field>
           <Field label="Rejected during production"><Num value={rejectQty} onChange={setRejectQty} /></Field>
