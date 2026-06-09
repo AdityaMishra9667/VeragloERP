@@ -386,7 +386,7 @@
     const b = BANNERS[mod.id] || { c1: mod.accent, c2: "#22d3ee", desc: mod.tagline };
     const img = (VG.MODULE_BANNER_IMG && VG.MODULE_BANNER_IMG[mod.id]) || null;
     return (
-      <div className="vg-module-banner relative overflow-hidden rounded-2xl mb-4 border border-white/10 animate-fade-up min-h-[120px] sm:min-h-[140px] shadow-lg">
+      <div className="vg-module-banner relative overflow-hidden rounded-2xl mb-5 border border-white/10 animate-fade-up min-h-[120px] sm:min-h-[140px] shadow-lg">
         {img && <img src={img} alt="" className="absolute inset-0 w-full h-full object-cover" loading="lazy" decoding="async" />}
         <div className="absolute inset-0" style={{ background: `linear-gradient(105deg, ${b.c1}e6 0%, ${b.c2}bb 45%, rgba(8,13,24,.88) 100%)` }} />
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/20" />

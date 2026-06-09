@@ -817,19 +817,21 @@
     }, [collapsed]);
 
     return (
-      <div className={"min-h-screen flex vg-app-shell " + (theme === "light" ? "text-slate-800" : "text-slate-100")}
+      <div className={"min-h-screen flex vg-app-shell vg-app-shell-layout " + (theme === "light" ? "text-slate-800" : "text-slate-100")}
         style={{ background: theme === "light"
           ? "radial-gradient(1200px 600px at 80% -10%, #e9eefb, #f4f6fc)"
           : "radial-gradient(1200px 600px at 80% -10%, #131c33, #0b1120)" }}>
         <Sidebar roleKey={roleKey} email={email} activeId={moduleId} onOpen={onOpen} onHome={onHome}
           collapsed={collapsed} setCollapsed={setCollapsed} hoverExpand={hoverExpand} setHoverExpand={setHoverExpand}
           mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} />
-        <div className="flex-1 min-w-0 flex flex-col">
+        <div className="vg-shell-column flex-1 min-w-0 flex flex-col">
           <Topbar roleKey={roleKey} email={email} mod={mod} onHome={onHome} onToggleMobile={() => setMobileOpen(true)}
             theme={theme} setTheme={setTheme} onLogout={onLogout} onOpenSearch={onOpenSearch} />
-          <main id="vg-main-content" className="relative flex-1 w-full min-w-0 max-w-none min-h-0 vg-premium-workspace">
-            {mod ? <VG.ModuleWorkspace key={moduleId} mod={mod} roleKey={roleKey} /> : <div className="opacity-60">Module not found.</div>}
-          </main>
+          <div className="vg-shell-canvas-wrap flex-1 min-h-0 flex flex-col">
+            <main id="vg-main-content" className="relative flex-1 w-full min-w-0 max-w-none min-h-0 vg-premium-workspace vg-workspace-canvas">
+              {mod ? <VG.ModuleWorkspace key={moduleId} mod={mod} roleKey={roleKey} /> : <div className="opacity-60 vg-workspace-inset">Module not found.</div>}
+            </main>
+          </div>
         </div>
       </div>
     );
