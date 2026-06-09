@@ -344,7 +344,7 @@
 
   /* Per-module banner palette + scene description (acts like a photographic hero). */
   const BANNERS = {
-    sales: { c1: "#4f46e5", c2: "#06b6d4", desc: "Win more deals — manage leads, quotations, orders and customer relationships in one place." },
+    sales: { c1: "#4f46e5", c2: "#06b6d4", desc: "Manage enquiries, customers, quotations, sales orders and follow-ups from one connected workspace." },
     enquiry: { c1: "#0284c7", c2: "#22d3ee", desc: "Capture every enquiry and nurture it into a qualified opportunity." },
     inventory: { c1: "#059669", c2: "#10b981", desc: "Real-time stock across stores, racks and bins with auto reorder alerts." },
     purchase: { c1: "#d97706", c2: "#f59e0b", desc: "From requisition to purchase order to goods receipt — fully tracked procurement." },
@@ -386,7 +386,7 @@
     const b = BANNERS[mod.id] || { c1: mod.accent, c2: "#22d3ee", desc: mod.tagline };
     const img = (VG.MODULE_BANNER_IMG && VG.MODULE_BANNER_IMG[mod.id]) || null;
     return (
-      <div className="vg-module-banner relative overflow-hidden rounded-2xl mb-5 border border-white/10 animate-fade-up min-h-[120px] sm:min-h-[140px] shadow-lg">
+      <div className="vg-module-banner relative overflow-hidden w-full animate-fade-up shadow-lg">
         {img && <img src={img} alt="" className="absolute inset-0 w-full h-full object-cover" loading="lazy" decoding="async" />}
         <div className="absolute inset-0" style={{ background: `linear-gradient(105deg, ${b.c1}e6 0%, ${b.c2}bb 45%, rgba(8,13,24,.88) 100%)` }} />
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/20" />
@@ -494,9 +494,12 @@
     const current = visibleSections.find((s) => s.id === section);
     const isDashboard = isDashboardSection(section);
     return (
-      <div className={"vg-workspace-fade vg-full-width-workspace" + (isDashboard ? "" : " vg-internal-workspace")}>
+      <div className={"vg-workspace-fade" + (isDashboard ? " vg-dash-shell" : " vg-full-width-workspace vg-internal-workspace")}>
         {isDashboard ? (
-          <ModuleBanner mod={mod} actions={actions} />
+          <>
+            <ModuleBanner mod={mod} actions={actions} />
+            <div className="vg-dash-body">{children}</div>
+          </>
         ) : current ? (
           <ModuleBreadcrumb
             mod={mod}
@@ -505,7 +508,7 @@
             onHome={() => setSection("dashboard")}
           />
         ) : null}
-        {children}
+        {!isDashboard ? children : null}
       </div>
     );
   }
@@ -571,23 +574,14 @@
     const isAnalytics = /analytic/i.test(tab);
 
     return (
-      <div className={"animate-fade-up vg-full-width-workspace" + (isOverview ? "" : " vg-internal-workspace")}>
+      <div className={"animate-fade-up" + (isOverview ? " vg-dash-shell" : " vg-full-width-workspace vg-internal-workspace")}>
         {isOverview ? (
-          <ModuleBanner mod={mod} actions={[
-            ...(can("add") && mod.shortcuts ? [{ label: mod.shortcuts[0], icon: "plus", primary: true, onClick: () => setTab(mod.tabs[1] || mod.tabs[0]) }] : []),
-            { label: "Reports", icon: "chart", onClick: () => setTab(mod.tabs.find((t) => /report/i.test(t)) || mod.tabs[0]) },
-          ]} />
-        ) : (
-          <ModuleBreadcrumb
-            mod={mod}
-            sectionLabel={tab}
-            groupLabel="Views"
-            onHome={() => setTab(mod.tabs[0])}
-          />
-        )}
-
-        {isOverview && (
-          <div className="space-y-6 w-full max-w-none">
+          <>
+            <ModuleBanner mod={mod} actions={[
+              ...(can("add") && mod.shortcuts ? [{ label: mod.shortcuts[0], icon: "plus", primary: true, onClick: () => setTab(mod.tabs[1] || mod.tabs[0]) }] : []),
+              { label: "Reports", icon: "chart", onClick: () => setTab(mod.tabs.find((t) => /report/i.test(t)) || mod.tabs[0]) },
+            ]} />
+            <div className="vg-dash-body space-y-6 w-full max-w-none">
             <div>
               <h2 className="text-xl font-display font-bold">{mod.name}</h2>
               <p className="text-sm opacity-55 mt-0.5">{mod.tagline}</p>

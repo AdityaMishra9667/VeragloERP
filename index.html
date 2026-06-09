@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0b1220" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
-    <meta name="vg-build" content="2026-06-production-fix-v1" />
+    <meta name="vg-build" content="2026-06-enterprise-dash-v1" />
     <title>Veraglo ERP — Enterprise Workspace</title>
     <link rel="icon" type="image/png" href="assets/veraglo-logo.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -1418,6 +1418,173 @@
       .vg-module-dashboard .vg-module-nav {
         margin-top: 0;
       }
+      /* Enterprise module dashboard — full-width aligned shell */
+      .vg-dash-shell {
+        width: 100%;
+        max-width: none;
+        margin: 0;
+        padding: 1rem 1.15rem 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1.25rem;
+      }
+      @media (min-width: 768px) {
+        .vg-dash-shell { padding: 1.15rem 1.35rem 1.65rem; gap: 1.35rem; }
+      }
+      @media (min-width: 1280px) {
+        .vg-dash-shell { padding: 1.25rem 1.75rem 1.85rem; gap: 1.5rem; }
+      }
+      .vg-dash-shell .vg-dash-body,
+      .vg-dash-shell .vg-module-dashboard {
+        padding: 0 !important;
+        margin: 0;
+        width: 100%;
+        max-width: none;
+      }
+      .vg-dash-shell .vg-module-banner {
+        margin-bottom: 0;
+        border-radius: var(--vg-radius-xl);
+        min-height: 156px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: var(--vg-shadow-md);
+      }
+      @media (min-width: 1024px) {
+        .vg-dash-shell .vg-module-banner { min-height: 176px; }
+      }
+      .vg-dash-section {
+        width: 100%;
+      }
+      .vg-dash-section-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 0.75rem;
+        margin-bottom: 0.85rem;
+      }
+      .vg-dash-section-head h3 {
+        font-size: 0.9375rem;
+        font-weight: 650;
+        letter-spacing: -0.02em;
+      }
+      .vg-dash-section-head span {
+        font-size: 0.6875rem;
+        opacity: 0.45;
+        white-space: nowrap;
+      }
+      .vg-quick-action-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.75rem;
+      }
+      @media (min-width: 640px) {
+        .vg-quick-action-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      }
+      @media (min-width: 1024px) {
+        .vg-quick-action-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      }
+      @media (min-width: 1536px) {
+        .vg-quick-action-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+      }
+      .vg-quick-action-card {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: flex-start;
+        gap: 0.65rem;
+        min-height: 5.5rem;
+        padding: 1rem 1.05rem;
+        border-radius: var(--vg-radius-lg);
+        background: var(--vg-panel-bg);
+        border: 1px solid var(--vg-border);
+        box-shadow: var(--vg-shadow-sm);
+        text-align: left;
+        transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+      }
+      .vg-quick-action-card:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: var(--vg-shadow-md);
+        border-color: color-mix(in srgb, var(--accent) 28%, var(--vg-border));
+      }
+      .vg-quick-action-card:disabled {
+        opacity: 0.42;
+        cursor: not-allowed;
+      }
+      .vg-quick-action-card.is-primary {
+        border-color: color-mix(in srgb, var(--accent) 35%, var(--vg-border));
+        background: color-mix(in srgb, var(--accent) 6%, var(--vg-panel-bg));
+      }
+      .vg-quick-action-icon {
+        display: grid;
+        place-items: center;
+        width: 2.25rem;
+        height: 2.25rem;
+        border-radius: 0.7rem;
+        color: #fff;
+        box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 32%, transparent);
+        flex-shrink: 0;
+      }
+      .vg-quick-action-label {
+        font-size: 0.8125rem;
+        font-weight: 600;
+        line-height: 1.35;
+        letter-spacing: -0.01em;
+      }
+      .vg-kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.85rem;
+      }
+      @media (min-width: 768px) {
+        .vg-kpi-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      }
+      .vg-kpi-grid .vg-kpi-card {
+        min-height: 8.5rem;
+        display: flex;
+        flex-direction: column;
+      }
+      .vg-work-queue-grid {
+        display: grid;
+        grid-template-columns: repeat(1, minmax(0, 1fr));
+        gap: 0.85rem;
+      }
+      @media (min-width: 768px) {
+        .vg-work-queue-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      }
+      @media (min-width: 1280px) {
+        .vg-work-queue-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      }
+      .vg-work-queue-card {
+        display: flex;
+        flex-direction: column;
+        min-height: 10.5rem;
+        padding: 1rem 1.1rem;
+        border-radius: var(--vg-radius-lg);
+        background: var(--vg-panel-bg);
+        border: 1px solid var(--vg-border);
+        box-shadow: var(--vg-shadow-sm);
+        text-align: left;
+        transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+      }
+      .vg-work-queue-card:hover {
+        transform: translateY(-1px);
+        box-shadow: var(--vg-shadow-md);
+        border-color: color-mix(in srgb, var(--accent) 22%, var(--vg-border));
+      }
+      .vg-dash-live {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 0.4rem;
+        font-size: 0.6875rem;
+        opacity: 0.45;
+        margin-top: -0.35rem;
+      }
+      .vg-dash-tabs {
+        display: flex;
+        gap: 0.4rem;
+        overflow-x: auto;
+        padding-bottom: 0.15rem;
+      }
       /* Post-login module home — bright sunlight workspace */
       .vg-module-home-sunlight {
         background: var(--vg-sun-bg);
@@ -1648,7 +1815,7 @@
           }
           VG.apiBase = "";
           VG.buildId = document.querySelector('meta[name="vg-build"]')?.content || "dev";
-          console.info("[Veraglo ERP] UI build:", VG.buildId, "— work order detail v1+. Run: git pull origin main");
+          console.info("[Veraglo ERP] UI build:", VG.buildId, "— enterprise dashboard v1+. Run: git pull origin main");
           var initInfo = await VG.store.init();
           if (VG.applyTypography) {
             var st = VG.store.settings();

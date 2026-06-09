@@ -43,40 +43,76 @@
 
   function KpiTile({ kpi, onClick, delay }) {
     return (
-      <button type="button" onClick={onClick} disabled={!onClick} className="text-left w-full group">
-        <Card hover className="vg-kpi-card p-5 h-full group-disabled:opacity-90 animate-fade-up" style={{ animationDelay: (delay || 0) + "ms" }}>
-          <div className="flex items-start justify-between gap-3">
-            <span className="grid place-items-center w-11 h-11 rounded-2xl shrink-0 text-white shadow" style={{ background: kpi.color || "var(--accent)" }}>
-              <Icon name={kpi.icon || "chart"} size={20} />
+      <button type="button" onClick={onClick} disabled={!onClick} className="text-left w-full h-full group">
+        <Card hover className="vg-kpi-card p-4 sm:p-5 h-full min-h-[8.5rem] group-disabled:opacity-90 animate-fade-up" style={{ animationDelay: (delay || 0) + "ms" }}>
+          <div className="flex items-start justify-between gap-2">
+            <span className="grid place-items-center w-10 h-10 rounded-xl shrink-0 text-white shadow-sm" style={{ background: kpi.color || "var(--accent)" }}>
+              <Icon name={kpi.icon || "chart"} size={18} />
             </span>
             {kpi.badge != null && <Pill color={kpi.badgeColor || "#f59e0b"}>{kpi.badge}</Pill>}
           </div>
-          <div className="mt-4 text-3xl sm:text-4xl font-display font-bold tracking-tight">{kpi.value}</div>
-          <div className="mt-1 text-sm font-medium opacity-90">{kpi.label}</div>
-          {kpi.hint && <div className="mt-1 text-[11px] opacity-50">{kpi.hint}</div>}
+          <div className="mt-3 text-2xl sm:text-3xl font-display font-bold tracking-tight leading-none">{kpi.value}</div>
+          <div className="mt-2 text-sm font-medium opacity-85 leading-snug">{kpi.label}</div>
+          {kpi.hint && <div className="mt-1 text-[11px] opacity-45">{kpi.hint}</div>}
         </Card>
       </button>
     );
   }
 
-  function QuickActionsBar({ actions, can }) {
+  function QuickActionGrid({ actions, can, accent }) {
     if (!actions || !actions.length) return null;
+    const color = accent || "var(--accent)";
     return (
-      <Card className="p-4 sm:p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-semibold">Quick actions</h3>
-          <span className="text-[11px] opacity-45">One click to common tasks</span>
+      <section className="vg-dash-section">
+        <div className="vg-dash-section-head">
+          <h3>Quick actions</h3>
+          <span>One click to common tasks</span>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="vg-quick-action-grid">
           {actions.map((a) => (
-            <button key={a.label} type="button" disabled={a.perm && !can(a.perm)} onClick={a.onClick}
-              className={"vg-btn-premium inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold " + (a.primary ? "vg-btn-solid" : "vg-btn-soft") + (a.perm && !can(a.perm) ? " opacity-40 cursor-not-allowed" : "")}>
-              <Icon name={a.icon || "plus"} size={16} />
-              {a.label}
+            <button
+              key={a.label}
+              type="button"
+              disabled={a.perm && !can(a.perm)}
+              onClick={a.onClick}
+              className={"vg-quick-action-card" + (a.primary ? " is-primary" : "")}
+              style={{ "--accent": color }}
+            >
+              <span className="vg-quick-action-icon" style={{ background: color }}>
+                <Icon name={a.icon || "plus"} size={18} />
+              </span>
+              <span className="vg-quick-action-label">{a.label}</span>
             </button>
           ))}
         </div>
-      </Card>
+      </section>
+    );
+  }
+
+  function WorkQueueGrid({ queues, go }) {
+    if (!queues || !queues.length) return null;
+    return (
+      <section className="vg-dash-section">
+        <div className="vg-dash-section-head">
+          <h3>Work queue</h3>
+          <span>Items needing attention now</span>
+        </div>
+        <div className="vg-work-queue-grid">
+          {queues.map((q) => (
+            <button key={q.title} type="button" onClick={() => (q.onClick ? q.onClick() : go && go(q.go))} className="vg-work-queue-card">
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <span className="grid place-items-center w-9 h-9 rounded-xl text-white shrink-0" style={{ background: q.color || "var(--accent)" }}>
+                  <Icon name={q.icon || "inbox"} size={17} />
+                </span>
+                <span className="text-2xl font-display font-bold tabular-nums">{q.count != null ? q.count : "—"}</span>
+              </div>
+              <div className="text-sm font-semibold">{q.title}</div>
+              {q.hint && <div className="text-[11px] opacity-50 mt-1 line-clamp-2">{q.hint}</div>}
+              <div className="mt-auto pt-3 text-[11px] font-medium opacity-55" style={{ color: "var(--accent)" }}>View details →</div>
+            </button>
+          ))}
+        </div>
+      </section>
     );
   }
 
@@ -302,6 +338,14 @@
           { label: "Material issue", icon: "logout", perm: "add", onClick: () => go("issue") },
           { label: "Stock ledger", icon: "activity", onClick: () => go("ledger") },
           { label: "Reorder alerts", icon: "alert", onClick: () => go("alerts") },
+          { label: "Item locations", icon: "grid", onClick: () => go("itemLocations") },
+          { label: "Reports", icon: "chart", onClick: () => go("reports") },
+        ],
+        workQueues: [
+          { title: "Reorder alerts", icon: "alert", go: "alerts", count: low.length, color: "#f59e0b", hint: "SKUs below reorder level" },
+          { title: "Pending QC (GRN)", icon: "shield", go: "receipt", count: store.list("materialReceipts").filter((r) => r.qcStatus === "Pending").length, color: "#8b5cf6", hint: "Receipts awaiting inspection" },
+          { title: "Pending returns", icon: "truck", go: "returns", count: pendingReturns.length, color: "#6366f1", hint: "Returnable challans open" },
+          { title: "Below minimum stock", icon: "box", go: "alerts", count: summary.filter((s) => s.below).length, color: "#ef4444", hint: "Critical stock levels" },
         ],
         kpis: [
           { label: "Total SKUs", value: summary.length, icon: "box", color: "#059669", go: "items" },
@@ -357,32 +401,47 @@
       const dispatched = orders.filter((o) => ["Partially Dispatched", "Fully Dispatched"].includes(stageOf(o)));
       const closed = orders.filter((o) => stageOf(o) === "Closed");
       const delayed = orders.filter((o) => o.deliveryDate && o.deliveryDate < today() && !["Closed", "Fully Dispatched", "Cancelled"].includes(stageOf(o)));
-      const pendingQuotes = store.list("quotations").filter((q) => ["Draft", "Pending Approval", "Sent"].includes(q.status)).length;
+      const quotations = store.list("quotations");
+      const pendingQuotes = quotations.filter((q) => ["Draft", "Pending Approval"].includes(q.status)).length;
+      const totalEnquiries = enqStats ? enqStats.all.length : store.list("enquiries").length;
+      const offersSent = enqStats ? enqStats.offerSent : store.list("enquiries").filter((e) => String(e.status || "").includes("Offer Sent")).length;
+      const followupsDue = enqStats ? (enqStats.followupsDueToday + enqStats.overdueFollowups) : overdue.length;
+      const openOrders = orders.filter((o) => !["Closed", "Cancelled"].includes(stageOf(o))).length;
+      const pendingDispatch = readyDispatch.length + orders.filter((o) => stageOf(o) === "Partially Dispatched").length;
+      const unpaidInv = store.list("invoices").filter((x) => x.status !== "Paid" && x.status !== "Cancelled");
+      const outstanding = unpaidInv.reduce((s, i) => s + ((Number(i.amount) || 0) - (Number(i.amountPaid) || 0)), 0);
+      const conversion = enqStats ? enqStats.conversionRatio + "%" : "—";
+      const ordersPendingAction = createdSaved.length + sent.length + pendingMaterial.length;
       return {
         title: "Sales & CRM Dashboard",
-        subtitle: "Pipeline, orders and customer follow-ups",
+        subtitle: "Manage enquiries, customers, quotations, sales orders and follow-ups from one connected workspace.",
         opsTabLabel: "Pipeline",
         opsTabIcon: "users",
         quickActions: [
-          { label: "New sales order", icon: "cart", primary: true, perm: "add", onClick: () => { VG._pendingSalesOrderCreate = true; go("orders"); } },
-          { label: "Create quotation", icon: "edit", perm: "add", onClick: () => go("quotations") },
-          { label: "Order tracking", icon: "chart", onClick: () => go("tracking") },
-          { label: "Add enquiry", icon: "inbox", perm: "add", onClick: () => go("enquiries") },
-          { label: "Add customer", icon: "users", perm: "add", onClick: () => go("customers") },
-          { label: "Proforma invoice", icon: "rupee", perm: "add", onClick: () => go("proformas") },
-          { label: "Tax invoices", icon: "rupee", perm: "add", onClick: () => go("invoices") },
-          { label: "Follow-ups", icon: "bell", onClick: () => go("followups") },
+          { label: "Add Customer", icon: "users", perm: "add", onClick: () => go("customers") },
+          { label: "Add Enquiry", icon: "inbox", perm: "add", onClick: () => go("enquiries") },
+          { label: "Create Quotation", icon: "edit", perm: "add", onClick: () => go("quotations") },
+          { label: "Create Proforma Invoice", icon: "rupee", perm: "add", onClick: () => go("proformas") },
+          { label: "Create Sales Order", icon: "cart", primary: true, perm: "add", onClick: () => { VG._pendingSalesOrderCreate = true; go("orders"); } },
+          { label: "View Follow-ups", icon: "bell", onClick: () => go("followups") },
+          { label: "View Sales Orders", icon: "cart", onClick: () => go("orders") },
+          { label: "Create Invoice", icon: "rupee", perm: "add", onClick: () => go("invoices") },
+        ],
+        workQueues: [
+          { title: "New enquiries", icon: "inbox", go: "enquiries", count: enqStats ? enqStats.new : store.list("enquiries").filter((e) => e.status === "New Enquiry").length, color: "#60a5fa", hint: "Fresh leads awaiting review", onClick: () => { VG._pendingEnquiryFilter = "New Enquiry"; go("enquiries"); } },
+          { title: "Quotations pending", icon: "edit", go: "quotations", count: pendingQuotes, color: "#a78bfa", hint: "Draft or awaiting approval" },
+          { title: "Follow-ups due", icon: "bell", go: "followups", count: followupsDue, color: "#f59e0b", hint: "Due today or overdue" },
+          { title: "Sales orders pending action", icon: "cart", go: "orders", count: ordersPendingAction, color: "#6366f1", hint: "Saved, sent or awaiting material" },
         ],
         kpis: [
-          { label: "Saved not sent", value: createdSaved.length, icon: "save", color: "#94a3b8", go: "orders" },
-          { label: "Sent to production", value: sent.length, icon: "factory", color: "#60a5fa", go: "orders" },
-          { label: "Under production", value: underProd.length, icon: "factory", color: "#f59e0b", go: "tracking" },
-          { label: "Pending material", value: pendingMaterial.length, icon: "box", color: "#a78bfa", go: "tracking" },
-          { label: "Under QC", value: underQc.length, icon: "shield", color: "#8b5cf6", go: "tracking" },
-          { label: "Ready dispatch", value: readyDispatch.length, icon: "truck", color: "#06b6d4", go: "tracking" },
-          { label: "Dispatched", value: dispatched.length, icon: "send", color: "#22c55e", go: "tracking" },
-          { label: "Closed orders", value: closed.length, icon: "check", color: "#64748b", go: "history" },
-          { label: "Delayed", value: delayed.length, icon: "alert", color: "#ef4444", go: "tracking" },
+          { label: "Total Enquiries", value: totalEnquiries, icon: "message", color: "#60a5fa", go: "enquiries" },
+          { label: "Pending Quotations", value: pendingQuotes, icon: "edit", color: "#a78bfa", go: "quotations" },
+          { label: "Offers Sent", value: offersSent, icon: "send", color: "#34d399", go: "enquiries" },
+          { label: "Follow-ups Due", value: followupsDue, icon: "bell", color: "#f59e0b", badge: followupsDue ? "!" : null, go: "followups" },
+          { label: "Sales Orders", value: openOrders, icon: "cart", color: "#6366f1", go: "orders" },
+          { label: "Pending Dispatch", value: pendingDispatch, icon: "truck", color: "#06b6d4", go: "tracking" },
+          { label: "Outstanding Amount", value: inr(outstanding), icon: "rupee", color: "#0e7490", go: "invoices" },
+          { label: "Conversion Ratio", value: conversion, icon: "chart", color: "#8b5cf6", go: "enquiries" },
         ],
         tasks: store.tasksFor("sales"),
         priorityTitle: enqStats && enqStats.overdueFollowups ? "Overdue enquiry follow-ups" : "Follow-ups due today",
@@ -471,7 +530,14 @@
           { label: "New request", icon: "plus", primary: true, perm: "add", onClick: () => go("requests") },
           { label: "Purchase orders", icon: "cart", onClick: () => go("orders") },
           { label: "Material receipt", icon: "download", onClick: () => VG.goTo("inventory", "receipt") },
+          { label: "Suppliers", icon: "handshake", onClick: () => go("suppliers") },
           { label: "Reports", icon: "chart", onClick: () => go("reports") },
+        ],
+        workQueues: [
+          { title: "Pending requests", icon: "inbox", go: "requests", count: pendingPR.length, color: "#d97706", hint: "Awaiting approval" },
+          { title: "Open purchase orders", icon: "cart", go: "orders", count: openPO.length, color: "#f59e0b", hint: "POs not fully received" },
+          { title: "Awaiting GRN", icon: "download", go: "orders", count: openPO.length, color: "#0d9488", hint: "Goods not yet received" },
+          { title: "Below reorder", icon: "alert", go: "requests", count: low.length, color: "#ef4444", hint: "Items to raise PR for" },
         ],
         kpis: [
           { label: "Pending requests", value: pendingPR.length, icon: "inbox", color: "#d97706", go: "requests" },
@@ -820,15 +886,15 @@
     const isHidden = (id) => (prefs.hiddenPanels || []).includes(id);
 
     return (
-      <div className="space-y-4 w-full max-w-none vg-module-dashboard vg-full-width-workspace">
-        <div className="flex items-center justify-end gap-2 text-[11px] opacity-45 -mt-1">
+      <div className="space-y-5 w-full max-w-none vg-module-dashboard">
+        <div className="vg-dash-live">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
           Live · refreshes automatically
         </div>
 
-        <QuickActionsBar actions={cfg.quickActions} can={can} />
+        <QuickActionGrid actions={cfg.quickActions} can={can} accent={mod?.accent} />
 
-        <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
+        <div className="vg-dash-tabs">
           {tabs.map((t) => (
             <button key={t.id} type="button" onClick={() => setTab(t.id)}
               className={"vg-tab shrink-0 " + (tab === t.id ? "is-active" : "")}
@@ -840,11 +906,21 @@
 
         {tab === "overview" && (
           <div className="space-y-6 animate-fade-up">
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-              {(cfg.kpis || []).map((k, i) => (
-                <KpiTile key={k.label} kpi={k} delay={i * 50} onClick={k.go ? () => go(k.go) : undefined} />
-              ))}
-            </div>
+            <section className="vg-dash-section">
+              <div className="vg-dash-section-head">
+                <h3>Overview</h3>
+                <span>Key performance indicators</span>
+              </div>
+              <div className="vg-kpi-grid">
+                {(cfg.kpis || []).map((k, i) => (
+                  <KpiTile key={k.label} kpi={k} delay={i * 40} onClick={k.go ? () => go(k.go) : undefined} />
+                ))}
+              </div>
+            </section>
+
+            {cfg.workQueues && cfg.workQueues.length > 0 && (
+              <WorkQueueGrid queues={cfg.workQueues} go={go} />
+            )}
             <div className="grid lg:grid-cols-3 gap-5">
               <div className="lg:col-span-2 space-y-5">
                 {!isHidden("priority") && (
