@@ -265,7 +265,7 @@
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-[11px] uppercase tracking-wider opacity-55 border-y border-white/10">
+              <tr className="vg-table-head-row text-left text-[11px] uppercase tracking-wider">
                 <th className="px-4 py-2.5 font-medium">ID</th>
                 <th className="px-4 py-2.5 font-medium">Description</th>
                 <th className="px-4 py-2.5 font-medium hidden md:table-cell">Owner</th>
