@@ -22,9 +22,9 @@
     return (
       <div className="fixed bottom-5 right-5 z-[100] space-y-2 w-[min(92vw,360px)]">
         {toastBus.items.map((t) => (
-          <div key={t.id} className="glass-dark rounded-xl shadow-glass p-3 flex items-start gap-2.5 animate-fade-up">
+          <div key={t.id} className="vg-toast-item glass-dark rounded-xl shadow-glass p-3 flex items-start gap-2.5 animate-fade-up">
             <Icon name={t.type === "error" ? "alert" : t.type === "warn" ? "alert" : "check"} size={16} style={{ color: color[t.type] }} />
-            <div className="text-sm flex-1">{t.message}</div>
+            <div className="flex-1">{t.message}</div>
           </div>
         ))}
       </div>
@@ -48,17 +48,17 @@
     const done = (val) => { const r = s.resolve; confirmState = null; set((v) => v + 1); r(val); };
     return (
       <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[120] w-[min(92vw,420px)] animate-fade-up" role="dialog" aria-live="polite">
-        <div className={"glass-dark rounded-xl shadow-glass border p-4 " + (s.danger ? "border-rose-500/35" : "border-white/10")}>
+        <div className={"vg-confirm-panel glass-dark rounded-xl shadow-glass border p-4 " + (s.danger ? "border-rose-500/35" : "border-white/10")}>
           <div className="flex items-start gap-3">
             <span className="grid place-items-center w-8 h-8 rounded-lg shrink-0" style={{ background: s.danger ? "rgba(239,68,68,.2)" : "var(--accent-soft)" }}>
               <Icon name={s.danger ? "alert" : "shield"} size={16} style={{ color: s.danger ? "#f87171" : "var(--accent)" }} />
             </span>
             <div className="flex-1 min-w-0">
-              <h3 className="text-sm font-semibold font-display">{s.title}</h3>
-              {s.message && <p className="text-xs opacity-75 mt-1 leading-relaxed">{s.message}</p>}
+              <h3 className="font-semibold font-display">{s.title}</h3>
+              {s.message && <p className="mt-1 leading-relaxed">{s.message}</p>}
               <div className="flex justify-end gap-2 mt-3">
                 <Button variant="soft" className="!py-1.5" onClick={() => done(false)}>{s.cancelLabel || "Cancel"}</Button>
-                <button type="button" onClick={() => done(true)} className="inline-flex items-center gap-2 rounded-xl text-xs font-medium px-3 py-1.5 text-white" style={{ background: s.danger ? "#ef4444" : "var(--accent)" }}>{s.confirmLabel}</button>
+                <button type="button" onClick={() => done(true)} className="inline-flex items-center gap-2 rounded-xl font-medium px-3 py-1.5 text-white" style={{ background: s.danger ? "#ef4444" : "var(--accent)", fontSize: "var(--vg-fs-button)" }}>{s.confirmLabel}</button>
               </div>
             </div>
           </div>

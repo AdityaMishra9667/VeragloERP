@@ -20,6 +20,10 @@
     const root = document.documentElement;
     root.classList.toggle("dark", theme === "dark");
     root.classList.toggle("light", theme === "light");
+    if (typeof VG !== "undefined" && VG.applyTypography && VG.store) {
+      const st = VG.store.settings();
+      VG.applyTypography(st.typography, st.theme);
+    }
   }
 
   function clearAuthCache() {

@@ -339,8 +339,11 @@
         },
       },
       typography: {
-        fontFamily: "inter", headingSize: "medium", tableSize: "medium", formSize: "medium",
-        pdfFontFamily: "inter", fontWeight: "medium", lineSpacing: "comfortable", density: "comfortable",
+        fontFamily: "inter", bodySize: "medium", headingSize: "medium", tableSize: "medium", formSize: "medium",
+        buttonSize: "medium", labelSize: "medium", pdfFontFamily: "inter", fontWeight: "medium",
+        lineSpacing: "comfortable", density: "comfortable",
+        lightTextColor: "#334155", darkTextColor: "#e2e8f0", lightHeadingColor: "#0f172a", darkHeadingColor: "#f8fafc",
+        lightMutedColor: "#64748b", darkMutedColor: "#94a3b8",
       },
       dashboard: { pinnedModules: [], hiddenModules: [], moduleOrder: [] },
       notifications: {

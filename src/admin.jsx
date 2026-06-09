@@ -1138,15 +1138,16 @@
     const [t, setT] = useState(() => clone(live));
     const set = (k, v) => setT((p) => ({ ...p, [k]: v }));
     const fontOpts = VG.typographyFontOptions ? VG.typographyFontOptions() : [];
-    const sizeOpts = ["small", "medium", "large"].map((x) => ({ value: x, label: x.charAt(0).toUpperCase() + x.slice(1) }));
+    const sizeOpts = VG.typographySizeOptions ? VG.typographySizeOptions() : ["small", "medium", "large"].map((x) => ({ value: x, label: x.charAt(0).toUpperCase() + x.slice(1) }));
     const preset = (VG.FONT_PRESETS && VG.FONT_PRESETS[t.fontFamily]) || (VG.FONT_PRESETS && VG.FONT_PRESETS.inter) || { label: "Inter" };
+    const colorDefaults = VG.TYPOGRAPHY_COLOR_DEFAULTS || {};
 
     useEffect(() => {
       if (VG.applyTypography) VG.applyTypography(t, liveTheme);
     }, [t]);
 
     function save() {
-      const themePatch = { ...liveTheme, fontSize: t.headingSize || liveTheme.fontSize || "medium" };
+      const themePatch = { ...liveTheme, fontSize: t.bodySize || t.headingSize || liveTheme.fontSize || "medium" };
       store.saveAdminSettings({ typography: t, theme: themePatch }, roleKey);
       VG.toast("Typography applied across the ERP");
     }
@@ -1154,36 +1155,65 @@
     function resetDefaults() {
       const d = VG.defaultTypography ? VG.defaultTypography(liveTheme) : live;
       setT(d);
+      if (VG.applyTypography) VG.applyTypography(d, liveTheme);
       VG.toast("Reset to Inter defaults — save to persist");
     }
 
     return (
       <div>
-        <PageHead title="UI Settings" desc="Global typography and font standards for screens, tables, forms, and PDF documents">
+        <PageHead
+          title="Typography"
+          desc="Centrally control font family, sizes, weight, line height, and text colors for dashboards, menus, sidebar, forms, tables, buttons, reports, popups, PDFs, and every module screen."
+        >
           <div className="flex gap-2 flex-wrap">
             {can("edit") && <Button variant="soft" onClick={resetDefaults}>Reset defaults</Button>}
             {can("edit") && <Button icon="check" onClick={save}>Save & apply globally</Button>}
           </div>
         </PageHead>
+
         <Card className="p-4 mb-4">
-          <h3 className="text-sm font-semibold mb-1">Global font family</h3>
-          <p className="text-xs opacity-60 mb-3">Inter is recommended for enterprise readability, numeric tables, and long working sessions.</p>
+          <h3 className="text-sm font-semibold mb-1">Font family</h3>
+          <p className="text-xs opacity-60 mb-3">Inter is recommended — clean, balanced, and comfortable for long office sessions.</p>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
             <Field label="Screen font"><Select value={t.fontFamily || "inter"} onChange={(v) => set("fontFamily", v)} options={fontOpts} /></Field>
             <Field label="PDF / print font"><Select value={t.pdfFontFamily || "inter"} onChange={(v) => set("pdfFontFamily", v)} options={fontOpts} /></Field>
             <Field label="Font weight"><Select value={t.fontWeight || "medium"} onChange={(v) => set("fontWeight", v)} options={[{ value: "normal", label: "Normal" }, { value: "medium", label: "Medium (recommended)" }]} /></Field>
           </div>
         </Card>
+
         <Card className="p-4 mb-4">
-          <h3 className="text-sm font-semibold mb-3">Typography scale</h3>
+          <h3 className="text-sm font-semibold mb-3">Font sizes</h3>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <Field label="Body / general text" hint="Dashboards, menus, default screen text"><Select value={t.bodySize || "medium"} onChange={(v) => set("bodySize", v)} options={sizeOpts} /></Field>
             <Field label="Heading size"><Select value={t.headingSize || "medium"} onChange={(v) => set("headingSize", v)} options={sizeOpts} /></Field>
             <Field label="Table size"><Select value={t.tableSize || "medium"} onChange={(v) => set("tableSize", v)} options={sizeOpts} /></Field>
-            <Field label="Form size"><Select value={t.formSize || "medium"} onChange={(v) => set("formSize", v)} options={sizeOpts} /></Field>
-            <Field label="Line spacing"><Select value={t.lineSpacing || "comfortable"} onChange={(v) => set("lineSpacing", v)} options={[{ value: "compact", label: "Compact" }, { value: "comfortable", label: "Comfortable" }, { value: "relaxed", label: "Relaxed" }]} /></Field>
+            <Field label="Button size"><Select value={t.buttonSize || "medium"} onChange={(v) => set("buttonSize", v)} options={sizeOpts} /></Field>
+            <Field label="Form input size"><Select value={t.formSize || "medium"} onChange={(v) => set("formSize", v)} options={sizeOpts} /></Field>
+            <Field label="Form label size"><Select value={t.labelSize || "medium"} onChange={(v) => set("labelSize", v)} options={sizeOpts} /></Field>
+          </div>
+        </Card>
+
+        <Card className="p-4 mb-4">
+          <h3 className="text-sm font-semibold mb-3">Spacing & density</h3>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <Field label="Line height"><Select value={t.lineSpacing || "comfortable"} onChange={(v) => set("lineSpacing", v)} options={[{ value: "compact", label: "Compact" }, { value: "comfortable", label: "Comfortable" }, { value: "relaxed", label: "Relaxed" }]} /></Field>
             <Field label="Density"><Select value={t.density || "comfortable"} onChange={(v) => set("density", v)} options={[{ value: "comfortable", label: "Comfortable" }, { value: "compact", label: "Compact mode" }]} /></Field>
           </div>
         </Card>
+
+        <Card className="p-4 mb-4">
+          <h3 className="text-sm font-semibold mb-1">Text colors</h3>
+          <p className="text-xs opacity-60 mb-3">Body, heading, and muted tones for light and dark workspace modes.</p>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <Field label="Light mode — body text"><Text type="color" value={t.lightTextColor || colorDefaults.lightTextColor || "#334155"} onChange={(v) => set("lightTextColor", v)} /></Field>
+            <Field label="Light mode — headings"><Text type="color" value={t.lightHeadingColor || colorDefaults.lightHeadingColor || "#0f172a"} onChange={(v) => set("lightHeadingColor", v)} /></Field>
+            <Field label="Light mode — muted text"><Text type="color" value={t.lightMutedColor || colorDefaults.lightMutedColor || "#64748b"} onChange={(v) => set("lightMutedColor", v)} /></Field>
+            <Field label="Dark mode — body text"><Text type="color" value={t.darkTextColor || colorDefaults.darkTextColor || "#e2e8f0"} onChange={(v) => set("darkTextColor", v)} /></Field>
+            <Field label="Dark mode — headings"><Text type="color" value={t.darkHeadingColor || colorDefaults.darkHeadingColor || "#f8fafc"} onChange={(v) => set("darkHeadingColor", v)} /></Field>
+            <Field label="Dark mode — muted text"><Text type="color" value={t.darkMutedColor || colorDefaults.darkMutedColor || "#94a3b8"} onChange={(v) => set("darkMutedColor", v)} /></Field>
+          </div>
+        </Card>
+
         <Card className="p-4">
           <div className="text-[11px] uppercase opacity-55 mb-3">Live preview · {preset.label}</div>
           <div className="space-y-4">
@@ -1192,19 +1222,23 @@
               <div className="text-sm opacity-70 mt-1">Quotation pipeline, orders, and tax invoices</div>
             </div>
             <div className="rounded-xl border border-white/10 overflow-hidden">
-              <table className="w-full text-left">
+              <table className="w-full text-left vg-tbl">
                 <thead><tr className="border-b border-white/10"><th className="px-3 py-2">Quotation #</th><th className="px-3 py-2">Customer</th><th className="px-3 py-2 text-right">Amount</th></tr></thead>
                 <tbody>
-                  <tr className="border-b border-white/5"><td className="px-3 py-2 font-mono text-xs">QTN-2026-0142</td><td className="px-3 py-2">Acme Industries Pvt Ltd</td><td className="px-3 py-2 text-right font-mono">₹ 12,45,680.00</td></tr>
-                  <tr><td className="px-3 py-2 font-mono text-xs">QTN-2026-0143</td><td className="px-3 py-2">Bharat Engineering Works</td><td className="px-3 py-2 text-right font-mono">₹ 8,92,150.00</td></tr>
+                  <tr className="border-b border-white/5"><td className="px-3 py-2 vg-doc-no">QTN-2026-0142</td><td className="px-3 py-2">Acme Industries Pvt Ltd</td><td className="px-3 py-2 text-right vg-doc-no">₹ 12,45,680.00</td></tr>
+                  <tr><td className="px-3 py-2 vg-doc-no">QTN-2026-0143</td><td className="px-3 py-2">Bharat Engineering Works</td><td className="px-3 py-2 text-right vg-doc-no">₹ 8,92,150.00</td></tr>
                 </tbody>
               </table>
             </div>
             <div className="grid sm:grid-cols-2 gap-3">
               <div><label className="vg-label block mb-1">Customer name</label><input className="vg-input w-full rounded-xl px-3 py-2" readOnly value="Sample customer" /></div>
-              <div><label className="vg-label block mb-1">Document number</label><input className="vg-input w-full rounded-xl px-3 py-2 font-mono" readOnly value="INV-2026-0088" /></div>
+              <div><label className="vg-label block mb-1">Document number</label><input className="vg-input w-full rounded-xl px-3 py-2 vg-doc-no" readOnly value="INV-2026-0088" /></div>
             </div>
-            <p className="text-xs opacity-50">Document numbers and financial values use tabular numerals for aligned, premium readability — same family as body text.</p>
+            <div className="flex flex-wrap gap-2">
+              <Button icon="check">Primary action</Button>
+              <Button variant="soft">Secondary</Button>
+            </div>
+            <p className="text-xs opacity-50">Changes apply instantly while you edit. Save to persist across all users and modules. Quotation numbers use tabular numerals in the same font family.</p>
           </div>
         </Card>
       </div>
@@ -1368,13 +1402,20 @@
     function save() {
       store.saveAdminSettings({ theme: t }, roleKey);
       if (t.accent && typeof document !== "undefined") document.documentElement.style.setProperty("--accent", t.accent);
-      if (t.defaultMode === "dark") document.documentElement.classList.add("dark");
-      else if (t.defaultMode === "light") document.documentElement.classList.remove("dark");
+      const root = document.documentElement;
+      if (t.defaultMode === "dark") {
+        root.classList.add("dark");
+        root.classList.remove("light");
+      } else if (t.defaultMode === "light") {
+        root.classList.remove("dark");
+        root.classList.add("light");
+      }
+      if (VG.applyTypography) VG.applyTypography(store.settings().typography, t);
       VG.toast("Theme applied");
     }
     return (
       <div>
-        <PageHead title="Theme & Appearance" desc="Accent colour and default light/dark mode. Font family and sizes are managed in UI Settings.">
+        <PageHead title="Theme & Appearance" desc="Accent colour and default light/dark mode. Font family, sizes, and text colors are managed in Typography (UI Settings).">
           {can("edit") && <Button icon="check" onClick={save}>Save & apply</Button>}
         </PageHead>
         <Card className="p-4">
@@ -1550,7 +1591,7 @@
     { id: "skuNumbering", label: "SKU Numbering", icon: "box", group: "Masters" },
     { id: "security", label: "Security", icon: "shield", group: "System" },
     { id: "notifications", label: "Notifications", icon: "bell", group: "System" },
-    { id: "uiSettings", label: "UI Settings", icon: "settings", group: "System" },
+    { id: "uiSettings", label: "Typography", icon: "settings", group: "System" },
     { id: "theme", label: "Theme", icon: "sparkle", group: "System" },
     { id: "weatherLogin", label: "Login Weather", icon: "cloud", group: "System" },
     { id: "backup", label: "Backup & Restore", icon: "cloud", group: "System" },

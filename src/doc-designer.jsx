@@ -415,6 +415,10 @@
   VG.templatePrintCSS = function (tpl) {
     const t = { ...DEFAULT_LAYOUT, ...(tpl || {}) };
     const docFont = resolveDocFont(t);
+    const globalTypo = VG.getTypography ? VG.getTypography() : null;
+    const pdfColors = VG.resolvePdfTextColors ? VG.resolvePdfTextColors(globalTypo, t) : { text: t.textColor || "#0f172a", muted: t.mutedColor || "#64748b" };
+    const bodyText = pdfColors.text;
+    const mutedText = pdfColors.muted;
     const accent = t.accentColor || "#2563eb";
     const accent2 = t.secondaryColor || accent;
     const logoH = Number(t.logoSize) || 52;
@@ -456,7 +460,7 @@
     return `
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Source+Sans+3:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap');
     *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-family:${docFont};-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
-    body{margin:0;color:#0f172a;font-size:${fs}pt;line-height:1.45;background:#fff;font-family:${docFont}}
+    body{margin:0;color:${bodyText};font-size:${fs}pt;line-height:1.45;background:#fff;font-family:${docFont}}
     .vg-mono,.vg-doc-no,.mono,.sku{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
     .vg-page{padding:${margin}mm;position:relative;max-width:210mm;margin:0 auto}
     .vg-theme-${theme}{}

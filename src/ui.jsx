@@ -228,7 +228,7 @@
 
   function Button({ children, variant = "solid", icon, className = "", ...rest }) {
     const base =
-      "vg-btn-premium inline-flex items-center justify-center gap-2 rounded-xl text-sm font-semibold px-4 py-2.5 disabled:opacity-40 disabled:cursor-not-allowed";
+      "vg-btn-premium inline-flex items-center justify-center gap-2 rounded-xl font-semibold px-4 py-2.5 disabled:opacity-40 disabled:cursor-not-allowed";
     const styles = {
       solid: "vg-btn-solid",
       soft: "vg-btn-soft",

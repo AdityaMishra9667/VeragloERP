@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0b1220" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
-    <meta name="vg-build" content="2026-06-sunlight-home-v1" />
+    <meta name="vg-build" content="2026-06-global-typography-v1" />
     <title>Veraglo ERP — Enterprise Workspace</title>
     <link rel="icon" type="image/png" href="assets/veraglo-logo.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -79,9 +79,15 @@
       html.dark {
         --accent: #6366f1;
         --accent-soft: rgba(99, 102, 241, 0.16);
-        --vg-text: #e2e8f0;
-        --vg-text-muted: #94a3b8;
-        --vg-heading: #f8fafc;
+        --vg-text-light: #334155;
+        --vg-text-dark: #e2e8f0;
+        --vg-heading-light: #0f172a;
+        --vg-heading-dark: #f8fafc;
+        --vg-muted-light: #64748b;
+        --vg-muted-dark: #94a3b8;
+        --vg-text: var(--vg-text-dark);
+        --vg-text-muted: var(--vg-muted-dark);
+        --vg-heading: var(--vg-heading-dark);
         --vg-bg: #0d1424;
         --vg-surface: rgba(255, 255, 255, 0.06);
         --vg-input-bg: rgba(15, 23, 42, 0.65);
@@ -107,7 +113,9 @@
         --vg-fs-subheading: 16px;
         --vg-fs-table: 13px;
         --vg-fs-form: 14px;
+        --vg-fs-button: 13px;
         --vg-fs-label: 12px;
+        --vg-fs-table-head: 12px;
         --vg-lh: 1.5;
         --vg-lh-tight: 1.35;
         --vg-fw-normal: 400;
@@ -121,9 +129,9 @@
         --vg-sun-gold-soft: rgba(251, 191, 36, 0.14);
       }
       html.light {
-        --vg-text: #1e293b;
-        --vg-text-muted: #64748b;
-        --vg-heading: #0f172a;
+        --vg-text: var(--vg-text-light);
+        --vg-text-muted: var(--vg-muted-light);
+        --vg-heading: var(--vg-heading-light);
         --vg-bg: #f4f6fc;
         --vg-surface: rgba(255, 255, 255, 0.9);
         --vg-input-bg: #ffffff;
@@ -197,15 +205,74 @@
       .vg-app-shell textarea,
       .vg-input,
       .login-input,
-      .vg-app-shell button,
       .vg-dropdown-item {
         font-family: inherit;
         font-size: var(--vg-fs-form);
         line-height: var(--vg-lh-tight);
       }
+      .vg-app-shell button,
+      .vg-btn-premium,
+      .login-panel button,
+      .vg-module-home-sunlight button,
+      .vg-login-sunlight button {
+        font-family: inherit;
+        font-size: var(--vg-fs-button);
+        line-height: var(--vg-lh-tight);
+      }
       .vg-module-nav .vg-tab,
       .vg-module-nav .vg-tab-group {
         font-family: inherit;
+        font-size: var(--vg-fs-form);
+      }
+      /* Global typography enforcement — admin-controlled */
+      .vg-app-shell,
+      .vg-sidebar,
+      .vg-module-home-sunlight,
+      .vg-login-sunlight,
+      .vg-premium-workspace,
+      .vg-workspace-canvas,
+      .vg-toast-item,
+      .vg-confirm-panel {
+        font-family: var(--vg-font-family);
+      }
+      .vg-app-shell,
+      .vg-sidebar,
+      .vg-premium-workspace,
+      .vg-workspace-canvas {
+        color: var(--vg-text);
+      }
+      .vg-module-home-sunlight,
+      .vg-login-sunlight {
+        color: var(--vg-text);
+      }
+      .vg-module-home-sunlight .text-slate-900,
+      .vg-module-home-sunlight .text-slate-800,
+      .vg-login-sunlight .text-slate-900 {
+        color: var(--vg-heading) !important;
+      }
+      .vg-module-home-sunlight .text-slate-600,
+      .vg-module-home-sunlight .text-slate-700,
+      .vg-login-sunlight .text-slate-600,
+      .vg-login-sunlight .text-slate-700 {
+        color: var(--vg-text) !important;
+      }
+      .vg-module-home-sunlight .text-slate-500,
+      .vg-module-home-sunlight .text-slate-400,
+      .vg-login-sunlight .text-slate-500 {
+        color: var(--vg-text-muted) !important;
+      }
+      .vg-toast-item {
+        font-size: var(--vg-fs-form);
+        line-height: var(--vg-lh-tight);
+        color: var(--vg-text);
+      }
+      .vg-confirm-panel h3 {
+        font-size: var(--vg-fs-form);
+        color: var(--vg-heading);
+      }
+      .vg-confirm-panel p {
+        font-size: var(--vg-fs-label);
+        color: var(--vg-text-muted);
       }
       .vg-line-table-wrap .vg-line-table tbody tr:nth-child(even) {
         background: rgba(255, 255, 255, 0.03);
@@ -279,7 +346,7 @@
         background: var(--vg-table-head-bg) !important;
         color: var(--vg-table-head-text) !important;
         opacity: 1 !important;
-        font-size: 11px;
+        font-size: var(--vg-fs-table-head);
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.04em;
@@ -333,7 +400,7 @@
         align-items: center;
         gap: 0.5rem;
         padding: 0.55rem 0.85rem;
-        font-size: 0.8125rem;
+        font-size: var(--vg-fs-form);
         text-align: left;
         border-radius: 0.5rem;
         margin: 0 0.25rem;
@@ -445,7 +512,7 @@
         width: 100%;
         border-radius: 0.75rem;
         padding: 0.55rem 0.75rem 0.55rem 2.15rem;
-        font-size: 0.8125rem;
+        font-size: var(--vg-fs-form);
         background: rgba(255, 255, 255, 0.05);
         border: 1px solid rgba(148, 163, 184, 0.14);
         color: var(--vg-text);
@@ -491,8 +558,8 @@
         background: color-mix(in srgb, var(--accent) 10%, transparent);
       }
       .vg-sidebar-group-label {
-        font-size: 10px;
-        font-weight: 700;
+        font-size: var(--vg-fs-label);
+        font-weight: var(--vg-fw-semibold);
         letter-spacing: 0.08em;
         text-transform: uppercase;
         color: var(--vg-text-muted);
@@ -509,8 +576,8 @@
         padding: 0.55rem 0.7rem;
         margin: 0 0.35rem;
         width: calc(100% - 0.7rem);
-        font-size: 0.8125rem;
-        font-weight: 500;
+        font-size: var(--vg-fs-form);
+        font-weight: var(--vg-fw-medium);
         color: var(--vg-text);
         opacity: 0.82;
         border: 1px solid transparent;
@@ -1581,7 +1648,7 @@
           }
           VG.apiBase = "";
           VG.buildId = document.querySelector('meta[name="vg-build"]')?.content || "dev";
-          console.info("[Veraglo ERP] UI build:", VG.buildId, "— sunlight homepage v1+. Run: git pull origin main");
+          console.info("[Veraglo ERP] UI build:", VG.buildId, "— global typography v1+. Run: git pull origin main");
           var initInfo = await VG.store.init();
           if (VG.applyTypography) {
             var st = VG.store.settings();
