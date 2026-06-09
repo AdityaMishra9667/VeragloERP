@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0b1220" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
-    <meta name="vg-build" content="2026-06-home-grid-table-headers-v2" />
+    <meta name="vg-build" content="2026-06-home-grid-table-headers-v3" />
     <title>Veraglo ERP — Enterprise Workspace</title>
     <link rel="icon" type="image/png" href="assets/veraglo-logo.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -858,31 +858,27 @@
       .vg-module-dashboard .vg-module-nav {
         margin-top: 0;
       }
-      /* Post-login module home — 5-column responsive card grid (up to 3 rows) */
+      /* Post-login module home — 5-column card grid (Tailwind + CSS fallback) */
       .vg-home-module-grid {
-        display: grid;
-        grid-template-columns: repeat(1, minmax(0, 1fr));
+        display: grid !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 0.75rem;
         align-items: stretch;
         justify-items: stretch;
+        width: 100%;
       }
-      @media (min-width: 480px) {
+      @media (min-width: 640px) {
         .vg-home-module-grid {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
+          grid-template-columns: repeat(3, minmax(0, 1fr));
           gap: 0.875rem;
         }
       }
       @media (min-width: 768px) {
         .vg-home-module-grid {
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-        }
-      }
-      @media (min-width: 1024px) {
-        .vg-home-module-grid {
           grid-template-columns: repeat(4, minmax(0, 1fr));
         }
       }
-      @media (min-width: 1280px) {
+      @media (min-width: 1024px) {
         .vg-home-module-grid {
           grid-template-columns: repeat(5, minmax(0, 1fr));
           gap: 1rem;
@@ -893,7 +889,9 @@
         border: 1px solid rgba(255, 255, 255, 0.1);
         box-shadow: 0 4px 24px rgba(2, 8, 23, 0.25);
         height: 100%;
-        min-height: 148px;
+        min-height: 152px;
+        max-height: 168px;
+        width: 100%;
       }
       .vg-home-module-card:hover {
         border-color: rgba(255, 255, 255, 0.18);
@@ -906,6 +904,13 @@
         background: rgba(255, 255, 255, 0.92);
         border-color: rgba(15, 23, 42, 0.08);
         color: #0f172a;
+      }
+      html.light .vg-home-module-card .font-display,
+      html.light .vg-home-module-card .font-semibold {
+        color: #0f172a !important;
+      }
+      html.light .vg-home-module-card .text-white\/60 {
+        color: rgba(15, 23, 42, 0.62) !important;
       }
       /* Weather-aware login */
       .vg-login-weather .vg-weather-widget {
@@ -977,7 +982,7 @@
           }
           VG.apiBase = "";
           VG.buildId = document.querySelector('meta[name="vg-build"]')?.content || "dev";
-          console.info("[Veraglo ERP] UI build:", VG.buildId, "— if older than 2026-06-home-grid-table-headers-v2, run: git pull origin main");
+          console.info("[Veraglo ERP] UI build:", VG.buildId, "— homepage grid needs v3+. Run: git pull origin main");
           var initInfo = await VG.store.init();
           if (VG.applyTypography) {
             var st = VG.store.settings();

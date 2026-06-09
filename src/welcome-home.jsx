@@ -29,48 +29,39 @@
         type="button"
         onClick={() => onOpen(mod.id)}
         className={
-          "group relative w-full h-full text-left rounded-xl p-4 sm:p-5 min-h-[148px] flex flex-col transition-all duration-200 "
+          "group relative w-full h-full text-center rounded-xl p-4 flex flex-col items-center justify-start transition-all duration-200 "
           + "hover:-translate-y-0.5 hover:shadow-lg active:scale-[0.99] animate-fade-up overflow-hidden vg-home-module-card "
           + (highlight ? "ring-2 ring-indigo-400/40" : "")
-          + (pinned ? " ring-1 ring-amber-400/25" : "")
+          + (pinned ? " ring-1 ring-amber-400/30" : "")
         }
-        style={{ animationDelay: Math.min(i, 14) * 30 + "ms", "--mod-accent": mod.accent }}
+        style={{ animationDelay: Math.min(i, 14) * 30 + "ms", "--mod-accent": mod.accent, minHeight: "152px", maxHeight: "168px" }}
       >
-        <div className="absolute inset-0 bg-gradient-to-br from-white/[0.06] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-        <div className="relative flex items-start justify-between gap-2">
+        <div className="absolute inset-0 bg-gradient-to-br from-white/[0.06] to-transparent opacity-0 group-hover:opacity-100 transition-opacity rounded-xl" />
+        {onTogglePin && (
           <span
-            className="grid place-items-center w-11 h-11 sm:w-12 sm:h-12 rounded-xl text-white shadow-md shrink-0 transition-transform group-hover:scale-105"
-            style={{ background: mod.accent }}
+            role="button"
+            tabIndex={0}
+            title={pinned ? "Remove from favorites" : "Add to favorites"}
+            onClick={(e) => { e.stopPropagation(); onTogglePin(mod.id); }}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); onTogglePin(mod.id); } }}
+            className={
+              "absolute top-2.5 right-2.5 p-1.5 rounded-lg transition z-10 "
+              + (pinned ? "text-amber-400 bg-amber-400/15" : "opacity-35 hover:opacity-100 hover:bg-white/10")
+            }
           >
-            <Icon name={mod.icon} size={22} />
+            <Icon name="star" size={14} />
           </span>
-          {onTogglePin && (
-            <span
-              role="button"
-              tabIndex={0}
-              title={pinned ? "Remove from favorites" : "Add to favorites"}
-              onClick={(e) => { e.stopPropagation(); onTogglePin(mod.id); }}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); onTogglePin(mod.id); } }}
-              className={
-                "p-1.5 rounded-lg transition shrink-0 "
-                + (pinned ? "text-amber-400 bg-amber-400/15" : "opacity-35 hover:opacity-100 hover:bg-white/10")
-              }
-            >
-              <Icon name="star" size={15} />
-            </span>
-          )}
-        </div>
-        <div className="relative mt-3 flex-1 flex flex-col min-h-0">
-          <div className="font-display font-semibold text-sm sm:text-[15px] leading-snug text-balance break-words">{mod.name}</div>
-          {(mod.tagline || mod.category) && (
-            <div className="mt-1 text-[11px] sm:text-xs opacity-55 leading-relaxed line-clamp-2">{mod.tagline || mod.category}</div>
-          )}
-        </div>
-        <div className="relative mt-2 flex items-center justify-end text-[10px] font-medium opacity-0 group-hover:opacity-70 transition">
-          <span className="inline-flex items-center gap-0.5">
-            Open <Icon name="chevronRight" size={12} className="group-hover:translate-x-0.5 transition-transform" />
-          </span>
-        </div>
+        )}
+        <span
+          className="relative grid place-items-center w-12 h-12 rounded-xl text-white shadow-md shrink-0 mt-1 mb-2.5 transition-transform group-hover:scale-105"
+          style={{ background: mod.accent }}
+        >
+          <Icon name={mod.icon} size={22} />
+        </span>
+        <div className="relative font-display font-semibold text-sm leading-snug text-white line-clamp-2 px-1 w-full">{mod.name}</div>
+        {(mod.tagline || mod.category) && (
+          <div className="relative mt-1 text-[11px] text-white/60 leading-snug line-clamp-2 px-1 w-full">{mod.tagline || mod.category}</div>
+        )}
       </button>
     );
   }
@@ -235,7 +226,11 @@
                     No modules match your search.
                   </div>
                 ) : (
-                  <div className="vg-home-module-grid">
+                  <div
+                    className="vg-home-module-grid grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4 w-full"
+                    style={{ display: "grid" }}
+                    data-layout="home-grid-5x3"
+                  >
                     {gridMods.map((m, i) => (
                       <ModuleHomeCard
                         key={m.id}
