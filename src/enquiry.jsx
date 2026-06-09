@@ -3,7 +3,7 @@
   const { useState, useEffect, useMemo } = React;
   const ui = VG.ui, fx = VG.fx, store = VG.store, inr = VG.fmt.inr, today = VG.fmt.todayISO;
   const { Icon, Button, Pill, Card } = ui;
-  const { Field, Text, Area, Num, DateF, Select, MasterSelect, Modal, InternalScreen, RecordTable, PageHead, StatusTag } = fx;
+  const { Field, Text, Area, Num, DateF, Select, MasterSelect, Modal, InternalScreen, RecordTable, PageHead, ListPage, StatusTag } = fx;
 
   const uid = () => "enq" + Math.random().toString(36).slice(2, 10);
   const custName = (id) => (store.get("customers", id) || {}).name || "—";
@@ -742,8 +742,7 @@
       );
     }
     return (
-      <div>
-        <PageHead title="Enquiry Management" desc="Capture enquiries, track offers, follow-ups and conversion to sales orders" />
+      <ListPage title="Enquiry Management" desc="Capture enquiries, track offers, follow-ups and conversion to sales orders" onNew={can("add") ? () => setBuilder({ date: today(), status: "New Enquiry", customerType: "Existing", lines: [blankLine()] }) : null} newLabel="Add Enquiry" can={can}>
         {VG.CustomerFilterBanner ? <VG.CustomerFilterBanner /> : null}
         <EnquiryDashboard onFilter={setStatusFilter} />
         {statusFilter && (
@@ -752,11 +751,11 @@
             <button type="button" className="opacity-50 hover:opacity-100" onClick={() => setStatusFilter("")}>Clear</button>
           </div>
         )}
-        <RecordTable tableId="enquiries" title="Enquiries" columns={cols} rows={rows} can={can} printTitle="Enquiries"
+        <RecordTable embedded suppressNew tableId="enquiries" title="Enquiry List" columns={cols} rows={rows} can={can} printTitle="Enquiries"
           searchKeys={["no", "projectName", "companyName", "subject", "customerRfqNo"]}
           filters={[{ key: "status", label: "All status", options: ENQ_STATUSES }, { key: "priority", label: "All priority", options: PRIORITIES }, { key: "type", label: "All types", options: ["Sales", "Purchase"] }]}
           onNew={can("add") ? () => setBuilder({ date: today(), status: "New Enquiry", customerType: "Existing", lines: [blankLine()] }) : null}
-          newLabel="New Enquiry" onView={(r) => setView(r)} onEdit={can("edit") ? (r) => setBuilder(r) : null}
+          onView={(r) => setView(r)} onEdit={can("edit") ? (r) => setBuilder(r) : null}
           onDelete={can("delete") ? async (r) => {
             if (await VG.confirm({ title: "Delete enquiry " + r.no + "?", danger: true, confirmLabel: "Delete" })) {
               store.remove("enquiries", r.id, roleKey);
@@ -769,7 +768,7 @@
           </button>
           {showReports && <EnquiryReports can={can} />}
         </div>
-      </div>
+      </ListPage>
     );
   }
 

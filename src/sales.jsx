@@ -3,7 +3,7 @@
   const { useState, useMemo, useEffect } = React;
   const ui = VG.ui, fx = VG.fx, store = VG.store, inr = VG.fmt.inr, today = VG.fmt.todayISO;
   const { Icon, Button, Pill, Card } = ui;
-  const { Field, Text, Area, Num, DateF, Select, Checkbox, MasterSelect, Modal, InternalScreen, RecordTable, PageHead, StatusTag, printDocument, DocActions, TransactionLinesShell } = fx;
+  const { Field, Text, Area, Num, DateF, Select, Checkbox, MasterSelect, Modal, InternalScreen, RecordTable, PageHead, ListPage, StatusTag, printDocument, DocActions, TransactionLinesShell } = fx;
 
   const QUO_STATUS = { Draft: "#94a3b8", "Pending Approval": "#f59e0b", Approved: "#34d399", Sent: "#60a5fa", Won: "#22c55e", Lost: "#ef4444", Revised: "#a78bfa" };
   const QUO_LIFECYCLE = {
@@ -819,14 +819,13 @@
       );
     }
     return (
-      <div>
-        <PageHead title="Quotations" desc="Click quotation number to open · download PDF or email from the list" />
+      <ListPage title="Quotations" desc="Click quotation number to open · download PDF or email from the list" onNew={() => setBuilder({})} newLabel="Add Quotation" can={can}>
         {VG.CustomerFilterBanner ? <VG.CustomerFilterBanner /> : null}
-        <RecordTable tableId="sales-quotations" title="All quotations" columns={cols} rows={rows} can={can} printTitle="Quotations"
+        <RecordTable embedded suppressNew tableId="sales-quotations" title="Quotation List" columns={cols} rows={rows} can={can} printTitle="Quotations"
           searchKeys={["no", "status"]} filters={[{ key: "status", label: "All status", get: (r) => quotationLifecycleStatus(r).label, options: QUO_LIFECYCLE_FILTER }]}
-          onNew={() => setBuilder({})} newLabel="New Quotation" onView={(r) => setView(r)}
+          onNew={() => setBuilder({})} onView={(r) => setView(r)}
           onEdit={can("edit") ? (r) => setBuilder(r) : null} onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete quotation " + r.no + "?", danger: true, confirmLabel: "Delete" })) { store.remove("quotations", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-      </div>
+      </ListPage>
     );
   }
 
@@ -852,13 +851,12 @@
       return <MasterForm title="Lead" open onClose={() => setEdit(null)} record={edit} onSave={save} fields={leadFields} roleKey={roleKey} can={can} />;
     }
     return (
-      <div>
-        <PageHead title="Lead Management" desc="Capture, qualify, and progress leads to orders" />
-        <RecordTable title="Leads" columns={cols} rows={rows} can={can} printTitle="Leads" searchKeys={["no", "title", "stage"]}
+      <ListPage title="Lead Management" desc="Capture, qualify, and progress leads to orders" onNew={() => setEdit({ date: today(), stage: "New", status: "Open" })} newLabel="Add Lead" can={can}>
+        <RecordTable embedded suppressNew title="Lead List" columns={cols} rows={rows} can={can} printTitle="Leads" searchKeys={["no", "title", "stage"]}
           filters={[{ key: "status", label: "All status", options: ["Open", "Won", "Lost"] }, { key: "stage", label: "All stages", options: ["New", "Qualified", "Proposal", "Negotiation"] }]}
-          onNew={() => setEdit({ date: today(), stage: "New", status: "Open" })} newLabel="New Lead" onView={(r) => setEdit(r)} onEdit={can("edit") ? (r) => setEdit(r) : null}
+          onNew={() => setEdit({ date: today(), stage: "New", status: "Open" })} onView={(r) => setEdit(r)} onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete lead?", danger: true, confirmLabel: "Delete" })) { store.remove("leads", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-      </div>
+      </ListPage>
     );
   }
 
@@ -897,18 +895,17 @@
       return <MasterForm title="Follow-up" open onClose={() => setEdit(null)} record={edit} onSave={save} fields={followFields} roleKey={roleKey} can={can} />;
     }
     return (
-      <div>
-        <PageHead title="Follow-up System" desc="Schedule calls, emails and meetings — linked to enquiries where applicable" />
+      <ListPage title="Follow-up System" desc="Schedule calls, emails and meetings — linked to enquiries where applicable" onNew={() => setEdit({ date: today(), time: "10:00", mode: "Call", status: "Pending" })} newLabel="Add Follow-up" can={can}>
         {VG.CustomerFilterBanner ? <VG.CustomerFilterBanner /> : null}
         <div className="flex flex-wrap gap-2 mb-3">
           <Pill color="#f59e0b">{rows.filter(overdue).length} overdue</Pill>
           <Pill color="#60a5fa">{dueToday.length} due today</Pill>
         </div>
-        <RecordTable title="Follow-ups" columns={cols} rows={rows} can={can} printTitle="Follow-ups" searchKeys={["note", "mode"]}
+        <RecordTable embedded suppressNew title="Follow-up List" columns={cols} rows={rows} can={can} printTitle="Follow-ups" searchKeys={["note", "mode"]}
           filters={[{ key: "status", label: "All status", options: ["Pending", "Done"] }, { key: "refType", label: "All types", options: ["Enquiry", ""] }]}
-          onNew={() => setEdit({ date: today(), time: "10:00", mode: "Call", status: "Pending" })} newLabel="New Follow-up" onView={(r) => setEdit(r)} onEdit={can("edit") ? (r) => setEdit(r) : null}
+          onNew={() => setEdit({ date: today(), time: "10:00", mode: "Call", status: "Pending" })} onView={(r) => setEdit(r)} onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete follow-up?", danger: true, confirmLabel: "Delete" })) { store.remove("followups", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-      </div>
+      </ListPage>
     );
   }
 
@@ -1082,15 +1079,14 @@
       );
     }
     return (
-      <div>
-        <PageHead title="Sales Orders" desc="Create and review in Sales. Send to Production only when ready." />
+      <ListPage title="Sales Orders" desc="Create and review in Sales. Send to Production only when ready." onNew={can("add") ? () => setBuilder({}) : null} newLabel="Add Sales Order" can={can}>
         {VG.CustomerFilterBanner ? <VG.CustomerFilterBanner /> : null}
-        <RecordTable tableId="sales-orders" title="Sales orders" columns={cols} rows={rows} can={can} printTitle="Sales Orders" searchKeys={["no"]}
+        <RecordTable embedded suppressNew tableId="sales-orders" title="Sales Order List" columns={cols} rows={rows} can={can} printTitle="Sales Orders" searchKeys={["no"]}
           filters={[{ key: "status", label: "All status", options: ORDER_FLOW }]}
-          onNew={can("add") ? () => setBuilder({}) : null} newLabel="New Sales Order"
+          onNew={can("add") ? () => setBuilder({}) : null}
           onView={(r) => setView(r)} onEdit={can("edit") ? (r) => setBuilder(r) : null}
           empty="No sales orders yet — click New Sales Order or convert a quotation" />
-      </div>
+      </ListPage>
     );
   }
   function OrderLineTable({ o }) {
@@ -1662,8 +1658,7 @@
       return <InvoicePrintCopiesModal inv={printPick.inv} mode={printPick.mode} onClose={() => setPrintPick(null)} />;
     }
     return (
-      <div>
-        <PageHead title="Tax Invoices" desc="Domestic & export invoices · multi-currency · LUT/Bond · E-Invoice & E-way" />
+      <ListPage title="Tax Invoices" desc="Domestic & export invoices · multi-currency · LUT/Bond · E-Invoice & E-way" onNew={can("add") ? () => setBuild({}) : null} newLabel="Add Tax Invoice" can={can}>
         {VG.CustomerFilterBanner ? <VG.CustomerFilterBanner /> : null}
         {readySO.length > 0 && can("add") && (
           <Card className="p-3 mb-4">
@@ -1676,7 +1671,7 @@
             </div>
           </Card>
         )}
-        <RecordTable tableId="sales-invoices" title="All tax invoices" columns={cols} rows={rows} can={can} printTitle="Tax Invoices"
+        <RecordTable embedded suppressNew tableId="sales-invoices" title="Tax Invoice List" columns={cols} rows={rows} can={can} printTitle="Tax Invoices"
           searchKeys={["no", "salesOrderNo", "status", "invoiceType", "currency"]}
           filters={[
             { key: "status", label: "All status", get: (r) => invoiceDisplayStatus(r).label, options: Object.keys(INV_DOC_STATUS) },
@@ -1684,10 +1679,9 @@
           ]}
           onView={(r) => setView(r)}
           onNew={can("add") ? () => setBuild({}) : null}
-          newLabel="New Tax Invoice"
           onEdit={can("edit") ? (r) => setBuild(r) : null}
           empty="No invoices yet — create from a sales order or click New Tax Invoice" />
-      </div>
+      </ListPage>
     );
   }
 
@@ -1710,15 +1704,14 @@
       return <ProformaBuilder open onClose={() => setBuild(null)} roleKey={roleKey} can={can} initial={build.id ? build : null} />;
     }
     return (
-      <div>
-        <PageHead title="Proforma Invoices" desc="Generate from sales orders or add proforma manually with full details" />
+      <ListPage title="Proforma Invoices" desc="Generate from sales orders or add proforma manually with full details" onNew={can("add") ? () => setBuild({}) : null} newLabel="Add Proforma Invoice" can={can}>
         {VG.CustomerFilterBanner ? <VG.CustomerFilterBanner /> : null}
-        <RecordTable tableId="sales-proformas" title="Proforma invoices" columns={cols} rows={rows} can={can} printTitle="Proforma Invoices" searchKeys={["no"]}
+        <RecordTable embedded suppressNew tableId="sales-proformas" title="Proforma List" columns={cols} rows={rows} can={can} printTitle="Proforma Invoices" searchKeys={["no"]}
           onView={(r) => proformaPDF(r, "preview")}
-          onNew={can("add") ? () => setBuild({}) : null} newLabel="Add Proforma Invoice"
+          onNew={can("add") ? () => setBuild({}) : null}
           onEdit={can("edit") ? (r) => setBuild(r) : null}
           empty="No proforma invoices — click Add Proforma Invoice" />
-      </div>
+      </ListPage>
     );
   }
   function proformaPDF(p, mode) { printDocument(proformaDoc(p), mode); }
@@ -1868,9 +1861,8 @@
     VG.useDB();
     const rows = store.list("orderHistory").slice().reverse();
     return (
-      <div>
-        <PageHead title="Order History" desc="Closed orders with full lifecycle timeline and activity log" />
-        <RecordTable title="Closed orders" columns={[
+      <ListPage title="Order History" desc="Closed orders with full lifecycle timeline and activity log" can={can}>
+        <RecordTable embedded suppressNew title="Order History List" columns={[
           { key: "salesOrderNo", label: "Sales Order", render: (r) => <span className="font-mono text-xs">{r.salesOrderNo}</span> },
           { key: "closureDate", label: "Closure date" },
           { key: "customerId", label: "Customer", render: (r) => custName(r.customerId), csv: (r) => custName(r.customerId) },
@@ -1884,7 +1876,7 @@
             inner: `<table class="vg-tbl"><thead><tr><th>Time</th><th>Action</th><th>User</th><th>Details</th></tr></thead><tbody>${html || "<tr><td colspan='4'>No timeline entries</td></tr>"}</tbody></table>`,
           }, "preview");
         }} empty="No closed orders yet" />
-      </div>
+      </ListPage>
     );
   }
 
@@ -1910,12 +1902,11 @@
       return <MasterForm title="Price" open onClose={() => setEdit(null)} record={edit} onSave={save} fields={priceFields} roleKey={roleKey} can={can} />;
     }
     return (
-      <div>
-        <PageHead title="Price List Management" desc="Approved list & floor rates per item" />
-        <RecordTable title="Price list" columns={cols} rows={rows} can={can} printTitle="Price List" searchKeys={["item"]}
-          onNew={() => setEdit({ effective: today() })} newLabel="New Price" onEdit={can("edit") ? (r) => setEdit(r) : null}
+      <ListPage title="Price List Management" desc="Approved list & floor rates per item" onNew={() => setEdit({ effective: today() })} newLabel="Add Price" can={can}>
+        <RecordTable embedded suppressNew title="Price List" columns={cols} rows={rows} can={can} printTitle="Price List" searchKeys={["item"]}
+          onNew={() => setEdit({ effective: today() })} onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete price?", danger: true, confirmLabel: "Delete" })) { store.remove("priceList", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-      </div>
+      </ListPage>
     );
   }
 
@@ -2012,12 +2003,11 @@
       return <MasterForm title="Communication" open onClose={() => setEdit(null)} record={edit} onSave={save} fields={commFields} roleKey={roleKey} can={can} />;
     }
     return (
-      <div>
-        <PageHead title="Communication History" desc="Every customer interaction, logged" />
+      <ListPage title="Communication History" desc="Every customer interaction, logged" onNew={() => setEdit({ date: today(), mode: "Call" })} newLabel="Log Communication" can={can}>
         {VG.CustomerFilterBanner ? <VG.CustomerFilterBanner /> : null}
-        <RecordTable title="Communications" columns={cols} rows={rows} can={can} printTitle="Communication History" searchKeys={["subject", "note", "mode"]}
-          onNew={() => setEdit({ date: today(), mode: "Call" })} newLabel="Log communication" />
-      </div>
+        <RecordTable embedded suppressNew title="Communication List" columns={cols} rows={rows} can={can} printTitle="Communication History" searchKeys={["subject", "note", "mode"]}
+          onNew={() => setEdit({ date: today(), mode: "Call" })} />
+      </ListPage>
     );
   }
 

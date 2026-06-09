@@ -3,7 +3,7 @@
   const { useState } = React;
   const ui = VG.ui, fx = VG.fx, store = VG.store, inr = VG.fmt.inr, today = VG.fmt.todayISO;
   const { Icon, Button, Pill, Card } = ui;
-  const { Field, Text, Area, Num, DateF, Select, MasterSelect, Modal, InternalScreen, RecordTable, PageHead, StatusTag, printDocument, DocActions, exportCSV } = fx;
+  const { Field, Text, Area, Num, DateF, Select, MasterSelect, Modal, InternalScreen, RecordTable, PageHead, ListPage, StatusTag, printDocument, DocActions, exportCSV } = fx;
 
   const custName = (id) => (store.get("customers", id) || {}).name || "—";
   const canSeeCustomer = (roleKey) => store.canViewCustomerForRole ? store.canViewCustomerForRole(roleKey) : (roleKey === "admin");
@@ -430,12 +430,11 @@
       );
     }
     return (
-      <div>
-        <PageHead title="Work Orders" desc="Release → material planning → production completion → QC handoff" />
-        <RecordTable tableId="production-work-orders" title="Work orders" columns={cols} rows={rows} can={can} printTitle="Work Orders" searchKeys={["no", "salesOrderNo", "product"]}
+      <ListPage title="Work Orders" desc="Release → material planning → production completion → QC handoff" can={can}>
+        <RecordTable embedded suppressNew tableId="production-work-orders" title="Work Order List" columns={cols} rows={rows} can={can} printTitle="Work Orders" searchKeys={["no", "salesOrderNo", "product"]}
           filters={[{ key: "status", label: "All status", options: Object.keys(WO_STATUS) }]}
           onView={(r) => setView(r)} empty="No work orders — release from a confirmed sales order on the dashboard" />
-      </div>
+      </ListPage>
     );
   }
 

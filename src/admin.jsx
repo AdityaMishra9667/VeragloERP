@@ -3,7 +3,7 @@
   const { useState, useRef, useEffect, useMemo } = React;
   const ui = VG.ui, fx = VG.fx, store = VG.store;
   const { Icon, Button, Pill, Card } = ui;
-  const { Field, Text, Area, Num, Select, Checkbox, RecordTable, PageHead, StatusTag, Modal, MasterSelect, printDocument } = fx;
+  const { Field, Text, Area, Num, Select, Checkbox, RecordTable, PageHead, ListPage, StatusTag, Modal, MasterSelect, printDocument } = fx;
 
   const clone = (x) => JSON.parse(JSON.stringify(x));
   const fmtBytes = (n) => (n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB");
@@ -272,11 +272,10 @@
     const actions = Array.from(new Set(rows.map((r) => r.action)));
     const entities = Array.from(new Set(rows.map((r) => r.entity)));
     return (
-      <div>
-        <PageHead title="Audit Trail" desc="Every change across the ERP, who made it and when" />
-        <RecordTable title="Audit log" columns={cols} rows={rows} can={can} printTitle="Audit Trail" searchKeys={["actor", "action", "entity", "summary", "refId", "ip"]}
+      <ListPage title="Audit Trail" desc="Every change across the ERP, who made it and when" can={can}>
+        <RecordTable embedded suppressNew title="Audit Log List" columns={cols} rows={rows} can={can} printTitle="Audit Trail" searchKeys={["actor", "action", "entity", "summary", "refId", "ip"]}
           filters={[{ key: "action", label: "All actions", options: actions }, { key: "entity", label: "All modules", options: entities }]} />
-      </div>
+      </ListPage>
     );
   }
 
@@ -503,12 +502,11 @@
       return <LocationForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} can={can} />;
     }
     return (
-      <div>
-        <PageHead title="Locations" desc="Plants, branches, warehouses, stores and rack/bin locations" />
-        <RecordTable title="Locations" columns={cols} rows={rows} can={can} printTitle="Locations" searchKeys={["name", "code", "city", "contact"]}
-          onNew={can("add") ? () => setEdit({}) : null} newLabel="New Location" onEdit={can("edit") ? (r) => setEdit(r) : null}
+      <ListPage title="Locations" desc="Plants, branches, warehouses, stores and rack/bin locations" onNew={can("add") ? () => setEdit({}) : null} newLabel="Add Location" can={can}>
+        <RecordTable embedded suppressNew title="Location List" columns={cols} rows={rows} can={can} printTitle="Locations" searchKeys={["name", "code", "city", "contact"]}
+          onNew={can("add") ? () => setEdit({}) : null} onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete " + r.name + "?", danger: true, confirmLabel: "Delete" })) { store.remove("locations", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-      </div>
+      </ListPage>
     );
   }
 
@@ -660,14 +658,13 @@
       return <UserForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} can={can} />;
     }
     return (
-      <div>
-        <PageHead title="Users" desc="ERP user accounts — login requires active user, role and password in this database" />
+      <ListPage title="Users" desc="ERP user accounts — login requires active user, role and password in this database" onNew={can("add") ? () => setEdit({}) : null} newLabel="Add User" can={can}>
         <div className="mb-3 flex flex-wrap items-center gap-3">
           <Checkbox checked={showDeleted} onChange={setShowDeleted} label="Show deleted users" />
         </div>
-        <RecordTable title="Users" columns={cols} rows={rows} can={can} printTitle="ERP Users" searchKeys={["userId", "name", "email", "department"]}
+        <RecordTable embedded suppressNew title="User List" columns={cols} rows={rows} can={can} printTitle="ERP Users" searchKeys={["userId", "name", "email", "department"]}
           filters={[{ key: "status", label: "All status", options: ["Active", "Inactive", "Locked", "Deleted"] }]}
-          onNew={can("add") ? () => setEdit({}) : null} newLabel="New User" onEdit={can("edit") ? (r) => setEdit(r) : null}
+          onNew={can("add") ? () => setEdit({}) : null} onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => {
             if (r.isDeleted) return;
             if (await VG.confirm({ title: "Delete user " + r.userId + "?", message: "Login will be blocked immediately and all sessions ended.", danger: true, confirmLabel: "Delete" })) {
@@ -675,7 +672,7 @@
               VG.toast("User deleted — login disabled");
             }
           } : null} />
-      </div>
+      </ListPage>
     );
   }
 
@@ -743,11 +740,10 @@
       return <RoleForm open onClose={() => { setEdit(null); setDup(false); }} record={edit} roleKey={roleKey} duplicate={dup} />;
     }
     return (
-      <div>
-        <PageHead title="Roles" desc="Custom roles with module access, actions and hierarchy" />
-        <RecordTable title="Roles" columns={cols} rows={rows} can={can} printTitle="Roles" searchKeys={["label", "key", "tag"]} search={false}
-          onNew={can("add") ? () => { setDup(false); setEdit({ key: "custom_" + Date.now().toString(36).slice(-4), label: "New Role", avatar: "NR", color: "#6366f1" }); } : null} newLabel="New Role" />
-      </div>
+      <ListPage title="Roles" desc="Custom roles with module access, actions and hierarchy" onNew={can("add") ? () => { setDup(false); setEdit({ key: "custom_" + Date.now().toString(36).slice(-4), label: "New Role", avatar: "NR", color: "#6366f1" }); } : null} newLabel="Add Role" can={can}>
+        <RecordTable embedded suppressNew title="Role List" columns={cols} rows={rows} can={can} printTitle="Roles" searchKeys={["label", "key", "tag"]} search={false}
+          onNew={can("add") ? () => { setDup(false); setEdit({ key: "custom_" + Date.now().toString(36).slice(-4), label: "New Role", avatar: "NR", color: "#6366f1" }); } : null} />
+      </ListPage>
     );
   }
 
@@ -848,12 +844,11 @@
       return <FieldPermForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} />;
     }
     return (
-      <div>
-        <PageHead title="Field Permissions" desc="Control visibility, editability and mandatory rules per module field" />
-        <RecordTable title="Field rules" columns={cols} rows={rows} can={can} printTitle="Field Permissions" searchKeys={["module", "field"]}
-          onNew={can("add") ? () => setEdit({}) : null} newLabel="Add rule" onEdit={can("edit") ? (r) => setEdit(r) : null}
+      <ListPage title="Field Permissions" desc="Control visibility, editability and mandatory rules per module field" onNew={can("add") ? () => setEdit({}) : null} newLabel="Add Rule" can={can}>
+        <RecordTable embedded suppressNew title="Field Rule List" columns={cols} rows={rows} can={can} printTitle="Field Permissions" searchKeys={["module", "field"]}
+          onNew={can("add") ? () => setEdit({}) : null} onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete this rule?", danger: true, confirmLabel: "Delete" })) { store.remove("fieldPermissions", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-      </div>
+      </ListPage>
     );
   }
 
@@ -909,12 +904,11 @@
       return <ApprovalForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} />;
     }
     return (
-      <div>
-        <PageHead title="Approval Workflows" desc="Multi-level approval rules by process type and amount" />
-        <RecordTable title="Workflows" columns={cols} rows={rows} can={can} printTitle="Approval Workflows" searchKeys={["process"]}
-          onNew={can("add") ? () => setEdit({}) : null} newLabel="New Workflow" onEdit={can("edit") ? (r) => setEdit(r) : null}
+      <ListPage title="Approval Workflows" desc="Multi-level approval rules by process type and amount" onNew={can("add") ? () => setEdit({}) : null} newLabel="Add Workflow" can={can}>
+        <RecordTable embedded suppressNew title="Workflow List" columns={cols} rows={rows} can={can} printTitle="Approval Workflows" searchKeys={["process"]}
+          onNew={can("add") ? () => setEdit({}) : null} onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete workflow?", danger: true, confirmLabel: "Delete" })) { store.remove("approvalWorkflows", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-      </div>
+      </ListPage>
     );
   }
 
@@ -998,12 +992,11 @@
       return <SeriesForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} />;
     }
     return (
-      <div>
-        <PageHead title="Numbering Series" desc="Auto-number prefixes for quotations, orders, challans and invoices" />
-        <RecordTable title="Series" columns={cols} rows={rows} can={can} printTitle="Number Series" searchKeys={["prefix", "docType"]}
-          onNew={can("add") ? () => setEdit({}) : null} newLabel="New Series" onEdit={can("edit") ? (r) => setEdit(r) : null}
+      <ListPage title="Numbering Series" desc="Auto-number prefixes for quotations, orders, challans and invoices" onNew={can("add") ? () => setEdit({}) : null} newLabel="Add Series" can={can}>
+        <RecordTable embedded suppressNew title="Series List" columns={cols} rows={rows} can={can} printTitle="Number Series" searchKeys={["prefix", "docType"]}
+          onNew={can("add") ? () => setEdit({}) : null} onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete series?", danger: true, confirmLabel: "Delete" })) { store.remove("numberSeries", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-      </div>
+      </ListPage>
     );
   }
 

@@ -3,7 +3,7 @@
   const { useState } = React;
   const ui = VG.ui, fx = VG.fx, store = VG.store, inr = VG.fmt.inr, today = VG.fmt.todayISO;
   const { Icon, Button, Pill, Card } = ui;
-  const { Field, Text, Area, Num, DateF, Select, MasterSelect, Modal, InternalScreen, RecordTable, PageHead, StatusTag, printDocument, DocActions } = fx;
+  const { Field, Text, Area, Num, DateF, Select, MasterSelect, Modal, InternalScreen, RecordTable, PageHead, ListPage, StatusTag, printDocument, DocActions } = fx;
 
   const itemName = (id) => (VG.itemDisplay && VG.itemDisplay.tableLabel(id)) || (VG.itemMfr && VG.itemMfr.label(id)) || "—";
   const itemNameSkuPdf = (id) => (VG.itemDisplay && VG.itemDisplay.itemNameSkuCell(id)) || itemName(id);
@@ -92,12 +92,11 @@
       return <PRForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} can={can} />;
     }
     return (
-      <div>
-        <PageHead title="Purchase Requests" desc="Raise, approve and convert requisitions into purchase orders" />
-        <RecordTable title="Requests" columns={cols} rows={rows} can={can} printTitle="Purchase Requests" searchKeys={["no"]}
+      <ListPage title="Purchase Requests" desc="Raise, approve and convert requisitions into purchase orders" onNew={() => setEdit({})} newLabel="Add Request" can={can}>
+        <RecordTable embedded suppressNew title="Request List" columns={cols} rows={rows} can={can} printTitle="Purchase Requests" searchKeys={["no"]}
           filters={[{ key: "status", label: "All status", options: ["Pending", "Approved", "Ordered", "Rejected"] }]}
-          onNew={() => setEdit({})} newLabel="New Request" onEdit={(r) => setEdit(r)} empty="No purchase requests yet" />
-      </div>
+          onNew={() => setEdit({})} onEdit={(r) => setEdit(r)} empty="No purchase requests yet" />
+      </ListPage>
     );
   }
 
@@ -128,12 +127,11 @@
       );
     }
     return (
-      <div>
-        <PageHead title="Purchase Orders" desc="Issued orders awaiting goods receipt from Stores" />
-        <RecordTable tableId="purchase-orders" title="Purchase orders" columns={cols} rows={rows} can={can} printTitle="Purchase Orders" searchKeys={["no"]}
+      <ListPage title="Purchase Orders" desc="Issued orders awaiting goods receipt from Stores" can={can}>
+        <RecordTable embedded suppressNew tableId="purchase-orders" title="Purchase Order List" columns={cols} rows={rows} can={can} printTitle="Purchase Orders" searchKeys={["no"]}
           filters={[{ key: "status", label: "All status", options: ["Open", "Approved", "Received", "Closed", "Cancelled"] }]}
           onView={(r) => setView(r)} empty="No purchase orders — approve a request to create one" />
-      </div>
+      </ListPage>
     );
   }
 
@@ -148,10 +146,9 @@
       { key: "status", label: "Status", render: (r) => <Pill color="#f59e0b">{r.status || "Pending"}</Pill> },
     ];
     return (
-      <div>
-        <PageHead title="Material Pending Receipt" desc="Goods received awaiting QC clearance and stock posting" />
-        <RecordTable title="Pending receipts" columns={cols} rows={rows} can={can} printTitle="Pending Material Receipt" searchKeys={["no"]} empty="No pending receipts — all material cleared" />
-      </div>
+      <ListPage title="Material Pending Receipt" desc="Goods received awaiting QC clearance and stock posting" can={can}>
+        <RecordTable embedded suppressNew title="Pending Receipt List" columns={cols} rows={rows} can={can} printTitle="Pending Material Receipt" searchKeys={["no"]} empty="No pending receipts — all material cleared" />
+      </ListPage>
     );
   }
 

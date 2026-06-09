@@ -3,7 +3,7 @@
   const { useState } = React;
   const ui = VG.ui, fx = VG.fx, store = VG.store, inr = VG.fmt.inr, today = VG.fmt.todayISO;
   const { Icon, Button, Pill, Card } = ui;
-  const { Field, Text, Num, DateF, Select, Modal, InternalScreen, RecordTable, PageHead, StatusTag, printDocument, DocActions } = fx;
+  const { Field, Text, Num, DateF, Select, Modal, InternalScreen, RecordTable, PageHead, ListPage, StatusTag, printDocument, DocActions } = fx;
 
   const empName = (id) => (store.get("employees", id) || {}).name || "—";
   const LV_STATUS = { Pending: "#f59e0b", Approved: "#34d399", Rejected: "#ef4444" };
@@ -73,9 +73,8 @@
       );
     }
     return (
-      <div>
-        <PageHead title="Employees" />
-        <RecordTable title="Employee master" columns={[
+      <ListPage title="Employees" onNew={() => setEdit({})} newLabel="Add Employee" can={can}>
+        <RecordTable embedded suppressNew title="Employee List" columns={[
           { key: "code", label: "Code" },
           { key: "name", label: "Name" },
           { key: "department", label: "Dept" },
@@ -83,8 +82,8 @@
           { key: "ctc", label: "CTC", render: (r) => inr(r.ctc) },
           { key: "status", label: "Status", render: (r) => <StatusTag value={r.status} map={{ Active: "#34d399", Inactive: "#94a3b8" }} /> },
         ]} rows={rows} can={can} printTitle="Employees" searchKeys={["name", "code", "department"]}
-          onNew={() => setEdit({})} newLabel="Add employee" onView={(r) => setView(r)} onEdit={can("edit") ? (r) => setEdit(r) : null} />
-      </div>
+          onNew={() => setEdit({})} onView={(r) => setView(r)} onEdit={can("edit") ? (r) => setEdit(r) : null} />
+      </ListPage>
     );
   }
 
@@ -92,9 +91,8 @@
     VG.useDB();
     const rows = store.list("leaveRequests").slice().reverse();
     return (
-      <div>
-        <PageHead title="Leave approvals" desc="Approved leave updates monthly attendance for payroll deductions" />
-        <RecordTable title="Leave requests" columns={[
+      <ListPage title="Leave approvals" desc="Approved leave updates monthly attendance for payroll deductions" can={can}>
+        <RecordTable embedded suppressNew title="Leave Request List" columns={[
           { key: "no", label: "#", render: (r) => <span className="font-mono text-xs">{r.no}</span> },
           { key: "employeeId", label: "Employee", render: (r) => empName(r.employeeId) },
           { key: "from", label: "From" },
@@ -109,7 +107,7 @@
             </div>
           ) : null },
         ]} rows={rows} can={can} printTitle="Leave" filters={[{ key: "status", label: "All", options: ["Pending", "Approved", "Rejected"] }]} />
-      </div>
+      </ListPage>
     );
   }
 
@@ -120,14 +118,13 @@
       ...a, emp: store.get("employees", a.employeeId) || {},
     }));
     return (
-      <div>
-        <PageHead title="Monthly attendance" desc="Lock month before payroll · leave days affect deductions" />
+      <ListPage title="Monthly attendance" desc="Lock month before payroll · leave days affect deductions" can={can}>
         <div className="flex flex-wrap items-center gap-3 mb-4">
           <Field label="Month"><Text value={month} onChange={setMonth} /></Field>
           {can("edit") && <Button variant="soft" onClick={() => { store.lockAttendanceMonth(month, roleKey); VG.toast("Attendance locked for " + month); }}>Lock month</Button>}
           <Button variant="soft" onClick={() => VG.goTo("attendance", "dashboard")}>Open Attendance module</Button>
         </div>
-        <RecordTable title={"Attendance · " + month} columns={[
+        <RecordTable embedded suppressNew title={"Attendance List · " + month} columns={[
           { key: "emp", label: "Employee", render: (r) => (r.emp.name || empName(r.employeeId)), csv: (r) => empName(r.employeeId) },
           { key: "present", label: "Present" },
           { key: "leave", label: "Leave" },
@@ -135,7 +132,7 @@
           { key: "otHours", label: "OT hrs" },
           { key: "locked", label: "Locked", render: (r) => r.locked ? <Pill color="#94a3b8">Yes</Pill> : <Pill color="#34d399">Open</Pill> },
         ]} rows={rows} can={can} printTitle="Attendance" empty="No records for this month" />
-      </div>
+      </ListPage>
     );
   }
 
@@ -163,30 +160,29 @@
       );
     }
     return (
-      <div className="space-y-4">
-        <PageHead title="Payroll" desc="Process monthly payroll after attendance is locked" />
+      <ListPage title="Payroll" desc="Process monthly payroll after attendance is locked" can={can}>
         {can("add") && (
-          <Card className="p-4 flex flex-wrap items-center gap-3">
+          <Card className="p-4 flex flex-wrap items-center gap-3 mb-4">
             <span className="text-sm">Run payroll for <b>{month}</b></span>
             <Button icon="rupee" onClick={runPayroll}>Run payroll</Button>
             <Button variant="soft" onClick={() => store.lockAttendanceMonth(month, roleKey)}>Lock attendance first</Button>
           </Card>
         )}
-        <RecordTable title="Payroll runs" columns={[
+        <RecordTable embedded suppressNew title="Payroll Run List" columns={[
           { key: "no", label: "Run #" },
           { key: "month", label: "Month" },
           { key: "status", label: "Status" },
           { key: "totalNet", label: "Net payout", render: (r) => inr(r.totalNet) },
           { key: "employeeCount", label: "Employees" },
         ]} rows={runs} can={can} printTitle="Payroll runs" />
-        <RecordTable title={"Salary slips · " + month} columns={[
+        <RecordTable embedded suppressNew title={"Salary Slip List · " + month} columns={[
           { key: "employeeCode", label: "Code" },
           { key: "employeeName", label: "Name" },
           { key: "gross", label: "Gross", render: (r) => inr(r.gross) },
           { key: "deductions", label: "Deductions", render: (r) => inr(r.deductions) },
           { key: "net", label: "Net", render: (r) => inr(r.net) },
         ]} rows={slips} can={can} printTitle="Salary slips" onView={(r) => setViewSlip(r)} />
-      </div>
+      </ListPage>
     );
   }
 

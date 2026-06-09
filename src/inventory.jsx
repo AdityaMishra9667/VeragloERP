@@ -3,7 +3,7 @@
   const { useState, useMemo, useEffect, useRef } = React;
   const ui = VG.ui, fx = VG.fx, store = VG.store, inr = VG.fmt.inr, today = VG.fmt.todayISO;
   const { Icon, Button, Pill, Card } = ui;
-  const { Field, Text, Area, Num, DateF, Select, MasterSelect, Modal, InternalScreen, RecordTable, PageHead, StatusTag, printDocument, DocActions, TransactionLinesShell, exportCSV } = fx;
+  const { Field, Text, Area, Num, DateF, Select, MasterSelect, Modal, InternalScreen, RecordTable, PageHead, ListPage, StatusTag, printDocument, DocActions, TransactionLinesShell, exportCSV } = fx;
   const MasterForm = VG.MasterForm;
 
   const itemName = (id) => (VG.itemDisplay && VG.itemDisplay.tableLabel(id)) || (VG.itemMfr && VG.itemMfr.label(id)) || "—";
@@ -337,16 +337,15 @@
       return <ManufacturerForm open onClose={() => setEdit(null)} record={edit} roleKey={roleKey} can={can} onSaved={() => setEdit(null)} />;
     }
     return (
-      <div>
-        <PageHead title="Manufacturer Master" desc="Canonical manufacturer list for Item Master and purchase traceability" />
-        <RecordTable title="Manufacturers" columns={cols} rows={rows} can={can} printTitle="Manufacturer Master" searchKeys={["name", "code", "brand", "country"]}
-          onNew={() => setEdit({ active: true })} newLabel="New Manufacturer" onEdit={can("edit") ? (r) => setEdit(r) : null}
+      <ListPage title="Manufacturer Master" desc="Canonical manufacturer list for Item Master and purchase traceability" onNew={() => setEdit({ active: true })} newLabel="Add Manufacturer" can={can}>
+        <RecordTable embedded suppressNew title="Manufacturer List" columns={cols} rows={rows} can={can} printTitle="Manufacturer Master" searchKeys={["name", "code", "brand", "country"]}
+          onNew={() => setEdit({ active: true })} onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => {
             const used = store.list("items").some((i) => i.manufacturerId === r.id);
             if (used) return VG.toast("Manufacturer is linked to items — cannot delete", "error");
             if (await VG.confirm({ title: "Delete " + r.name + "?", danger: true, confirmLabel: "Delete" })) { store.remove("manufacturers", r.id, roleKey); VG.toast("Deleted"); }
           } : null} />
-      </div>
+      </ListPage>
     );
   }
 
@@ -373,12 +372,11 @@
       return <ItemForm open onClose={() => setEdit(null)} record={edit} roleKey={roleKey} can={can} onSaved={() => setEdit(null)} />;
     }
     return (
-      <div>
-        <PageHead title="Item Master" desc="Central catalogue — SKU auto-generated · reference images supported" />
-        <RecordTable title="Items" columns={cols} rows={rows} can={can} printTitle="Item Master" searchKeys={["sku", "name", "description", "hsn", "manufacturerName", "manufacturerPartNumber", "brandName"]}
-          onNew={() => setEdit({ unit: "Nos", taxId: "gst18", batchTracked: "No" })} newLabel="New Item" onView={(r) => setEdit(r)} onEdit={can("edit") ? (r) => setEdit(r) : null}
+      <ListPage title="Item Master" desc="Central catalogue — SKU auto-generated · reference images supported" onNew={() => setEdit({ unit: "Nos", taxId: "gst18", batchTracked: "No" })} newLabel="Add Item" can={can}>
+        <RecordTable embedded suppressNew title="Item List" columns={cols} rows={rows} can={can} printTitle="Item Master" searchKeys={["sku", "name", "description", "hsn", "manufacturerName", "manufacturerPartNumber", "brandName"]}
+          onNew={() => setEdit({ unit: "Nos", taxId: "gst18", batchTracked: "No" })} onView={(r) => setEdit(r)} onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete " + r.sku + "?", danger: true, confirmLabel: "Delete" })) { store.remove("items", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-      </div>
+      </ListPage>
     );
   }
 
@@ -453,12 +451,11 @@
       return <CategoryForm open onClose={() => setEdit(null)} record={edit} roleKey={roleKey} can={can} onSaved={() => setEdit(null)} />;
     }
     return (
-      <div>
-        <PageHead title="Category Master" desc="Category code CAT-n auto · SKU type RWM, FNG, PKG…" />
-        <RecordTable title="Categories" columns={cols} rows={rows} can={can} printTitle="Categories" searchKeys={["name", "code", "typeCode"]}
-          onNew={() => setEdit({ typeCode: "RWM" })} newLabel="New Category" onEdit={can("edit") ? (r) => setEdit(r) : null}
+      <ListPage title="Category Master" desc="Category code CAT-n auto · SKU type RWM, FNG, PKG…" onNew={() => setEdit({ typeCode: "RWM" })} newLabel="Add Category" can={can}>
+        <RecordTable embedded suppressNew title="Category List" columns={cols} rows={rows} can={can} printTitle="Categories" searchKeys={["name", "code", "typeCode"]}
+          onNew={() => setEdit({ typeCode: "RWM" })} onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete category?", danger: true, confirmLabel: "Delete" })) { store.remove("categories", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-      </div>
+      </ListPage>
     );
   }
 
@@ -473,12 +470,11 @@
       return <MasterForm title="Supplier" open onClose={() => setEdit(null)} record={edit} onSave={save} roleKey={roleKey} can={can} fields={supplierFields} />;
     }
     return (
-      <div>
-        <PageHead title="Supplier / Vendor Master" desc="Shared across Purchase, Inventory & Material Issue" />
-        <RecordTable title="Suppliers" columns={cols} rows={rows} can={can} printTitle="Supplier Master" searchKeys={["name", "code", "gstin"]}
-          onNew={() => setEdit({ category: "A-grade", rating: 4 })} newLabel="New Supplier" onView={(r) => setEdit(r)} onEdit={can("edit") ? (r) => setEdit(r) : null}
+      <ListPage title="Supplier / Vendor Master" desc="Shared across Purchase, Inventory & Material Issue" onNew={() => setEdit({ category: "A-grade", rating: 4 })} newLabel="Add Supplier" can={can}>
+        <RecordTable embedded suppressNew title="Supplier List" columns={cols} rows={rows} can={can} printTitle="Supplier Master" searchKeys={["name", "code", "gstin"]}
+          onNew={() => setEdit({ category: "A-grade", rating: 4 })} onView={(r) => setEdit(r)} onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete supplier?", danger: true, confirmLabel: "Delete" })) { store.remove("suppliers", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-      </div>
+      </ListPage>
     );
   }
 
@@ -493,12 +489,11 @@
       return <MasterForm title="Storage Location" open onClose={() => setEdit(null)} record={edit} onSave={save} fields={locFields} roleKey={roleKey} can={can} />;
     }
     return (
-      <div>
-        <PageHead title="Storage Location Master" desc="Warehouses and stores — item locations (rack / shelf / bin) are managed separately" />
-        <RecordTable title="Storage locations" columns={cols} rows={rows} can={can} printTitle="Storage Locations" searchKeys={["name", "code"]}
-          onNew={() => setEdit({})} newLabel="New Storage Location" onEdit={can("edit") ? (r) => setEdit(r) : null}
+      <ListPage title="Storage Location Master" desc="Warehouses and stores — item locations (rack / shelf / bin) are managed separately" onNew={() => setEdit({})} newLabel="Add Storage Location" can={can}>
+        <RecordTable embedded suppressNew title="Storage Location List" columns={cols} rows={rows} can={can} printTitle="Storage Locations" searchKeys={["name", "code"]}
+          onNew={() => setEdit({})} onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete location?", danger: true, confirmLabel: "Delete" })) { store.remove("locations", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-      </div>
+      </ListPage>
     );
   }
 
@@ -556,12 +551,11 @@
       );
     }
     return (
-      <div>
-        <PageHead title="Item Location Master" desc="Rack, shelf, bin and zone under each storage location" />
-        <RecordTable title="Item locations" columns={cols} rows={rows} can={can} printTitle="Item Locations" searchKeys={["name", "code", "rack", "bin", "zone"]}
-          onNew={() => setEdit({ status: "Active" })} newLabel="New Item Location" onEdit={can("edit") ? (r) => setEdit(r) : null}
+      <ListPage title="Item Location Master" desc="Rack, shelf, bin and zone under each storage location" onNew={() => setEdit({ status: "Active" })} newLabel="Add Item Location" can={can}>
+        <RecordTable embedded suppressNew title="Item Location List" columns={cols} rows={rows} can={can} printTitle="Item Locations" searchKeys={["name", "code", "rack", "bin", "zone"]}
+          onNew={() => setEdit({ status: "Active" })} onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete item location?", danger: true, confirmLabel: "Delete" })) { store.remove("itemLocations", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-      </div>
+      </ListPage>
     );
   }
 
@@ -806,13 +800,12 @@
       return <ReceiptBuilder open onClose={() => setBuild(false)} roleKey={roleKey} can={can} />;
     }
     return (
-      <div>
-        <PageHead title="Material Receipt" desc="Multi-item GRN with qty invoiced vs received and storage → item location" />
-        <RecordTable title="Receipts" columns={cols} rows={rows} can={can} printTitle="Material Receipts" searchKeys={["no", "invoiceNo"]}
+      <ListPage title="Material Receipt" desc="Multi-item GRN with qty invoiced vs received and storage → item location" onNew={() => setBuild(true)} newLabel="Add Receipt" can={can}>
+        <RecordTable embedded suppressNew title="Receipt List" columns={cols} rows={rows} can={can} printTitle="Material Receipts" searchKeys={["no", "invoiceNo"]}
           filters={[{ key: "qcStatus", label: "All QC", options: ["Pending", "Passed", "Failed", "Not required"] }]}
           onView={(r) => printDocument(receiptDoc(r), "preview")}
-          onNew={() => setBuild(true)} newLabel="New Receipt" empty="No receipts yet" />
-      </div>
+          onNew={() => setBuild(true)} empty="No receipts yet" />
+      </ListPage>
     );
   }
 
@@ -935,12 +928,11 @@
       return <IssueBuilder open onClose={() => setBuild(false)} roleKey={roleKey} can={can} initialType={defaultType} />;
     }
     return (
-      <div>
-        <PageHead title={defaultType === "Vendor Returnable Challan" ? "Returnable Challan" : defaultType === "Vendor Non-Returnable Challan" ? "Non-Returnable Challan" : "Material Issue"} desc="Invoicing · Production · Vendor challans" />
-        <RecordTable title="Issues" columns={cols} rows={rows} can={can} printTitle="Material Issues" searchKeys={["no", "type"]}
+      <ListPage title={defaultType === "Vendor Returnable Challan" ? "Returnable Challan" : defaultType === "Vendor Non-Returnable Challan" ? "Non-Returnable Challan" : "Material Issue"} desc="Invoicing · Production · Vendor challans" onNew={() => setBuild(true)} newLabel="Add Issue" can={can}>
+        <RecordTable embedded suppressNew title="Issue List" columns={cols} rows={rows} can={can} printTitle="Material Issues" searchKeys={["no", "type"]}
           filters={defaultType ? [] : [{ key: "type", label: "All types", options: ISSUE_TYPES }]}
-          onNew={() => setBuild(true)} newLabel="New Issue" onView={(r) => issueChallanPDF(r, "preview")} empty="No issues yet" />
-      </div>
+          onNew={() => setBuild(true)} onView={(r) => issueChallanPDF(r, "preview")} empty="No issues yet" />
+      </ListPage>
     );
   }
 
@@ -1007,11 +999,10 @@
       );
     }
     return (
-      <div className="space-y-5">
-        <PageHead title="Material Requirement & FG Handover" desc="Stores queue: issue materials to production and route finished goods to QC" />
-        <RecordTable title="Material requirements" columns={cols} rows={rows} can={can} printTitle="Material Requirements" searchKeys={["no", "workOrderNo"]} empty="No material requirements pending" />
-        <RecordTable title="Finished goods transfer" columns={fgCols} rows={fgRows} can={can} printTitle="Finished Goods Transfer" searchKeys={["no", "workOrderNo"]} empty="No finished goods transfers" />
-      </div>
+      <ListPage title="Material Requirement & FG Handover" desc="Stores queue: issue materials to production and route finished goods to QC" can={can}>
+        <RecordTable embedded suppressNew title="Material Requirement List" columns={cols} rows={rows} can={can} printTitle="Material Requirements" searchKeys={["no", "workOrderNo"]} empty="No material requirements pending" />
+        <RecordTable embedded suppressNew title="Finished Goods Transfer List" columns={fgCols} rows={fgRows} can={can} printTitle="Finished Goods Transfer" searchKeys={["no", "workOrderNo"]} empty="No finished goods transfers" />
+      </ListPage>
     );
   }
 
@@ -1033,10 +1024,9 @@
         onPost={(f, no) => { const q = Number(f.qty); store.postLedger({ itemId: f.itemId, locationId: f.fromId, type: "transfer-out", qty: -q, ref: no, date: f.date }, roleKey); store.postLedger({ itemId: f.itemId, locationId: f.toId, type: "transfer-in", qty: q, ref: no, date: f.date }, roleKey); }} />;
     }
     return (
-      <div>
-        <PageHead title="Stock Transfer" desc="Move stock between locations / racks / bins" />
-        <RecordTable title="Transfers" columns={cols} rows={rows} can={can} printTitle="Stock Transfers" searchKeys={["no"]} onNew={() => setBuild(true)} newLabel="New Transfer" empty="No transfers yet" />
-      </div>
+      <ListPage title="Stock Transfer" desc="Move stock between locations / racks / bins" onNew={() => setBuild(true)} newLabel="Add Transfer" can={can}>
+        <RecordTable embedded suppressNew title="Transfer List" columns={cols} rows={rows} can={can} printTitle="Stock Transfers" searchKeys={["no"]} onNew={() => setBuild(true)} empty="No transfers yet" />
+      </ListPage>
     );
   }
 
@@ -1057,10 +1047,9 @@
         onPost={(f, no) => { store.postLedger({ itemId: f.itemId, locationId: f.locationId, type: "return", qty: Number(f.qty), ref: no, date: f.date }, roleKey); }} />;
     }
     return (
-      <div>
-        <PageHead title="Return Management" desc="Customer returns & vendor returnable receipts (stock-in)" />
-        <RecordTable title="Returns" columns={cols} rows={rows} can={can} printTitle="Returns" searchKeys={["no", "reason"]} onNew={() => setBuild(true)} newLabel="New Return" empty="No returns yet" />
-      </div>
+      <ListPage title="Return Management" desc="Customer returns & vendor returnable receipts (stock-in)" onNew={() => setBuild(true)} newLabel="Add Return" can={can}>
+        <RecordTable embedded suppressNew title="Return List" columns={cols} rows={rows} can={can} printTitle="Returns" searchKeys={["no", "reason"]} onNew={() => setBuild(true)} empty="No returns yet" />
+      </ListPage>
     );
   }
 
@@ -1079,10 +1068,9 @@
         onPost={(f, no) => { store.postLedger({ itemId: f.itemId, locationId: f.locationId, type: "scrap", qty: -Number(f.qty), ref: no, date: f.date }, roleKey); }} />;
     }
     return (
-      <div>
-        <PageHead title="Scrap / Rejection Entry" desc="Write off rejected / damaged stock" />
-        <RecordTable title="Scrap entries" columns={cols} rows={rows} can={can} printTitle="Scrap" searchKeys={["no", "reason"]} onNew={() => setBuild(true)} newLabel="New Scrap" empty="No scrap entries" />
-      </div>
+      <ListPage title="Scrap / Rejection Entry" desc="Write off rejected / damaged stock" onNew={() => setBuild(true)} newLabel="Add Scrap Entry" can={can}>
+        <RecordTable embedded suppressNew title="Scrap List" columns={cols} rows={rows} can={can} printTitle="Scrap" searchKeys={["no", "reason"]} onNew={() => setBuild(true)} empty="No scrap entries" />
+      </ListPage>
     );
   }
 
@@ -1131,10 +1119,9 @@
       { key: "gap", label: "Shortfall", render: (r) => Math.max(0, r.reorder - r.qty), csv: (r) => Math.max(0, r.reorder - r.qty) },
     ];
     return (
-      <div>
-        <PageHead title="Stock Alerts & Reorder" desc="Items at or below reorder level" />
-        <RecordTable title="Reorder list" columns={cols} rows={low} can={can} printTitle="Reorder Report" searchKeys={["sku", "name"]} empty="All items above reorder level 🎉" />
-      </div>
+      <ListPage title="Stock Alerts & Reorder" desc="Items at or below reorder level" can={can}>
+        <RecordTable embedded suppressNew title="Reorder List" columns={cols} rows={low} can={can} printTitle="Reorder Report" searchKeys={["sku", "name"]} empty="All items above reorder level 🎉" />
+      </ListPage>
     );
   }
   function BatchesPage({ roleKey, can }) {
@@ -1147,10 +1134,9 @@
       { key: "qty", label: "Balance qty" }, { key: "first", label: "First seen" },
     ];
     return (
-      <div>
-        <PageHead title="Batch / Lot Tracking" desc="Balances by batch for traceability" />
-        <RecordTable title="Batches" columns={cols} rows={rows} can={can} printTitle="Batch Tracking" searchKeys={["batch"]} empty="No batch-tracked stock yet" />
-      </div>
+      <ListPage title="Batch / Lot Tracking" desc="Balances by batch for traceability" can={can}>
+        <RecordTable embedded suppressNew title="Batch List" columns={cols} rows={rows} can={can} printTitle="Batch Tracking" searchKeys={["batch"]} empty="No batch-tracked stock yet" />
+      </ListPage>
     );
   }
   function stockByLocationRows() {
