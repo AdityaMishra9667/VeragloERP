@@ -198,14 +198,20 @@
     const down = kpi.trend === "down";
     const tone = up ? "#34d399" : down ? "#f87171" : "#94a3b8";
     return (
-      <Card className="vg-kpi-card p-4 animate-fade-up overflow-hidden relative vg-panel-hover" style={{ animationDelay: delay + "ms" }}>
-        <div className="absolute -right-6 -top-6 w-20 h-20 rounded-full opacity-20" style={{ background: "var(--accent)" }} />
-        <div className="text-[11px] uppercase tracking-wider text-[var(--vg-text-muted)]">{kpi.label}</div>
-        <div className="mt-1.5 text-2xl font-semibold font-display text-[var(--vg-heading)]">{kpi.value}</div>
-        <div className="mt-1 flex items-center gap-1 text-xs font-medium" style={{ color: tone }}>
-          <Icon name={up ? "trending" : down ? "chart" : "dot"} size={13} />
-          <span>{kpi.delta}</span>
+      <Card className="vg-kpi-card vg-kpi-card-compact p-3 sm:p-3.5 animate-fade-up overflow-hidden relative vg-panel-hover" style={{ animationDelay: delay + "ms" }}>
+        <div className="text-xl sm:text-2xl font-semibold font-display text-[var(--vg-heading)] leading-none tabular-nums">{kpi.value}</div>
+        <div className="mt-2.5 flex items-center gap-2 min-w-0">
+          <span className="vg-kpi-foot-icon grid place-items-center w-8 h-8 rounded-lg shrink-0 text-white" style={{ background: "var(--accent)" }}>
+            <Icon name={up ? "trending" : down ? "chart" : "chart"} size={15} />
+          </span>
+          <span className="text-xs sm:text-sm font-medium opacity-80 truncate">{kpi.label}</span>
         </div>
+        {kpi.delta && (
+          <div className="mt-1.5 pl-10 flex items-center gap-1 text-[10px] font-medium" style={{ color: tone }}>
+            <Icon name={up ? "trending" : down ? "chart" : "dot"} size={11} />
+            <span>{kpi.delta}</span>
+          </div>
+        )}
       </Card>
     );
   }

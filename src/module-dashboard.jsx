@@ -44,16 +44,18 @@
   function KpiTile({ kpi, onClick, delay }) {
     return (
       <button type="button" onClick={onClick} disabled={!onClick} className="text-left w-full h-full group">
-        <Card hover className="vg-kpi-card p-4 sm:p-5 h-full min-h-[8.5rem] group-disabled:opacity-90 animate-fade-up" style={{ animationDelay: (delay || 0) + "ms" }}>
+        <Card hover className="vg-kpi-card vg-kpi-card-compact p-3 sm:p-3.5 h-full group-disabled:opacity-90 animate-fade-up" style={{ animationDelay: (delay || 0) + "ms" }}>
           <div className="flex items-start justify-between gap-2">
-            <span className="grid place-items-center w-10 h-10 rounded-xl shrink-0 text-white shadow-sm" style={{ background: kpi.color || "var(--accent)" }}>
-              <Icon name={kpi.icon || "chart"} size={18} />
-            </span>
+            <div className="text-xl sm:text-2xl font-display font-bold tracking-tight leading-none tabular-nums">{kpi.value}</div>
             {kpi.badge != null && <Pill color={kpi.badgeColor || "#f59e0b"}>{kpi.badge}</Pill>}
           </div>
-          <div className="mt-3 text-2xl sm:text-3xl font-display font-bold tracking-tight leading-none">{kpi.value}</div>
-          <div className="mt-2 text-sm font-medium opacity-85 leading-snug">{kpi.label}</div>
-          {kpi.hint && <div className="mt-1 text-[11px] opacity-45">{kpi.hint}</div>}
+          <div className="mt-2.5 flex items-center gap-2 min-w-0">
+            <span className="vg-kpi-foot-icon grid place-items-center w-8 h-8 rounded-lg shrink-0 text-white" style={{ background: kpi.color || "var(--accent)" }}>
+              <Icon name={kpi.icon || "chart"} size={15} />
+            </span>
+            <span className="text-xs sm:text-sm font-medium opacity-80 leading-snug truncate">{kpi.label}</span>
+          </div>
+          {kpi.hint && <div className="mt-1.5 text-[10px] opacity-42 pl-10">{kpi.hint}</div>}
         </Card>
       </button>
     );
@@ -100,15 +102,14 @@
         <div className="vg-work-queue-grid">
           {queues.map((q) => (
             <button key={q.title} type="button" onClick={() => (q.onClick ? q.onClick() : go && go(q.go))} className="vg-work-queue-card">
-              <div className="flex items-center justify-between gap-2 mb-3">
-                <span className="grid place-items-center w-9 h-9 rounded-xl text-white shrink-0" style={{ background: q.color || "var(--accent)" }}>
-                  <Icon name={q.icon || "inbox"} size={17} />
+              <div className="text-xl sm:text-2xl font-display font-bold tabular-nums leading-none">{q.count != null ? q.count : "—"}</div>
+              <div className="mt-2 flex items-center gap-2 min-w-0">
+                <span className="vg-kpi-foot-icon grid place-items-center w-8 h-8 rounded-lg text-white shrink-0" style={{ background: q.color || "var(--accent)" }}>
+                  <Icon name={q.icon || "inbox"} size={15} />
                 </span>
-                <span className="text-2xl font-display font-bold tabular-nums">{q.count != null ? q.count : "—"}</span>
+                <span className="text-xs sm:text-sm font-semibold leading-snug truncate">{q.title}</span>
               </div>
-              <div className="text-sm font-semibold">{q.title}</div>
-              {q.hint && <div className="text-[11px] opacity-50 mt-1 line-clamp-2">{q.hint}</div>}
-              <div className="mt-auto pt-3 text-[11px] font-medium opacity-55" style={{ color: "var(--accent)" }}>View details →</div>
+              {q.hint && <div className="mt-1.5 text-[10px] opacity-45 pl-10 line-clamp-2">{q.hint}</div>}
             </button>
           ))}
         </div>
@@ -414,7 +415,7 @@
       const ordersPendingAction = createdSaved.length + sent.length + pendingMaterial.length;
       return {
         title: "Sales & CRM Dashboard",
-        subtitle: "Manage enquiries, customers, quotations, sales orders and follow-ups from one connected workspace.",
+        subtitle: "Manage enquiries, quotations, sales orders and customer relationships from one connected workspace.",
         opsTabLabel: "Pipeline",
         opsTabIcon: "users",
         quickActions: [
@@ -594,6 +595,12 @@
           { label: "NCR register", icon: "alert", onClick: () => go("ncr") },
           { label: "Reports", icon: "chart", onClick: () => go("reports") },
         ],
+        workQueues: [
+          { title: "Pending inspections", icon: "shield", go: "inspections", count: pending.length, color: "#7c3aed", hint: "Incoming GRN / material QC" },
+          { title: "Open NCRs", icon: "alert", go: "ncr", count: ncrs.length, color: "#ef4444", hint: "Non-conformance reports" },
+          { title: "Accepted (MTD)", icon: "check", go: "inspections", count: insp.filter((x) => x.status === "Accepted").length, color: "#34d399", hint: "Released to stock" },
+          { title: "Total inspections", icon: "activity", go: "inspections", count: insp.length, color: "#6366f1", hint: "Logged this period" },
+        ],
         kpis: [
           { label: "Pending inspections", value: pending.length, icon: "shield", color: "#7c3aed", go: "inspections" },
           { label: "Open NCRs", value: ncrs.length, icon: "alert", color: "#ef4444", go: "ncr" },
@@ -639,6 +646,13 @@
           { label: "Work orders", icon: "factory", primary: true, onClick: () => go("orders") },
           { label: "Issue materials", icon: "logout", onClick: () => go("mrp") },
           { label: "BOM register", icon: "flow", onClick: () => go("bom") },
+          { label: "Reports", icon: "chart", onClick: () => go("reports") },
+        ],
+        workQueues: [
+          { title: "WO pending BOM", icon: "flow", go: "orders", count: pendingBom.length, color: "#dc2626", hint: "Awaiting BOM finalization" },
+          { title: "WO pending material", icon: "box", go: "mrp", count: pendingMaterial.length, color: "#8b5cf6", hint: "Material issue pending" },
+          { title: "WO in progress", icon: "factory", go: "orders", count: running.length, color: "#f97316", hint: "Shop floor active" },
+          { title: "WO completed", icon: "check", go: "orders", count: completed.length, color: "#34d399", hint: "Finished work orders" },
         ],
         kpis: [
           { label: "WO pending BOM", value: pendingBom.length, icon: "flow", color: "#dc2626", go: "orders" },
@@ -690,6 +704,13 @@
           { label: "New shipment", icon: "plus", primary: true, perm: "add", onClick: () => go("shipments") },
           { label: "Pending dispatch", icon: "truck", onClick: () => go("shipments") },
           { label: "Generate invoice", icon: "rupee", onClick: () => VG.goTo("accounts", "receivables") },
+          { label: "Reports", icon: "chart", onClick: () => go("reports") },
+        ],
+        workQueues: [
+          { title: "Ready to ship", icon: "inbox", go: "shipments", count: sos.length, color: "#ea580c", hint: "Sales orders awaiting dispatch" },
+          { title: "Pending dispatch", icon: "box", go: "shipments", count: pending.length, color: "#f97316", hint: "Packing / loading queue" },
+          { title: "In transit", icon: "truck", go: "shipments", count: transit.length, color: "#22d3ee", hint: "Shipments on the road" },
+          { title: "Delivered (MTD)", icon: "check", go: "shipments", count: sh.filter((s) => s.status === "Delivered").length, color: "#34d399", hint: "Completed deliveries" },
         ],
         kpis: [
           { label: "SOs ready to ship", value: sos.length, icon: "inbox", color: "#ea580c", go: "shipments" },
@@ -728,6 +749,13 @@
           { label: "Create invoice", icon: "rupee", primary: true, perm: "add", onClick: () => go("receivables") },
           { label: "Record payment", icon: "check", onClick: () => go("receivables") },
           { label: "Approve pending", icon: "shield", onClick: () => go("receivables") },
+          { label: "Reports", icon: "chart", onClick: () => go("reports") },
+        ],
+        workQueues: [
+          { title: "Open invoices", icon: "inbox", go: "receivables", count: unpaid.length, color: "#6366f1", hint: "Awaiting payment" },
+          { title: "Overdue invoices", icon: "alert", go: "receivables", count: overdue.length, color: "#ef4444", hint: "Past due date" },
+          { title: "Ready to invoice", icon: "file", go: "receivables", count: store.list("salesOrders").filter((s) => (s.stage === "Dispatched" || s.stage === "Ready to Dispatch") && !inv.some((i) => i.salesOrderId === s.id)).length, color: "#0891b2", hint: "Dispatched orders" },
+          { title: "Receivables", icon: "rupee", go: "receivables", count: inr(receivable), color: "#0e7490", hint: "Outstanding amount" },
         ],
         kpis: [
           { label: "Receivables", value: inr(receivable), icon: "rupee", color: "#0e7490", go: "receivables" },
@@ -758,6 +786,13 @@
           { label: "Employees", icon: "users", onClick: () => go("employees") },
           { label: "Leave requests", icon: "calendar", onClick: () => go("leave") },
           { label: "Run payroll", icon: "rupee", onClick: () => go("payroll") },
+          { label: "Reports", icon: "chart", onClick: () => go("reports") },
+        ],
+        workQueues: [
+          { title: "Leave pending", icon: "calendar", go: "leave", count: leave.length, color: "#f59e0b", hint: "Awaiting approval" },
+          { title: "Active employees", icon: "users", go: "employees", count: store.list("employees").filter((e) => e.status === "Active").length, color: "#db2777", hint: "On payroll" },
+          { title: "Payroll status", icon: "rupee", go: "payroll", count: payrollDone ? "Done" : "Due", color: payrollDone ? "#34d399" : "#f59e0b", hint: "Current month" },
+          { title: "Salary slips", icon: "check", go: "payroll", count: store.list("salarySlips").filter((s) => s.month === month).length, color: "#6366f1", hint: "Issued this month" },
         ],
         kpis: [
           { label: "Active employees", value: store.list("employees").filter((e) => e.status === "Active").length, icon: "users", color: "#db2777", go: "employees" },
@@ -790,6 +825,13 @@
         quickActions: [
           { label: "Monthly register", icon: "clock", primary: true, onClick: () => go("register") },
           { label: "HR payroll", icon: "rupee", onClick: () => VG.goTo("hr", "payroll") },
+          { label: "Reports", icon: "chart", onClick: () => go("reports") },
+        ],
+        workQueues: [
+          { title: "Records this month", icon: "users", go: "register", count: recs.length, color: "#16a34a", hint: "Attendance entries" },
+          { title: "Present days", icon: "check", go: "register", count: present, color: "#22c55e", hint: "Logged present" },
+          { title: "Leave days", icon: "clock", go: "register", count: onLeave, color: "#f59e0b", hint: "Leave marked" },
+          { title: "Locked records", icon: "shield", go: "register", count: recs.filter((a) => a.locked).length, color: "#94a3b8", hint: "Ready for payroll" },
         ],
         kpis: [
           { label: "Records this month", value: recs.length, icon: "users", color: "#16a34a", go: "register" },
@@ -886,7 +928,7 @@
     const isHidden = (id) => (prefs.hiddenPanels || []).includes(id);
 
     return (
-      <div className="space-y-5 w-full max-w-none vg-module-dashboard">
+      <div className="space-y-4 w-full max-w-none vg-module-dashboard">
         <div className="vg-dash-live">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
           Live · refreshes automatically
@@ -905,7 +947,7 @@
         </div>
 
         {tab === "overview" && (
-          <div className="space-y-6 animate-fade-up">
+          <div className="space-y-4 animate-fade-up">
             <section className="vg-dash-section">
               <div className="vg-dash-section-head">
                 <h3>Overview</h3>
@@ -975,7 +1017,7 @@
         )}
 
         {tab === "operations" && (
-          <div className="space-y-6 animate-fade-up">
+          <div className="space-y-4 animate-fade-up">
             {cfg.stockItems ? (
               <Card className="p-5 sm:p-6">
                 <SectionTitle icon="box" title={cfg.opsTitle || "Operational summary"} action={cfg.opsAction} />
@@ -995,7 +1037,7 @@
         )}
 
         {tab === "insights" && (
-          <div className="space-y-6 animate-fade-up">
+          <div className="space-y-4 animate-fade-up">
             {cfg.series && cfg.series.length > 0 && (
               <Card className="p-5 sm:p-6">
                 <SectionTitle icon="chart" title="Trend" action={<Pill color="var(--accent)">12 periods</Pill>} />
