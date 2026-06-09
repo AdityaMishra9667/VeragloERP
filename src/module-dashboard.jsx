@@ -517,34 +517,41 @@
     },
     purchase(ctx) {
       const { go, can, roleKey } = ctx;
+      const stats = store.purchaseStats ? store.purchaseStats() : {};
       const prs = store.list("purchaseRequests");
       const pos = store.list("purchaseOrders");
       const low = store.stockSummary().filter((s) => s.reorderNeeded);
       const pendingPR = prs.filter((x) => x.status === "Pending");
-      const openPO = pos.filter((x) => x.status === "Open" || x.status === "Approved");
+      const openPO = pos.filter((x) => ["Approved", "Sent to Vendor", "Partially Received", "Draft", "Pending Approval"].includes(x.status));
+      const topVendors = store.list("suppliers").slice().sort((a, b) => (Number(b.rating) || 0) - (Number(a.rating) || 0)).slice(0, 5);
       return {
         title: "Purchase Dashboard",
-        subtitle: "Requests, orders and supplier follow-through",
+        subtitle: "Procurement · RFQ · PO · GRN · vendor payments",
         opsTabLabel: "Procurement",
         opsTabIcon: "cart",
         quickActions: [
-          { label: "New request", icon: "plus", primary: true, perm: "add", onClick: () => go("requests") },
-          { label: "Purchase orders", icon: "cart", onClick: () => go("orders") },
-          { label: "Material receipt", icon: "download", onClick: () => VG.goTo("inventory", "receipt") },
-          { label: "Suppliers", icon: "handshake", onClick: () => go("suppliers") },
-          { label: "Reports", icon: "chart", onClick: () => go("reports") },
+          { label: "Add request", icon: "plus", primary: true, perm: "add", onClick: () => go("requests") },
+          { label: "Create RFQ", icon: "mail", perm: "add", onClick: () => go("rfq") },
+          { label: "Create PO", icon: "cart", perm: "add", onClick: () => go("orders") },
+          { label: "Add vendor", icon: "handshake", perm: "add", onClick: () => go("vendors") },
+          { label: "Pending deliveries", icon: "truck", onClick: () => go("orders") },
+          { label: "Vendor ledger", icon: "book", onClick: () => go("ledger") },
         ],
         workQueues: [
-          { title: "Pending requests", icon: "inbox", go: "requests", count: pendingPR.length, color: "#d97706", hint: "Awaiting approval" },
-          { title: "Open purchase orders", icon: "cart", go: "orders", count: openPO.length, color: "#f59e0b", hint: "POs not fully received" },
-          { title: "Awaiting GRN", icon: "download", go: "orders", count: openPO.length, color: "#0d9488", hint: "Goods not yet received" },
-          { title: "Below reorder", icon: "alert", go: "requests", count: low.length, color: "#ef4444", hint: "Items to raise PR for" },
+          { title: "Pending requests", icon: "inbox", go: "requests", count: stats.pendingPR != null ? stats.pendingPR : pendingPR.length, color: "#d97706", hint: "PR awaiting approval" },
+          { title: "RFQs pending", icon: "mail", go: "rfq", count: stats.pendingRFQ || 0, color: "#6366f1", hint: "Awaiting vendor response" },
+          { title: "PO pending approval", icon: "shield", go: "approvals", count: stats.poPendingApproval || 0, color: "#f59e0b", hint: "Approval workflow" },
+          { title: "Pending deliveries", icon: "truck", go: "orders", count: stats.pendingDeliveries || openPO.length, color: "#0d9488", hint: "Goods not fully received" },
+          { title: "Delayed deliveries", icon: "alert", go: "orders", count: stats.delayedDeliveries || 0, color: "#ef4444", hint: "Past delivery schedule" },
+          { title: "GRN pending", icon: "download", go: "grn", count: stats.grnPending || 0, color: "#8b5cf6", hint: "QC / posting pending" },
+          { title: "Bills pending", icon: "rupee", go: "bills", count: stats.billsPending || 0, color: "#0891b2", hint: "Vendor AP open" },
+          { title: "Below reorder", icon: "alert", go: "requests", count: low.length, color: "#f87171", hint: "Material shortage alerts" },
         ],
         kpis: [
-          { label: "Pending requests", value: pendingPR.length, icon: "inbox", color: "#d97706", go: "requests" },
-          { label: "Open POs", value: openPO.length, icon: "cart", color: "#f59e0b", go: "orders" },
-          { label: "Awaiting receipt", value: openPO.length, icon: "download", color: "#0d9488" },
-          { label: "Below reorder", value: low.length, icon: "alert", color: "#ef4444" },
+          { label: "Pending PR", value: stats.pendingPR != null ? stats.pendingPR : pendingPR.length, icon: "inbox", color: "#d97706", go: "requests" },
+          { label: "Quotations received", value: stats.quotesReceived || 0, icon: "file", color: "#6366f1", go: "comparison" },
+          { label: "Open POs", value: stats.pendingDeliveries || openPO.length, icon: "cart", color: "#f59e0b", go: "orders" },
+          { label: "Outstanding AP", value: inr(stats.outstandingPayments || 0), icon: "rupee", color: "#0891b2", go: "bills" },
         ],
         tasks: store.tasksFor("purchase"),
         priorityTitle: "Items below reorder — raise PR",
@@ -557,27 +564,36 @@
           ))}</ul>
         ),
         opsContent: (
-          <div className="grid sm:grid-cols-2 gap-4">
-            <div className="rounded-xl glass p-4">
-              <div className="text-[11px] uppercase opacity-50 mb-2">Purchase requests</div>
-              <div className="text-3xl font-display font-bold">{prs.length}</div>
-              <div className="text-xs opacity-55 mt-1">{pendingPR.length} pending approval</div>
+          <div className="space-y-4">
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="rounded-xl glass p-4"><div className="text-[11px] uppercase opacity-50 mb-2">Purchase requests</div><div className="text-3xl font-display font-bold">{prs.length}</div><div className="text-xs opacity-55 mt-1">{pendingPR.length} pending</div></div>
+              <div className="rounded-xl glass p-4"><div className="text-[11px] uppercase opacity-50 mb-2">Purchase orders</div><div className="text-3xl font-display font-bold">{pos.length}</div><div className="text-xs opacity-55 mt-1">{openPO.length} open</div></div>
+              <div className="rounded-xl glass p-4"><div className="text-[11px] uppercase opacity-50 mb-2">Vendor bills</div><div className="text-3xl font-display font-bold">{store.list("vendorBills").length}</div><div className="text-xs opacity-55 mt-1">{stats.billsPending || 0} unpaid</div></div>
+              <div className="rounded-xl glass p-4"><div className="text-[11px] uppercase opacity-50 mb-2">RFQs</div><div className="text-3xl font-display font-bold">{store.list("rfqs").length}</div><div className="text-xs opacity-55 mt-1">{stats.quotesReceived || 0} quotes in</div></div>
             </div>
-            <div className="rounded-xl glass p-4">
-              <div className="text-[11px] uppercase opacity-50 mb-2">Purchase orders</div>
-              <div className="text-3xl font-display font-bold">{pos.length}</div>
-              <div className="text-xs opacity-55 mt-1">{openPO.length} open</div>
-            </div>
+            {topVendors.length > 0 && (
+              <div>
+                <div className="text-[11px] uppercase opacity-50 mb-2">Top vendors</div>
+                <ul className="space-y-2">{topVendors.map((v) => (
+                  <li key={v.id} className="flex items-center gap-3 text-sm glass rounded-xl p-3">
+                    <span className="flex-1 truncate">{v.name}</span>
+                    <Pill color="#14b8a6">{v.rating ? "★ " + v.rating : v.category}</Pill>
+                    <Button variant="ghost" className="!py-1" onClick={() => go("ledger")}>Ledger</Button>
+                  </li>
+                ))}</ul>
+              </div>
+            )}
           </div>
         ),
         insights: [
-          { title: "Delayed approvals", desc: "PRs pending > 3 days", value: pendingPR.length, icon: "clock", color: "#f59e0b" },
-          { title: "POs awaiting GRN", desc: "Open orders not received", value: openPO.length, icon: "download", color: "#22d3ee" },
+          { title: "Delayed deliveries", desc: "POs past schedule", value: stats.delayedDeliveries || 0, icon: "alert", color: "#ef4444" },
+          { title: "POs awaiting GRN", desc: "Goods not received", value: stats.pendingDeliveries || openPO.length, icon: "download", color: "#22d3ee" },
+          { title: "Outstanding vendor pay", desc: "Open AP balance", value: inr(stats.outstandingPayments || 0), icon: "rupee", color: "#0891b2" },
         ],
-        series: [8, 10, 9, 14, 12, 16, 15, 18, 20, 17, 22, 19],
-        activity: auditRows(["purchaseRequests", "purchaseOrders"], 8),
+        series: [8, 10, 12, 14, 13, 16, 18, 17, 20, 22, 21, 24],
+        activity: auditRows(["purchaseRequests", "purchaseOrders", "rfqs", "vendorBills"], 8),
         reports: [{ label: "Purchase reports", onClick: () => go("reports") }],
-        workflowSteps: ["Request", "Approve", "Purchase order", "Goods receipt"],
+        workflowSteps: ["Request", "Approve", "RFQ", "Compare", "PO", "GRN", "QC", "Bill", "Payment"],
       };
     },
     quality(ctx) {
@@ -779,37 +795,63 @@
       const leave = store.list("leaveRequests").filter((l) => l.status === "Pending");
       const month = new Date().toISOString().slice(0, 7);
       const payrollDone = store.list("payrollRuns").some((p) => p.month === month);
+      const emps = store.list("employees");
+      const active = emps.filter((e) => e.status === "Active");
+      const att = store.list("attendanceRecords").filter((a) => a.month === month);
+      const onLeaveToday = leave.filter((l) => l.status === "Approved" && l.from <= today() && l.to >= today()).length;
+      const birthdays = active.filter((e) => e.dob && e.dob.slice(5, 10) === today().slice(5, 10));
+      const newJoin = active.filter((e) => e.doj && e.doj.slice(0, 7) === month);
+      const lastRun = store.list("payrollRuns").slice().reverse()[0];
       return {
-        title: "HR Dashboard",
-        subtitle: "People, leave and payroll readiness",
+        title: "HR & Payroll Dashboard",
+        subtitle: "People · attendance · statutory payroll · compliance",
         quickActions: [
-          { label: "Employees", icon: "users", onClick: () => go("employees") },
-          { label: "Leave requests", icon: "calendar", onClick: () => go("leave") },
-          { label: "Run payroll", icon: "rupee", onClick: () => go("payroll") },
-          { label: "Reports", icon: "chart", onClick: () => go("reports") },
+          { label: "Add employee", icon: "plus", primary: true, onClick: () => go("employees") },
+          { label: "Process payroll", icon: "rupee", onClick: () => go("payroll") },
+          { label: "Attendance", icon: "activity", onClick: () => go("attendance") },
+          { label: "Leave approval", icon: "clock", onClick: () => go("leave") },
+          { label: "Salary slips", icon: "file", onClick: () => go("payroll") },
+          { label: "Self-service", icon: "user", onClick: () => go("selfservice") },
         ],
         workQueues: [
           { title: "Leave pending", icon: "calendar", go: "leave", count: leave.length, color: "#f59e0b", hint: "Awaiting approval" },
-          { title: "Active employees", icon: "users", go: "employees", count: store.list("employees").filter((e) => e.status === "Active").length, color: "#db2777", hint: "On payroll" },
-          { title: "Payroll status", icon: "rupee", go: "payroll", count: payrollDone ? "Done" : "Due", color: payrollDone ? "#34d399" : "#f59e0b", hint: "Current month" },
-          { title: "Salary slips", icon: "check", go: "payroll", count: store.list("salarySlips").filter((s) => s.month === month).length, color: "#6366f1", hint: "Issued this month" },
+          { title: "Payroll pending", icon: "rupee", go: "payroll", count: payrollDone ? 0 : 1, color: payrollDone ? "#34d399" : "#f59e0b", hint: payrollDone ? "Done this month" : "Run payroll" },
+          { title: "On leave today", icon: "clock", go: "leave", count: onLeaveToday, color: "#6366f1", hint: "Approved leave" },
+          { title: "Attendance open", icon: "activity", go: "attendance", count: att.filter((a) => !a.locked).length, color: "#16a34a", hint: "Not locked for payroll" },
+          { title: "New joinings", icon: "users", go: "employees", count: newJoin.length, color: "#db2777", hint: "This month" },
+          { title: "Birthdays", icon: "star", go: "employees", count: birthdays.length, color: "#ec4899", hint: "Today" },
         ],
         kpis: [
-          { label: "Active employees", value: store.list("employees").filter((e) => e.status === "Active").length, icon: "users", color: "#db2777", go: "employees" },
+          { label: "Total employees", value: active.length, icon: "users", color: "#db2777", go: "employees" },
+          { label: "Present days (MTD)", value: att.reduce((s, a) => s + (Number(a.present) || 0), 0), icon: "check", color: "#22c55e" },
           { label: "Leave pending", value: leave.length, icon: "calendar", color: "#f59e0b", badge: leave.length || null, go: "leave" },
-          { label: "Payroll " + month, value: payrollDone ? "Done" : "Pending", icon: "rupee", color: payrollDone ? "#34d399" : "#f59e0b", go: "payroll" },
-          { label: "Salary slips", value: store.list("salarySlips").filter((s) => s.month === month).length, icon: "check", color: "#6366f1" },
+          { label: "Payroll " + month, value: payrollDone ? "Processed" : "Pending", icon: "rupee", color: payrollDone ? "#34d399" : "#f59e0b", go: "payroll" },
         ],
         tasks: store.tasksFor("hr"),
         priorityTitle: "Leave awaiting approval",
         priorityContent: leave.length === 0 ? <EmptyState icon="check" title="No leave pending" /> : (
           <ul className="space-y-2">{leave.map((l) => (
-            <li key={l.id} className="glass rounded-xl p-3 text-sm">{(store.get("employees", l.employeeId) || {}).name} · {l.type} · {l.days} day(s)</li>
+            <li key={l.id} className="glass rounded-xl p-3 text-sm flex items-center gap-3">
+              <span className="flex-1">{(store.get("employees", l.employeeId) || {}).name} · {l.type} · {l.days} day(s)</span>
+              <Button variant="soft" className="!py-1" onClick={() => go("leave")}>Review</Button>
+            </li>
           ))}</ul>
         ),
-        workflowSteps: ["Leave request", "HR approval", "Attendance", "Payroll", "Salary slip"],
-        insights: [{ title: "Leave approvals", desc: "Awaiting manager", value: leave.length, icon: "calendar", color: "#ec4899" }],
-        activity: auditRows(["leaveRequests", "employees", "payrollRuns"], 8),
+        opsContent: (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="rounded-xl glass p-4"><div className="text-[11px] uppercase opacity-50 mb-2">PF (last run)</div><div className="text-2xl font-bold">{lastRun ? inr(lastRun.totalPf || 0) : "—"}</div></div>
+            <div className="rounded-xl glass p-4"><div className="text-[11px] uppercase opacity-50 mb-2">ESI (last run)</div><div className="text-2xl font-bold">{lastRun ? inr(lastRun.totalEsi || 0) : "—"}</div></div>
+            <div className="rounded-xl glass p-4"><div className="text-[11px] uppercase opacity-50 mb-2">Net payout</div><div className="text-2xl font-bold">{lastRun ? inr(lastRun.totalNet || 0) : "—"}</div></div>
+            <div className="rounded-xl glass p-4"><div className="text-[11px] uppercase opacity-50 mb-2">Salary slips</div><div className="text-2xl font-bold">{store.list("salarySlips").filter((s) => s.month === month).length}</div></div>
+          </div>
+        ),
+        workflowSteps: ["Joining", "Attendance", "Leave", "Payroll", "Statutory", "Salary slip"],
+        insights: [
+          { title: "Leave approvals", desc: "Awaiting manager", value: leave.length, icon: "calendar", color: "#ec4899" },
+          { title: "Payroll readiness", desc: month, value: payrollDone ? "Complete" : "Due", icon: "rupee", color: payrollDone ? "#34d399" : "#f59e0b" },
+          { title: "Birthdays today", desc: "Employee reminders", value: birthdays.length, icon: "star", color: "#f472b6" },
+        ],
+        activity: auditRows(["leaveRequests", "employees", "payrollRuns", "attendanceRecords"], 8),
         reports: [{ label: "HR reports", onClick: () => go("reports") }],
       };
     },

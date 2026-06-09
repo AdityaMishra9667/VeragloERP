@@ -5,7 +5,7 @@
 (function (VG) {
   const { useState, useEffect } = React;
   const KEY = "veraglo-erp-db";
-  const VERSION = 13;
+  const VERSION = 14;
   const ITEM_DESC_MAX = 30000;
   const AUTH_INACTIVE_MSG = "User account does not exist or has been deactivated.";
   const ITEM_MFR_DUP_MSG = "This manufacturer and part number already exist in Item Master. Duplicate item cannot be created.";
@@ -202,7 +202,7 @@
       qty, ref: "Opening Balance", batch: "", by: "system",
     }));
 
-    const seq = { QT: 0, PI: 0, SO: 1, MR: 0, FG: 0, QCI: 0, MRN: 0, MIN: 0, GRN: 0, TRF: 0, RET: 0, SCR: 0, PV: 0, LEAD: 0, ENQ: 0, PR: 1, PO: 0, QC: 0, NCR: 0, BOM: 0, WO: 0, SH: 0, INV: 0, LP: 0, PAY: 0 };
+    const seq = { QT: 0, PI: 0, SO: 1, MR: 0, FG: 0, QCI: 0, MRN: 0, MIN: 0, GRN: 0, TRF: 0, RET: 0, SCR: 0, PV: 0, LEAD: 0, ENQ: 0, PR: 1, PO: 0, RFQ: 0, VB: 0, VP: 0, QC: 0, NCR: 0, BOM: 0, WO: 0, SH: 0, INV: 0, LP: 0, PAY: 0 };
 
     return {
       _v: VERSION,
@@ -270,6 +270,10 @@
         { id: "PR1", no: "PR/2627/0001", date: todayISO(), itemId: "i6", qty: 250, uom: "Nos", neededBy: "", priority: "High", reason: "Below reorder level", status: "Pending", raisedBy: "inventory", supplierId: "s1" },
       ],
       purchaseOrders: [],
+      rfqs: [],
+      vendorQuotations: [],
+      vendorBills: [],
+      vendorPayments: [],
       qcInspections: [],
       ncrs: [],
       communications: [
@@ -384,7 +388,7 @@
     if (!db.settings) db.settings = defaultSettings();
     if (!db.settings.backup) db.settings.backup = defaultSettings().backup;
     if (!Array.isArray(db.backups)) db.backups = [];
-    ["purchaseRequests", "purchaseOrders", "qcInspections", "qcIssues", "ncrs", "boms", "workOrders", "materialRequirements", "finishedGoodsTransfers", "dispatchQueue", "orderHistory", "shipments", "invoices", "payments", "employees", "leaveRequests", "attendanceRecords", "payrollRuns", "salarySlips",
+    ["purchaseRequests", "purchaseOrders", "rfqs", "vendorQuotations", "vendorBills", "vendorPayments", "qcInspections", "qcIssues", "ncrs", "boms", "workOrders", "materialRequirements", "finishedGoodsTransfers", "dispatchQueue", "orderHistory", "shipments", "invoices", "payments", "employees", "leaveRequests", "attendanceRecords", "payrollRuns", "salarySlips",
       "erpUsers", "customRoles", "loginLog", "approvalWorkflows", "documentTemplates", "numberSeries", "fieldPermissions", "departments", "designations", "itemLocations"].forEach((k) => { if (!Array.isArray(db[k])) db[k] = []; });
     if (!db.settings.security) db.settings.security = defaultSettings().security;
     else db.settings.security = { ...defaultSettings().security, ...db.settings.security };
@@ -408,7 +412,7 @@
     else db.settings.weatherLogin = { ...defaultSettings().weatherLogin, ...db.settings.weatherLogin, wallpapers: { ...defaultSettings().weatherLogin.wallpapers, ...(db.settings.weatherLogin.wallpapers || {}) } };
     migrateLicense(db);
     db.seq = db.seq || {};
-    ["PR", "PO", "QC", "QCI", "NCR", "BOM", "WO", "MR", "FG", "SH", "INV", "LP", "PAY", "USR"].forEach((k) => { if (db.seq[k] == null) db.seq[k] = 0; });
+    ["PR", "PO", "RFQ", "VB", "VP", "QC", "QCI", "NCR", "BOM", "WO", "MR", "FG", "SH", "INV", "LP", "PAY", "USR"].forEach((k) => { if (db.seq[k] == null) db.seq[k] = 0; });
     migrateBoms(db);
     (db.categories || []).forEach((c) => { if (!c.typeCode) c.typeCode = "RWM"; });
     (db.salesOrders || []).forEach((o) => { if (!o.timeline) o.timeline = []; if (!o.stage && o.status === "Confirmed") o.stage = "Confirmed"; });
@@ -421,8 +425,94 @@
     migrateInvoices(db);
     migrateItems(db);
     migrateItemLocations(db);
+    migratePurchaseEnterprise(db);
+    migrateHREnterprise(db);
     db._v = VERSION;
     return db;
+  }
+
+  function migratePurchaseEnterprise(db) {
+    (db.suppliers || []).forEach((s) => {
+      if (!s.status) s.status = "Active";
+      if (!s.currency) s.currency = "INR";
+      if (!s.paymentTerms) s.paymentTerms = "30 Days Credit";
+      if (!s.deliveryTerms) s.deliveryTerms = "FOR Destination";
+      if (!Array.isArray(s.addresses)) {
+        s.addresses = s.address ? [{ id: "addr1", type: "Registered", line1: s.address, city: s.city || "", state: s.state || "", country: s.country || "India", pin: s.pin || "", default: true }] : [];
+      }
+      if (!s.bankName && s.bankAccount) s.bankName = s.bankName || "";
+      if (!Array.isArray(s.documents)) s.documents = [];
+    });
+    (db.purchaseRequests || []).forEach((pr) => {
+      if (!Array.isArray(pr.lines)) {
+        pr.lines = pr.itemId ? [{
+          itemId: pr.itemId, qty: pr.qty, uom: pr.uom || "Nos", desc: pr.desc || "",
+          techSpec: pr.techSpec || "", bomRef: pr.bomRef || "", woRef: pr.woRef || "",
+        }] : [];
+      }
+      if (!pr.department) pr.department = "Production";
+      if (!pr.requestedBy) pr.requestedBy = pr.raisedBy || "";
+      if (!pr.requiredDate) pr.requiredDate = pr.neededBy || "";
+      if (!pr.remarks) pr.remarks = pr.reason || "";
+    });
+    const poMap = { Open: "Draft", Received: "Fully Received" };
+    (db.purchaseOrders || []).forEach((po) => {
+      if (poMap[po.status]) po.status = poMap[po.status];
+      if (!po.status) po.status = "Draft";
+      if (!Array.isArray(po.lines)) po.lines = [];
+      if (!po.currency) po.currency = "INR";
+      if (po.exchangeRate == null) po.exchangeRate = 1;
+      (po.lines || []).forEach((l) => {
+        if (l.qtyReceived == null) l.qtyReceived = po.received ? (Number(l.qty) || 0) : 0;
+        if (l.qtyRejected == null) l.qtyRejected = 0;
+        if (l.qtyPending == null) l.qtyPending = Math.max(0, (Number(l.qty) || 0) - (Number(l.qtyReceived) || 0));
+      });
+      if (!po.approvalStatus) po.approvalStatus = po.status === "Draft" ? "Draft" : "Approved";
+    });
+    (db.vendorBills || []).forEach((b) => {
+      if (!b.status) b.status = b.amountPaid >= b.amount ? "Paid" : b.amountPaid > 0 ? "Partially Paid" : "Open";
+      if (!b.currency) b.currency = "INR";
+    });
+  }
+
+  function migrateHREnterprise(db) {
+    (db.employees || []).forEach((e) => {
+      if (!e.gender) e.gender = "";
+      if (!e.bloodGroup) e.bloodGroup = "";
+      if (!e.mobile) e.mobile = e.phone || "";
+      if (!e.email) e.email = "";
+      if (!e.address) e.address = "";
+      if (!e.emergencyContact) e.emergencyContact = "";
+      if (!e.aadhaar) e.aadhaar = "";
+      if (!e.uan) e.uan = "";
+      if (!e.esiNo) e.esiNo = "";
+      if (!e.bankName) e.bankName = "";
+      if (!e.bankAccount) e.bankAccount = "";
+      if (!e.ifsc) e.ifsc = "";
+      if (!Array.isArray(e.documents)) e.documents = [];
+      if (!e.salaryStructure) {
+        const monthly = Math.round((Number(e.ctc) || 0) / 12);
+        e.salaryStructure = {
+          basicPct: 50, hraPct: 25, conveyance: 1600, bonus: 0, incentive: 0,
+          pfApplicable: true, esiApplicable: monthly <= 21000, ptApplicable: true, tdsApplicable: monthly > 50000,
+        };
+      }
+      if (!e.leaveBalance) {
+        e.leaveBalance = { casual: 12, sick: 12, earned: 15, compOff: 0 };
+      }
+      if (!e.reportingManagerId) e.reportingManagerId = "";
+    });
+    (db.leaveRequests || []).forEach((lv) => {
+      if (!lv.halfDay) lv.halfDay = false;
+      if (!lv.appliedOn) lv.appliedOn = lv.date || todayISO();
+    });
+    (db.salarySlips || []).forEach((s) => {
+      if (s.pf == null) s.pf = 0;
+      if (s.esi == null) s.esi = 0;
+      if (s.pt == null) s.pt = 0;
+      if (s.tds == null) s.tds = 0;
+      if (s.overtime == null) s.overtime = 0;
+    });
   }
 
   function migrateItems(db) {
@@ -1055,9 +1145,9 @@
     nextNo(prefix, dateRef) {
       const DOC_BY_PREFIX = {
         QTN: "Quotation", PI: "Proforma Invoice", SO: "Sales Order", PO: "Purchase Order",
-        PR: "Purchase Request", MRN: "Material Receipt", MIS: "Material Issue", RC: "Returnable Challan",
+        PR: "Purchase Request", RFQ: "Purchase Request", MRN: "Material Receipt", MIS: "Material Issue", RC: "Returnable Challan",
         INV: "Tax Invoice", QC: "QC Report", NCR: "QC Report", WO: "Work Order", SH: "Delivery Challan",
-        LP: "Leave", PAY: "Salary Slip",
+        LP: "Leave", PAY: "Salary Slip", VB: "Purchase Order", VP: "Purchase Order",
       };
       const docType = DOC_BY_PREFIX[prefix];
       const ser = docType && (DB.numberSeries || []).find((s) => s.active !== false && s.docType === docType);
@@ -1471,6 +1561,7 @@
         this.update("materialReceipts", rec.id, { qcStatus: "Not required", posted: true }, actor);
         this.audit(actor, "stock-in", "stockLedger", rec.no, "GRN " + rec.no + " — " + normalizedLines.length + " line(s) to stock");
       }
+      if (receipt.poId || receipt.poNo) this.syncPOReceiptFromGRN(rec.id, actor);
       return rec;
     },
     // Quality decision on an incoming inspection.
@@ -1494,19 +1585,185 @@
     poFromRequest(prId, extra, actor) {
       const pr = this.get("purchaseRequests", prId);
       if (!pr) return null;
-      const item = this.get("items", pr.itemId) || {};
-      const rate = (extra && extra.rate) || item.rate || 0;
+      const lines = (pr.lines && pr.lines.length) ? pr.lines : (pr.itemId ? [{ itemId: pr.itemId, qty: pr.qty, uom: pr.uom }] : []);
+      const poLines = lines.map((l) => {
+        const item = this.get("items", l.itemId) || {};
+        const rate = (extra && extra.rate) || l.rate || item.rate || 0;
+        return {
+          itemId: l.itemId, qty: l.qty, uom: l.uom || item.unit, rate, taxId: l.taxId || item.taxId,
+          desc: l.desc || item.description || item.name, qtyReceived: 0, qtyRejected: 0, qtyPending: Number(l.qty) || 0,
+        };
+      });
+      const total = poLines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.rate) || 0), 0);
       const po = this.create("purchaseOrders", {
-        no: this.nextNo("PO", todayISO()), date: todayISO(), supplierId: (extra && extra.supplierId) || pr.supplierId || "",
-        prId, lines: [{ itemId: pr.itemId, qty: pr.qty, uom: pr.uom || item.unit, rate, taxId: item.taxId }],
-        status: "Open", received: false, total: rate * (Number(pr.qty) || 0), preparedBy: actor,
+        no: this.nextNo("PO", todayISO()), date: todayISO(),
+        supplierId: (extra && extra.supplierId) || pr.supplierId || "",
+        prId, prNo: pr.no, lines: poLines, currency: (extra && extra.currency) || "INR", exchangeRate: 1,
+        status: "Draft", approvalStatus: "Draft", received: false, total, preparedBy: actor,
+        paymentTerms: (extra && extra.paymentTerms) || "", deliveryTerms: (extra && extra.deliveryTerms) || "",
+        tdsPct: (extra && extra.tdsPct) || 0, tcsPct: (extra && extra.tcsPct) || 0,
       }, actor);
       this.update("purchaseRequests", prId, { status: "Ordered", poId: po.id, poNo: po.no }, actor);
       return po;
     },
     raisePRFromItem(itemId, qty, actor) {
       const it = this.get("items", itemId) || {};
-      return this.create("purchaseRequests", { no: this.nextNo("PR", todayISO()), date: todayISO(), itemId, qty: qty || it.reorder || 0, uom: it.unit, priority: "High", reason: "Below reorder level", status: "Pending", raisedBy: actor, supplierId: "" }, actor);
+      return this.create("purchaseRequests", {
+        no: this.nextNo("PR", todayISO()), date: todayISO(), department: "Stores", requestedBy: actor,
+        requiredDate: extraDueDate(7), priority: "High", status: "Pending", raisedBy: actor,
+        lines: [{ itemId, qty: qty || it.reorder || 0, uom: it.unit, desc: it.description || it.name }],
+        remarks: "Below reorder level", supplierId: "",
+      }, actor);
+    },
+    nextVendorCode() {
+      let max = 0;
+      (DB.suppliers || []).forEach((s) => {
+        const m = String(s.code || "").toUpperCase().match(/^SUPP-?(\d+)$/);
+        if (m) max = Math.max(max, parseInt(m[1], 10));
+      });
+      return "SUPP-" + String(max + 1).padStart(4, "0");
+    },
+    approvePR(prId, actor) {
+      return this.update("purchaseRequests", prId, { status: "Approved", approvedBy: actor, approvedAt: Date.now() }, actor);
+    },
+    rejectPR(prId, actor, reason) {
+      return this.update("purchaseRequests", prId, { status: "Rejected", approvedBy: actor, approvedAt: Date.now(), rejectReason: reason || "" }, actor);
+    },
+    createRFQ(data, actor) {
+      const lines = (data.lines || []).map((l, i) => ({ lineNo: i + 1, ...l }));
+      return this.create("rfqs", {
+        no: this.nextNo("RFQ", data.date || todayISO()), date: data.date || todayISO(),
+        prIds: data.prIds || [], prNos: data.prNos || [], supplierIds: data.supplierIds || [],
+        lines, status: data.status || "Draft", dueDate: data.dueDate || extraDueDate(7),
+        remarks: data.remarks || "", preparedBy: actor,
+      }, actor);
+    },
+    addVendorQuotation(rfqId, data, actor) {
+      const rfq = this.get("rfqs", rfqId);
+      if (!rfq) return null;
+      const q = this.create("vendorQuotations", {
+        rfqId, rfqNo: rfq.no, supplierId: data.supplierId, date: data.date || todayISO(),
+        lines: data.lines || [], leadTimeDays: Number(data.leadTimeDays) || 0, freight: Number(data.freight) || 0,
+        warranty: data.warranty || "", technicalCompliance: data.technicalCompliance || "Compliant",
+        validityDate: data.validityDate || extraDueDate(30), status: "Received", receivedBy: actor,
+        total: (data.lines || []).reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.rate) || 0), 0) + (Number(data.freight) || 0),
+      }, actor);
+      this.update("rfqs", rfqId, { status: "Quotations Received" }, actor);
+      return q;
+    },
+    vendorComparison(rfqId) {
+      const rfq = this.get("rfqs", rfqId);
+      if (!rfq) return null;
+      const quotes = (DB.vendorQuotations || []).filter((q) => q.rfqId === rfqId);
+      return { rfq, quotes: quotes.map((q) => {
+        const sup = this.get("suppliers", q.supplierId) || {};
+        const pos = (DB.purchaseOrders || []).filter((po) => po.supplierId === q.supplierId);
+        return { ...q, supplierName: sup.name, rating: sup.rating, priorOrders: pos.length };
+      }) };
+    },
+    createPO(data, actor) {
+      const lines = (data.lines || []).map((l) => ({
+        ...l, qtyReceived: 0, qtyRejected: 0, qtyPending: Number(l.qty) || 0,
+      }));
+      const total = lines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.rate) || 0), 0);
+      return this.create("purchaseOrders", {
+        no: this.nextNo("PO", data.date || todayISO()), date: data.date || todayISO(),
+        supplierId: data.supplierId, lines, currency: data.currency || "INR", exchangeRate: data.exchangeRate || 1,
+        status: data.status || "Draft", approvalStatus: "Draft", total, preparedBy: actor,
+        rfqId: data.rfqId || "", quotationId: data.quotationId || "",
+        paymentTerms: data.paymentTerms || "", deliveryTerms: data.deliveryTerms || "",
+        tdsPct: Number(data.tdsPct) || 0, tcsPct: Number(data.tcsPct) || 0,
+        deliverySchedule: data.deliverySchedule || "", remarks: data.remarks || "",
+      }, actor);
+    },
+    approvePO(poId, actor) {
+      return this.update("purchaseOrders", poId, { status: "Approved", approvalStatus: "Approved", approvedBy: actor, approvedAt: Date.now() }, actor);
+    },
+    submitPOForApproval(poId, actor) {
+      return this.update("purchaseOrders", poId, { status: "Pending Approval", approvalStatus: "Pending" }, actor);
+    },
+    sendPOToVendor(poId, actor) {
+      return this.update("purchaseOrders", poId, { status: "Sent to Vendor", sentAt: Date.now(), sentBy: actor }, actor);
+    },
+    cancelPO(poId, actor, reason) {
+      return this.update("purchaseOrders", poId, { status: "Cancelled", cancelReason: reason || "", cancelledBy: actor }, actor);
+    },
+    closePO(poId, actor) {
+      return this.update("purchaseOrders", poId, { status: "Closed", closedAt: Date.now() }, actor);
+    },
+    syncPOReceiptFromGRN(receiptId, actor) {
+      const rec = this.get("materialReceipts", receiptId);
+      if (!rec) return;
+      const po = rec.poId ? this.get("purchaseOrders", rec.poId) : (DB.purchaseOrders || []).find((p) => p.no === rec.poNo);
+      if (!po) return;
+      const lines = (po.lines || []).map((pl) => {
+        const match = (rec.lines || []).find((rl) => rl.itemId === pl.itemId) || (rec.itemId === pl.itemId ? rec : null);
+        if (!match) return pl;
+        const recv = Number(match.qtyReceived || match.qtyAccepted || match.qty) || 0;
+        const rej = Number(match.qtyRejected) || 0;
+        const newRecv = (Number(pl.qtyReceived) || 0) + recv;
+        const newRej = (Number(pl.qtyRejected) || 0) + rej;
+        return { ...pl, qtyReceived: newRecv, qtyRejected: newRej, qtyPending: Math.max(0, (Number(pl.qty) || 0) - newRecv) };
+      });
+      const allReceived = lines.every((l) => (Number(l.qtyReceived) || 0) >= (Number(l.qty) || 0));
+      const anyReceived = lines.some((l) => (Number(l.qtyReceived) || 0) > 0);
+      const status = allReceived ? "Fully Received" : anyReceived ? "Partially Received" : po.status;
+      this.update("purchaseOrders", po.id, { lines, status, received: allReceived, lastReceiptAt: Date.now(), lastReceiptNo: rec.no }, actor);
+    },
+    createVendorBill(data, actor) {
+      const lines = data.lines || [];
+      const taxable = lines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.rate) || 0), 0);
+      const tax = Number(data.taxAmount) || lines.reduce((s, l) => {
+        const tr = (this.get("taxes", l.taxId) || {}).rate || Number(l.taxPct) || 0;
+        return s + (Number(l.qty) || 0) * (Number(l.rate) || 0) * tr / 100;
+      }, 0);
+      const tds = Number(data.tdsAmount) || Math.round(taxable * (Number(data.tdsPct) || 0) / 100);
+      const amount = Math.round((taxable + tax - tds) * 100) / 100;
+      return this.create("vendorBills", {
+        no: this.nextNo("VB", data.date || todayISO()), date: data.date || todayISO(),
+        supplierId: data.supplierId, poId: data.poId || "", poNo: data.poNo || "",
+        grnId: data.grnId || "", grnNo: data.grnNo || "", vendorInvoiceNo: data.vendorInvoiceNo || "",
+        lines, taxable, taxAmount: tax, tdsPct: Number(data.tdsPct) || 0, tdsAmount: tds,
+        amount, amountPaid: 0, dueDate: data.dueDate || extraDueDate(30), currency: data.currency || "INR",
+        status: "Open", gstBreakup: data.gstBreakup || {}, enteredBy: actor,
+      }, actor);
+    },
+    recordVendorPayment(billId, amount, actor, mode) {
+      const bill = this.get("vendorBills", billId);
+      if (!bill) return null;
+      const amt = Number(amount) || 0;
+      const paid = (Number(bill.amountPaid) || 0) + amt;
+      const status = paid >= (Number(bill.amount) || 0) ? "Paid" : paid > 0 ? "Partially Paid" : bill.status;
+      this.create("vendorPayments", {
+        no: this.nextNo("VP", todayISO()), date: todayISO(), billId, billNo: bill.no,
+        supplierId: bill.supplierId, amount: amt, mode: mode || "NEFT", recordedBy: actor,
+      }, actor);
+      return this.update("vendorBills", billId, { amountPaid: paid, status, lastPaymentAt: Date.now() }, actor);
+    },
+    vendorLedger(supplierId) {
+      const sup = this.get("suppliers", supplierId) || {};
+      const pos = (DB.purchaseOrders || []).filter((p) => p.supplierId === supplierId);
+      const bills = (DB.vendorBills || []).filter((b) => b.supplierId === supplierId);
+      const payments = (DB.vendorPayments || []).filter((p) => p.supplierId === supplierId);
+      const grns = (DB.materialReceipts || []).filter((r) => r.supplierId === supplierId);
+      const outstanding = bills.reduce((s, b) => s + Math.max(0, (Number(b.amount) || 0) - (Number(b.amountPaid) || 0)), 0);
+      const delayedPO = pos.filter((p) => p.deliverySchedule && p.deliverySchedule < todayISO() && !["Fully Received", "Closed", "Cancelled"].includes(p.status));
+      return { supplier: sup, purchaseOrders: pos, bills, payments, grns, outstanding, delayedPO, totalPurchases: pos.reduce((s, p) => s + (Number(p.total) || 0), 0) };
+    },
+    purchaseStats() {
+      const prs = DB.purchaseRequests || [], pos = DB.purchaseOrders || [], rfqs = DB.rfqs || [], bills = DB.vendorBills || [];
+      const quotes = DB.vendorQuotations || [], grns = DB.materialReceipts || [];
+      return {
+        pendingPR: prs.filter((x) => x.status === "Pending").length,
+        pendingRFQ: rfqs.filter((x) => x.status === "Draft" || x.status === "Sent").length,
+        quotesReceived: quotes.filter((x) => x.status === "Received").length,
+        poPendingApproval: pos.filter((x) => x.status === "Pending Approval").length,
+        pendingDeliveries: pos.filter((x) => ["Approved", "Sent to Vendor", "Partially Received"].includes(x.status)).length,
+        delayedDeliveries: pos.filter((x) => x.deliverySchedule && x.deliverySchedule < todayISO() && !["Fully Received", "Closed", "Cancelled"].includes(x.status)).length,
+        grnPending: grns.filter((x) => x.qcStatus === "Pending" || x.status === "Pending QC" || !x.posted).length,
+        billsPending: bills.filter((x) => x.status !== "Paid").length,
+        outstandingPayments: bills.reduce((s, b) => s + Math.max(0, (Number(b.amount) || 0) - (Number(b.amountPaid) || 0)), 0),
+      };
     },
 
     // Live, cross-module task list — drives notifications and module dashboards.
@@ -1520,7 +1777,10 @@
       push("inventory", "alerts", "Items below reorder level", low.length, "#f59e0b");
       push("inventory", "issue", "Returnable challans pending return", (DB.materialIssues || []).filter((x) => x.pendingReturn).length, "#22d3ee");
       push("purchase", "requests", "Purchase requests to approve", (DB.purchaseRequests || []).filter((x) => x.status === "Pending").length, "#f59e0b");
-      push("purchase", "orders", "POs awaiting material receipt", (DB.purchaseOrders || []).filter((x) => x.status === "Open" || x.status === "Approved").length, "#22d3ee");
+      push("purchase", "orders", "POs pending approval", (DB.purchaseOrders || []).filter((x) => x.status === "Pending Approval" || x.status === "Draft").length, "#6366f1");
+      push("purchase", "orders", "POs awaiting GRN", (DB.purchaseOrders || []).filter((x) => ["Approved", "Sent to Vendor", "Partially Received"].includes(x.status)).length, "#22d3ee");
+      push("purchase", "bills", "Vendor bills pending payment", (DB.vendorBills || []).filter((x) => x.status !== "Paid").length, "#0891b2");
+      push("purchase", "rfq", "RFQs awaiting quotation", (DB.rfqs || []).filter((x) => x.status === "Draft" || x.status === "Sent").length, "#a78bfa");
       push("sales", "followups", "Follow-ups due", (DB.followups || []).filter((x) => x.status === "Pending" && (x.date || "") <= todayISO()).length, "#6366f1");
       push("sales", "discounts", "Quotation approvals waiting", (DB.quotations || []).filter((x) => x.status === "Pending Approval").length, "#f59e0b");
       push("sales", "revisions", "Sales order revisions waiting approval", (DB.salesOrders || []).filter((x) => x.revisionPendingApproval).length, "#f59e0b");
@@ -2579,6 +2839,56 @@
     rejectLeave(leaveId, actor) {
       return this.update("leaveRequests", leaveId, { status: "Rejected", approvedBy: actor, approvedAt: Date.now() }, actor);
     },
+    applyLeave(data, actor) {
+      const from = data.from, to = data.to || from;
+      const days = data.halfDay ? 0.5 : (Number(data.days) || Math.max(1, Math.ceil((new Date(to) - new Date(from)) / 86400000) + 1));
+      return this.create("leaveRequests", {
+        no: this.nextNo("LP", data.from || todayISO()), employeeId: data.employeeId,
+        from, to, days, type: data.type || "Casual Leave", reason: data.reason || "",
+        halfDay: !!data.halfDay, status: "Pending", appliedOn: todayISO(), appliedBy: actor,
+      }, actor);
+    },
+    nextEmployeeCode() {
+      let max = 0;
+      (DB.employees || []).forEach((e) => {
+        const m = String(e.code || "").toUpperCase().match(/^EMP-?(\d+)$/);
+        if (m) max = Math.max(max, parseInt(m[1], 10));
+      });
+      return "EMP-" + String(max + 1).padStart(4, "0");
+    },
+    employeeForUser(roleKey) {
+      const user = (DB.erpUsers || []).find((u) => u.roleKey === roleKey || u.email === roleKey);
+      if (user && user.employeeId) return this.get("employees", user.employeeId);
+      return null;
+    },
+    computeStatutorySalary(emp, att, month) {
+      const ss = emp.salaryStructure || {};
+      const monthly = Math.round((Number(emp.ctc) || 0) / 12);
+      const basic = Math.round(monthly * (Number(ss.basicPct) || 50) / 100);
+      const hra = Math.round(monthly * (Number(ss.hraPct) || 25) / 100);
+      const conveyance = Number(ss.conveyance) || 1600;
+      const bonus = Number(ss.bonus) || 0;
+      const incentive = Number(ss.incentive) || 0;
+      const otRate = monthly / (22 * 8);
+      const overtime = Math.round(otRate * (Number(att.otHours) || 0));
+      const other = Math.max(0, monthly - basic - hra - conveyance) + bonus + incentive;
+      const gross = basic + hra + conveyance + other + overtime;
+      const workingDays = 22;
+      const leaveDed = Math.round((monthly / workingDays) * (Number(att.leave) || 0));
+      const absentDed = Math.round((monthly / workingDays) * (Number(att.absent) || 0));
+      const pf = ss.pfApplicable !== false ? Math.round(basic * 0.12) : 0;
+      const esi = ss.esiApplicable && gross <= 21000 ? Math.round(gross * 0.0075) : 0;
+      const pt = ss.ptApplicable !== false ? (gross > 15000 ? 200 : gross > 10000 ? 175 : 0) : 0;
+      const tds = ss.tdsApplicable ? Math.round(Math.max(0, gross - pf - esi - pt - 50000) * 0.1) : 0;
+      const loanDed = Number(att.loanDeduction) || 0;
+      const deductions = leaveDed + absentDed + pf + esi + pt + tds + loanDed;
+      const net = gross - deductions;
+      return {
+        basic, hra, conveyance, bonus, incentive, other, overtime, gross,
+        leaveDeduction: leaveDed, absentDeduction: absentDed, pf, esi, pt, tds, loanDeduction: loanDed,
+        deductions, net, present: att.present, leaveDays: att.leave, absent: att.absent, otHours: att.otHours,
+      };
+    },
     lockAttendanceMonth(month, actor) {
       (DB.attendanceRecords || []).filter((a) => a.month === month).forEach((a) => {
         this.update("attendanceRecords", a.id, { locked: true }, actor);
@@ -2590,27 +2900,28 @@
       const run = this.create("payrollRuns", {
         no: this.nextNo("PAY", todayISO()), month, status: "Processed", processedAt: Date.now(), processedBy: actor,
       }, actor);
-      let totalNet = 0;
+      let totalNet = 0, totalPf = 0, totalEsi = 0;
       (DB.employees || []).filter((e) => e.status === "Active").forEach((emp) => {
-        const att = (DB.attendanceRecords || []).find((a) => a.employeeId === emp.id && a.month === month) || { present: 22, leave: 0, absent: 0 };
-        const monthly = Math.round((Number(emp.ctc) || 0) / 12);
-        const basic = Math.round(monthly * 0.5);
-        const hra = Math.round(monthly * 0.25);
-        const other = monthly - basic - hra;
-        const leaveDed = Math.round((monthly / 22) * (Number(att.leave) || 0));
-        const absentDed = Math.round((monthly / 22) * (Number(att.absent) || 0));
-        const deductions = leaveDed + absentDed;
-        const net = monthly - deductions;
-        totalNet += net;
+        const att = (DB.attendanceRecords || []).find((a) => a.employeeId === emp.id && a.month === month) || { present: 22, leave: 0, absent: 0, otHours: 0 };
+        const calc = this.computeStatutorySalary(emp, att, month);
+        totalNet += calc.net;
+        totalPf += calc.pf;
+        totalEsi += calc.esi;
         this.create("salarySlips", {
           payrollRunId: run.id, payrollNo: run.no, employeeId: emp.id, employeeCode: emp.code, employeeName: emp.name,
           month, department: emp.department, designation: emp.designation,
-          present: att.present, leaveDays: att.leave, absent: att.absent,
-          basic, hra, other, gross: monthly, leaveDeduction: leaveDed, absentDeduction: absentDed, deductions, net,
-          status: "Generated",
+          present: calc.present, leaveDays: calc.leaveDays, absent: calc.absent, otHours: calc.otHours,
+          basic: calc.basic, hra: calc.hra, conveyance: calc.conveyance, bonus: calc.bonus, incentive: calc.incentive,
+          other: calc.other, overtime: calc.overtime, gross: calc.gross,
+          leaveDeduction: calc.leaveDeduction, absentDeduction: calc.absentDeduction,
+          pf: calc.pf, esi: calc.esi, pt: calc.pt, tds: calc.tds, loanDeduction: calc.loanDeduction,
+          deductions: calc.deductions, net: calc.net, status: "Generated",
         }, actor);
       });
-      this.update("payrollRuns", run.id, { totalNet, employeeCount: (DB.employees || []).filter((e) => e.status === "Active").length }, actor);
+      const activeCount = (DB.employees || []).filter((e) => e.status === "Active").length;
+      this.update("payrollRuns", run.id, { totalNet, totalPf, totalEsi, employeeCount: activeCount }, actor);
+      this.audit(actor, "payroll", "payrollRuns", run.no, "Payroll processed for " + month + " · " + activeCount + " employees");
+      notify();
       return run;
     },
 

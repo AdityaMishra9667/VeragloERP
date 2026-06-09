@@ -62,6 +62,7 @@
   }
 
   function slipDoc(slip) {
+    if (VG.hrSlipDoc) return VG.hrSlipDoc(slip);
     const inner = `
       <div class="vg-cols">
         <div class="vg-card"><b>Employee</b>${slip.employeeName}<br>${slip.employeeCode}<br>${slip.department} · ${slip.designation}</div>
