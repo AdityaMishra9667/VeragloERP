@@ -977,6 +977,7 @@
           }
           VG.apiBase = "";
           VG.buildId = document.querySelector('meta[name="vg-build"]')?.content || "dev";
+          console.info("[Veraglo ERP] UI build:", VG.buildId, "— if older than 2026-06-home-grid-table-headers-v2, run: git pull origin main");
           var initInfo = await VG.store.init();
           if (VG.applyTypography) {
             var st = VG.store.settings();
