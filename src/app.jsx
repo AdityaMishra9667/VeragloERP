@@ -387,12 +387,26 @@
   }
 
   /* ---------------- App shell (sidebar + topbar + workspace) ---------------- */
-  function Sidebar({ roleKey, activeId, onOpen, onHome, collapsed, setCollapsed, hoverExpand, setHoverExpand, mobileOpen, setMobileOpen }) {
+  function Sidebar({ roleKey, email, activeId, onOpen, onHome, collapsed, setCollapsed, hoverExpand, setHoverExpand, mobileOpen, setMobileOpen }) {
     const mods = VG.modulesForRole(roleKey);
+    const role = VG.ROLES[roleKey] || {};
     const narrow = collapsed && !hoverExpand;
-    const w = narrow ? "lg:w-[72px]" : "lg:w-[272px]";
+    const w = narrow ? "lg:w-[76px]" : "lg:w-[280px]";
     const [, setNavTick] = useState(0);
     const [expandedId, setExpandedId] = useState(activeId);
+    const [navQuery, setNavQuery] = useState("");
+    const prefs = VG.store.dashboardPrefs(roleKey);
+    const pinnedIds = prefs.pinnedModules || [];
+    const recentIds = (prefs.recentModules || []).slice(0, 4);
+    const displayName = (email || "").split("@")[0].replace(/\./g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+    const QUICK_LINKS = [
+      { label: "Quote", icon: "edit", mod: "sales", section: "quotations", title: "Add Quotation" },
+      { label: "Customer", icon: "users", mod: "sales", section: "customers", title: "Customers" },
+      { label: "Invoice", icon: "rupee", mod: "sales", section: "invoices", title: "Tax Invoice" },
+      { label: "GRN", icon: "download", mod: "inventory", section: "receipt", title: "Material Receipt" },
+      { label: "WO", icon: "factory", mod: "production", section: "orders", title: "Work Order" },
+    ];
 
     useEffect(() => {
       if (activeId) setExpandedId(activeId);
@@ -405,9 +419,46 @@
       return () => { VG._navListeners = (VG._navListeners || []).filter((f) => f !== bump); };
     }, []);
 
+    useEffect(() => {
+      function onKey(e) {
+        if ((e.metaKey || e.ctrlKey) && e.key === "b") {
+          e.preventDefault();
+          setCollapsed((c) => !c);
+        }
+      }
+      window.addEventListener("keydown", onKey);
+      return () => window.removeEventListener("keydown", onKey);
+    }, [setCollapsed]);
+
     const activeSection = activeId && VG._activeModuleNav && VG._activeModuleNav.modId === activeId
       ? VG._activeModuleNav.section
       : null;
+
+    const modById = useMemo(() => {
+      const map = {};
+      mods.forEach((m) => { map[m.id] = m; });
+      return map;
+    }, [mods.length]);
+
+    const groupedMods = useMemo(() => {
+      const q = navQuery.trim().toLowerCase();
+      let list = mods;
+      if (q) {
+        list = mods.filter((m) => {
+          const sections = (VG.moduleSections && VG.moduleSections[m.id]) || [];
+          const secMatch = sections.some((s) => (s.label + " " + s.id + " " + (s.group || "")).toLowerCase().includes(q));
+          return (m.name + " " + m.tagline + " " + m.category + " " + m.id).toLowerCase().includes(q) || secMatch;
+        });
+      }
+      const pinned = [];
+      const groups = {};
+      list.forEach((m) => {
+        if (pinnedIds.includes(m.id) && !q) pinned.push(m);
+        const g = m.category || "Modules";
+        (groups[g] = groups[g] || []).push(m);
+      });
+      return { pinned, groups };
+    }, [mods, navQuery, pinnedIds.join(",")]);
 
     function navToSection(modId, sectionId) {
       if (activeId === modId && VG._activeModuleNav && VG._activeModuleNav.modId === modId) {
@@ -424,7 +475,7 @@
     function onModuleClick(m) {
       const sections = (VG.moduleSections && VG.moduleSections[m.id]) || [];
       if (narrow && sections.length) setCollapsed(false);
-      if (activeId === m.id && sections.length) {
+      if (activeId === m.id && sections.length && !narrow) {
         setExpandedId((cur) => (cur === m.id ? null : m.id));
         return;
       }
@@ -433,85 +484,203 @@
       setMobileOpen(false);
     }
 
+    function renderModule(m) {
+      const active = m.id === activeId;
+      const expanded = expandedId === m.id && !narrow;
+      const sections = (VG.moduleSections && VG.moduleSections[m.id]) || [];
+      const hasChildren = sections.length > 0;
+      const q = navQuery.trim().toLowerCase();
+      const filteredSections = q
+        ? sections.filter((s) => (s.label + " " + s.id + " " + (s.group || "")).toLowerCase().includes(q))
+        : sections;
+      const showSubs = (expanded || q) && filteredSections.length > 0;
+
+      return (
+        <div key={m.id} className="vg-sidebar-module">
+          <button
+            type="button"
+            onClick={() => onModuleClick(m)}
+            data-tip={m.name}
+            title={narrow ? m.name : undefined}
+            className={"vg-sidebar-item vg-sidebar-tip " + (active ? "is-active " : "") + (narrow ? "justify-center" : "")}
+            style={{ "--item-accent": m.accent }}
+            aria-expanded={expanded}
+          >
+            <span className="vg-sidebar-icon" style={active ? undefined : { color: m.accent }}>
+              <Icon name={m.icon} size={18} />
+            </span>
+            {!narrow && (
+              <>
+                <span className="flex-1 min-w-0 leading-snug truncate">{m.name}</span>
+                {hasChildren && (
+                  <Icon name="chevron" size={14} className={"vg-sidebar-chevron shrink-0 " + (expanded ? "is-open" : "")} />
+                )}
+              </>
+            )}
+          </button>
+          {showSubs && (
+            <ul className="vg-sidebar-sub vg-sidebar-sections animate-fade-up" style={{ "--item-accent": m.accent }}>
+              {filteredSections.map((s) => {
+                const isCur = active && activeSection === s.id;
+                return (
+                  <li key={s.id}>
+                    <button
+                      type="button"
+                      onClick={() => navToSection(m.id, s.id)}
+                      className={"vg-sidebar-sub-item " + (isCur ? "is-active" : "")}
+                      style={{ "--item-accent": m.accent }}
+                    >
+                      <Icon name={s.icon || "grid"} size={13} className="shrink-0 opacity-70" />
+                      <span className="break-words">{s.label}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      );
+    }
+
     return (
       <>
-        {mobileOpen && <div className="fixed inset-0 z-30 bg-black/50 lg:hidden" onClick={() => setMobileOpen(false)} />}
+        {mobileOpen && <div className="fixed inset-0 z-30 bg-black/40 backdrop-blur-sm lg:hidden" onClick={() => setMobileOpen(false)} />}
         <aside
           onMouseEnter={() => { if (collapsed) setHoverExpand(true); }}
           onMouseLeave={() => setHoverExpand(false)}
           className={
-            "fixed lg:sticky top-0 z-40 h-screen shrink-0 app-chrome border-r transition-all duration-300 flex flex-col " +
+            "vg-sidebar fixed lg:sticky top-0 z-40 h-screen shrink-0 transition-all duration-300 ease-out flex flex-col " +
             w + " " +
-            (mobileOpen ? "left-0 w-[272px]" : "-left-72 w-[272px]") + " lg:left-0"
+            (narrow ? "vg-sidebar--narrow " : "") +
+            (mobileOpen ? "left-0 w-[280px]" : "-left-72 w-[280px]") + " lg:left-0"
           }
         >
-          <div className={"flex items-center gap-2.5 h-16 border-b border-white/10 " + (narrow ? "justify-center px-2" : "px-4")}>
-            <img src={LOGO} alt="" className="h-8 w-8 object-contain shrink-0" />
-            {!narrow && <span className="font-display font-semibold tracking-wide truncate">Veraglo ERP</span>}
+          <div className={"vg-sidebar-head shrink-0 " + (narrow ? "px-2 py-3" : "px-3 py-3")}>
+            <div className={"flex items-center gap-2 " + (narrow ? "justify-center" : "justify-between")}>
+              <div className={"vg-sidebar-brand " + (narrow ? "justify-center" : "")}>
+                <div className="vg-sidebar-brand-mark">
+                  <img src={LOGO} alt="" className="h-5 w-5 object-contain" />
+                </div>
+                {!narrow && (
+                  <div className="min-w-0">
+                    <div className="font-display font-semibold text-sm leading-tight truncate">Veraglo ERP</div>
+                    <div className="text-[10px] text-[var(--vg-text-muted)] uppercase tracking-wider">Enterprise</div>
+                  </div>
+                )}
+              </div>
+              {!narrow && (
+                <button
+                  type="button"
+                  onClick={() => setCollapsed(true)}
+                  className="p-2 rounded-lg opacity-50 hover:opacity-100 hover:bg-white/10 transition"
+                  title="Collapse sidebar (⌘B)"
+                >
+                  <Icon name="chevronLeft" size={16} />
+                </button>
+              )}
+            </div>
+            {!narrow && (
+              <div className="vg-sidebar-user">
+                <span className="grid place-items-center w-9 h-9 rounded-xl text-white text-xs font-bold shrink-0" style={{ background: role.color || "var(--accent)" }}>
+                  {role.avatar || displayName.charAt(0)}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold truncate">{displayName || "User"}</div>
+                  <div className="text-[10px] text-[var(--vg-text-muted)] truncate">{role.label || "Role"}</div>
+                </div>
+              </div>
+            )}
           </div>
 
-          <nav className="flex-1 overflow-y-auto no-scrollbar py-3 px-2 space-y-0.5">
-            <button type="button" onClick={() => { onHome(); setMobileOpen(false); }} title="All workspaces"
-              className={"w-full flex items-center rounded-xl text-sm opacity-75 hover:opacity-100 chrome-hover transition " + (narrow ? "justify-center p-2.5" : "gap-3 px-3 py-2.5")}>
-              <Icon name="grid" size={20} className="shrink-0" />
+          {!narrow && (
+            <div className="vg-sidebar-search">
+              <Icon name="search" size={14} className="absolute left-3 top-1/2 -translate-y-1/2 opacity-45 pointer-events-none" />
+              <input
+                type="search"
+                value={navQuery}
+                onChange={(e) => setNavQuery(e.target.value)}
+                placeholder="Search menu…"
+                aria-label="Search navigation"
+              />
+            </div>
+          )}
+
+          {!narrow && !navQuery && (
+            <div className="vg-sidebar-quick no-scrollbar">
+              {QUICK_LINKS.filter((l) => modById[l.mod]).map((l) => (
+                <button
+                  key={l.label}
+                  type="button"
+                  title={l.title}
+                  onClick={() => navToSection(l.mod, l.section)}
+                  className="vg-sidebar-quick-btn"
+                >
+                  <Icon name={l.icon} size={16} />
+                  <span>{l.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          <nav className="flex-1 overflow-y-auto no-scrollbar py-2 min-h-0">
+            <button
+              type="button"
+              onClick={() => { onHome(); setMobileOpen(false); }}
+              data-tip="All Workspaces"
+              title={narrow ? "All Workspaces" : undefined}
+              className={"vg-sidebar-item vg-sidebar-tip mb-1 " + (!activeId ? "is-active" : "") + (narrow ? " justify-center" : "")}
+              style={{ "--item-accent": "var(--accent)" }}
+            >
+              <span className="vg-sidebar-icon"><Icon name="grid" size={18} /></span>
               {!narrow && <span>All Workspaces</span>}
             </button>
-            {!narrow && <div className="text-[10px] uppercase tracking-wider opacity-40 px-3 pt-3 pb-1">Modules</div>}
-            {mods.map((m) => {
-              const active = m.id === activeId;
-              const expanded = expandedId === m.id && !narrow;
-              const sections = (VG.moduleSections && VG.moduleSections[m.id]) || [];
-              const hasChildren = sections.length > 0;
+
+            {!narrow && !navQuery && pinnedIds.length > 0 && (
+              <div className="px-3 pb-1 flex flex-wrap gap-1.5">
+                {pinnedIds.filter((id) => modById[id]).map((id) => {
+                  const m = modById[id];
+                  return (
+                    <button key={"pin-" + id} type="button" onClick={() => onModuleClick(m)} className="vg-sidebar-pin">
+                      <Icon name="star" size={11} className="text-amber-400" />
+                      {m.name.split(" ")[0]}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {!narrow && !navQuery && recentIds.length > 0 && (
+              <>
+                <div className="vg-sidebar-group-label">Recent</div>
+                {recentIds.filter((id) => modById[id]).map((id) => renderModule(modById[id]))}
+              </>
+            )}
+
+            {Object.keys(groupedMods.groups).sort().map((group) => {
+              const items = groupedMods.groups[group].filter((m) => navQuery || !recentIds.includes(m.id));
+              if (!items.length) return null;
               return (
-                <div key={m.id} className="vg-sidebar-module">
-                  <button
-                    type="button"
-                    onClick={() => onModuleClick(m)}
-                    title={m.name}
-                    className={"w-full flex items-center rounded-xl text-sm transition-all " + (narrow ? "justify-center p-2.5" : "gap-2 px-3 py-2.5") + " " + (active ? "text-white shadow-md" : "opacity-75 hover:opacity-100 chrome-hover")}
-                    style={active ? { background: m.accent } : undefined}
-                    aria-expanded={expanded}
-                  >
-                    <Icon name={m.icon} size={20} className="shrink-0" />
-                    {!narrow && (
-                      <>
-                        <span className="text-left leading-snug flex-1 min-w-0">{m.name}</span>
-                        {hasChildren && (
-                          <Icon name="chevron" size={16} className={"shrink-0 opacity-70 transition-transform " + (expanded ? "rotate-180" : "")} />
-                        )}
-                      </>
-                    )}
-                  </button>
-                  {expanded && hasChildren && (
-                    <ul className="vg-sidebar-sections mt-0.5 mb-1 ml-2 pl-2 border-l-2 space-y-0.5 animate-fade-up" style={{ borderColor: active ? m.accent + "88" : "rgba(255,255,255,0.12)" }}>
-                      {sections.map((s) => {
-                        const isCur = active && activeSection === s.id;
-                        return (
-                          <li key={s.id}>
-                            <button
-                              type="button"
-                              onClick={() => navToSection(m.id, s.id)}
-                              className={"w-full flex items-center gap-2 rounded-lg text-left text-[12px] leading-snug py-2 px-2 transition " + (isCur ? "font-semibold text-white" : "opacity-70 hover:opacity-100 chrome-hover")}
-                              style={isCur ? { background: m.accent + "cc" } : undefined}
-                            >
-                              <Icon name={s.icon || "grid"} size={14} className="shrink-0 opacity-80" />
-                              <span className="break-words">{s.label}</span>
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
+                <div key={group}>
+                  {!narrow && <div className="vg-sidebar-group-label">{group}</div>}
+                  {items.map((m) => renderModule(m))}
                 </div>
               );
             })}
+
+            {navQuery && !Object.values(groupedMods.groups).some((arr) => arr.length) && (
+              <div className="px-4 py-6 text-center text-xs opacity-50">No menu items match</div>
+            )}
           </nav>
 
-          <div className="border-t border-white/10 p-2">
-            <button type="button" onClick={() => setCollapsed(!collapsed)} title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-              className={"hidden lg:flex w-full items-center rounded-xl text-sm opacity-70 hover:opacity-100 chrome-hover transition " + (narrow ? "justify-center p-2.5" : "gap-3 px-3 py-2.5")}>
-              <Icon name={collapsed ? "chevronRight" : "chevronLeft"} size={18} className="shrink-0" />
-              {!narrow && <span>{collapsed ? "Collapsed" : "Collapse menu"}</span>}
+          <div className="vg-sidebar-foot shrink-0">
+            <button
+              type="button"
+              onClick={() => setCollapsed(!collapsed)}
+              title={collapsed ? "Expand sidebar (⌘B)" : "Collapse sidebar (⌘B)"}
+              className={"vg-sidebar-collapse-btn hidden lg:flex " + (narrow ? "justify-center" : "")}
+            >
+              <Icon name={collapsed ? "chevronRight" : "chevronLeft"} size={18} />
+              {!narrow && <span>{collapsed ? "Expand" : "Collapse"}</span>}
             </button>
           </div>
         </aside>
@@ -652,7 +821,7 @@
         style={{ background: theme === "light"
           ? "radial-gradient(1200px 600px at 80% -10%, #e9eefb, #f4f6fc)"
           : "radial-gradient(1200px 600px at 80% -10%, #131c33, #0b1120)" }}>
-        <Sidebar roleKey={roleKey} activeId={moduleId} onOpen={onOpen} onHome={onHome}
+        <Sidebar roleKey={roleKey} email={email} activeId={moduleId} onOpen={onOpen} onHome={onHome}
           collapsed={collapsed} setCollapsed={setCollapsed} hoverExpand={hoverExpand} setHoverExpand={setHoverExpand}
           mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} />
         <div className="flex-1 min-w-0 flex flex-col">

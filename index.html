@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0b1220" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
-    <meta name="vg-build" content="2026-06-premium-workspace-v1" />
+    <meta name="vg-build" content="2026-06-premium-sidebar-v1" />
     <title>Veraglo ERP — Enterprise Workspace</title>
     <link rel="icon" type="image/png" href="assets/veraglo-logo.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -363,9 +363,288 @@
       .vg-sidebar-sections {
         max-height: min(420px, 55vh);
         overflow-y: auto;
+        padding-left: 0.35rem;
       }
       .vg-sidebar-module + .vg-sidebar-module {
-        margin-top: 2px;
+        margin-top: 0.15rem;
+      }
+      /* Premium enterprise sidebar navigation */
+      .vg-sidebar {
+        background: linear-gradient(180deg, rgba(17, 24, 39, 0.97) 0%, rgba(15, 23, 42, 0.98) 100%);
+        border-right: 1px solid rgba(148, 163, 184, 0.12);
+        box-shadow: 4px 0 32px rgba(2, 8, 23, 0.18);
+      }
+      html.light .vg-sidebar {
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.98) 100%);
+        border-right-color: rgba(15, 23, 42, 0.08);
+        box-shadow: 4px 0 28px rgba(15, 23, 42, 0.06);
+      }
+      .vg-sidebar-head {
+        border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+        background: color-mix(in srgb, var(--accent) 6%, transparent);
+      }
+      html.light .vg-sidebar-head {
+        border-bottom-color: rgba(15, 23, 42, 0.08);
+      }
+      .vg-sidebar-brand {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        min-width: 0;
+      }
+      .vg-sidebar-brand-mark {
+        width: 2.25rem;
+        height: 2.25rem;
+        border-radius: 0.75rem;
+        background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #312e81));
+        box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 35%, transparent);
+        display: grid;
+        place-items: center;
+        flex-shrink: 0;
+      }
+      .vg-sidebar-user {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        padding: 0.55rem 0.65rem;
+        margin: 0.5rem 0.65rem 0;
+        border-radius: 0.85rem;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(148, 163, 184, 0.12);
+      }
+      html.light .vg-sidebar-user {
+        background: rgba(15, 23, 42, 0.03);
+        border-color: rgba(15, 23, 42, 0.08);
+      }
+      .vg-sidebar-search {
+        margin: 0.65rem 0.65rem 0.35rem;
+        position: relative;
+      }
+      .vg-sidebar-search input {
+        width: 100%;
+        border-radius: 0.75rem;
+        padding: 0.55rem 0.75rem 0.55rem 2.15rem;
+        font-size: 0.8125rem;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(148, 163, 184, 0.14);
+        color: var(--vg-text);
+        outline: none;
+        transition: border-color 0.18s ease, box-shadow 0.18s ease;
+      }
+      .vg-sidebar-search input:focus {
+        border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
+      }
+      html.light .vg-sidebar-search input {
+        background: #fff;
+        border-color: rgba(15, 23, 42, 0.1);
+      }
+      .vg-sidebar-quick {
+        display: flex;
+        gap: 0.35rem;
+        padding: 0.35rem 0.65rem 0.5rem;
+        overflow-x: auto;
+      }
+      .vg-sidebar-quick-btn {
+        flex: 1 0 auto;
+        min-width: 2.5rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.2rem;
+        padding: 0.45rem 0.35rem;
+        border-radius: 0.7rem;
+        font-size: 9px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        opacity: 0.72;
+        border: 1px solid rgba(148, 163, 184, 0.12);
+        background: rgba(255, 255, 255, 0.03);
+        transition: all 0.18s ease;
+      }
+      .vg-sidebar-quick-btn:hover {
+        opacity: 1;
+        transform: translateY(-1px);
+        border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+        background: color-mix(in srgb, var(--accent) 10%, transparent);
+      }
+      .vg-sidebar-group-label {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--vg-text-muted);
+        padding: 0.65rem 0.85rem 0.35rem;
+        opacity: 0.65;
+      }
+      .vg-sidebar-item {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        width: 100%;
+        text-align: left;
+        border-radius: 0.75rem;
+        padding: 0.55rem 0.7rem;
+        margin: 0 0.35rem;
+        width: calc(100% - 0.7rem);
+        font-size: 0.8125rem;
+        font-weight: 500;
+        color: var(--vg-text);
+        opacity: 0.82;
+        border: 1px solid transparent;
+        border-left: 3px solid transparent;
+        transition: all 0.18s ease;
+      }
+      .vg-sidebar-item:hover {
+        opacity: 1;
+        background: rgba(255, 255, 255, 0.06);
+        transform: translateX(2px);
+      }
+      html.light .vg-sidebar-item:hover {
+        background: rgba(15, 23, 42, 0.04);
+      }
+      .vg-sidebar-item.is-active {
+        opacity: 1;
+        font-weight: 600;
+        background: color-mix(in srgb, var(--item-accent, var(--accent)) 16%, transparent);
+        border-left-color: var(--item-accent, var(--accent));
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--item-accent, var(--accent)) 12%, transparent),
+          0 4px 16px color-mix(in srgb, var(--item-accent, var(--accent)) 12%, transparent);
+      }
+      .vg-sidebar-item.is-active .vg-sidebar-icon {
+        background: var(--item-accent, var(--accent));
+        color: #fff;
+        box-shadow: 0 4px 12px color-mix(in srgb, var(--item-accent, var(--accent)) 40%, transparent);
+      }
+      .vg-sidebar-icon {
+        width: 2rem;
+        height: 2rem;
+        border-radius: 0.65rem;
+        display: grid;
+        place-items: center;
+        flex-shrink: 0;
+        background: rgba(255, 255, 255, 0.06);
+        transition: all 0.18s ease;
+      }
+      html.light .vg-sidebar-icon {
+        background: rgba(15, 23, 42, 0.05);
+      }
+      .vg-sidebar-sub {
+        margin: 0.15rem 0.5rem 0.35rem 1.15rem;
+        padding-left: 0.65rem;
+        border-left: 1px solid rgba(148, 163, 184, 0.18);
+      }
+      .vg-sidebar-sub-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        width: 100%;
+        text-align: left;
+        padding: 0.45rem 0.55rem;
+        border-radius: 0.55rem;
+        font-size: 0.75rem;
+        font-weight: 500;
+        opacity: 0.72;
+        transition: all 0.15s ease;
+      }
+      .vg-sidebar-sub-item:hover {
+        opacity: 1;
+        background: rgba(255, 255, 255, 0.05);
+      }
+      .vg-sidebar-sub-item.is-active {
+        opacity: 1;
+        font-weight: 600;
+        background: color-mix(in srgb, var(--item-accent, var(--accent)) 14%, transparent);
+        color: var(--vg-heading);
+      }
+      .vg-sidebar-sub-item.is-active::before {
+        content: "";
+        width: 5px;
+        height: 5px;
+        border-radius: 999px;
+        background: var(--item-accent, var(--accent));
+        flex-shrink: 0;
+      }
+      .vg-sidebar-pin {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.3rem 0.55rem;
+        border-radius: 999px;
+        font-size: 10px;
+        font-weight: 600;
+        border: 1px solid rgba(148, 163, 184, 0.15);
+        background: rgba(255, 255, 255, 0.04);
+        transition: all 0.15s ease;
+      }
+      .vg-sidebar-pin:hover {
+        border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+        background: color-mix(in srgb, var(--accent) 10%, transparent);
+      }
+      .vg-sidebar-foot {
+        border-top: 1px solid rgba(148, 163, 184, 0.12);
+        padding: 0.5rem;
+      }
+      .vg-sidebar-collapse-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        width: 100%;
+        padding: 0.55rem;
+        border-radius: 0.75rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        opacity: 0.65;
+        transition: all 0.18s ease;
+      }
+      .vg-sidebar-collapse-btn:hover {
+        opacity: 1;
+        background: rgba(255, 255, 255, 0.06);
+      }
+      .vg-sidebar--narrow .vg-sidebar-item {
+        justify-content: center;
+        padding: 0.6rem;
+        margin: 0.15rem auto;
+        width: 2.75rem;
+      }
+      .vg-sidebar--narrow .vg-sidebar-icon {
+        margin: 0;
+      }
+      .vg-sidebar-tip {
+        position: relative;
+      }
+      .vg-sidebar--narrow .vg-sidebar-tip[data-tip]:hover::after {
+        content: attr(data-tip);
+        position: absolute;
+        left: calc(100% + 10px);
+        top: 50%;
+        transform: translateY(-50%);
+        z-index: 80;
+        padding: 0.35rem 0.6rem;
+        border-radius: 0.5rem;
+        font-size: 11px;
+        font-weight: 600;
+        white-space: nowrap;
+        background: rgba(15, 23, 42, 0.95);
+        color: #f8fafc;
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        box-shadow: 0 8px 24px rgba(2, 8, 23, 0.35);
+        pointer-events: none;
+      }
+      html.light .vg-sidebar--narrow .vg-sidebar-tip[data-tip]:hover::after {
+        background: #fff;
+        color: #0f172a;
+        border-color: rgba(15, 23, 42, 0.1);
+      }
+      .vg-sidebar-chevron {
+        transition: transform 0.22s ease;
+        opacity: 0.55;
+      }
+      .vg-sidebar-chevron.is-open {
+        transform: rotate(180deg);
+        opacity: 0.85;
       }
       html,
       body,
@@ -1097,7 +1376,7 @@
           }
           VG.apiBase = "";
           VG.buildId = document.querySelector('meta[name="vg-build"]')?.content || "dev";
-          console.info("[Veraglo ERP] UI build:", VG.buildId, "— premium workspace needs v1+. Run: git pull origin main");
+          console.info("[Veraglo ERP] UI build:", VG.buildId, "— premium sidebar needs v1+. Run: git pull origin main");
           var initInfo = await VG.store.init();
           if (VG.applyTypography) {
             var st = VG.store.settings();
