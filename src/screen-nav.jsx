@@ -132,18 +132,20 @@
 
     return (
       <div className={"vg-internal-screen flex flex-col w-full min-h-0 animate-fade-up " + className}>
-        {breadcrumbs && breadcrumbs.length > 0 && <Breadcrumbs items={breadcrumbs} />}
-        <div className="vg-internal-screen-head flex flex-wrap items-start gap-3 mb-3 pb-3 border-b border-white/10 shrink-0">
-          {onBack && (
-            <Button variant="soft" icon="chevronLeft" onClick={requestBack} className="shrink-0">
-              {backLabel}
-            </Button>
-          )}
+        <div className="vg-internal-screen-head vg-form-page-head flex flex-wrap items-start justify-between gap-3 mb-3 pb-3 border-b border-white/10 shrink-0">
           <div className="flex-1 min-w-0">
+            {breadcrumbs && breadcrumbs.length > 0 && <Breadcrumbs items={breadcrumbs} />}
             {title && <h2 className="text-base sm:text-lg font-semibold font-display leading-tight truncate">{title}</h2>}
             {subtitle && <p className="text-xs opacity-60 mt-0.5 leading-snug">{subtitle}</p>}
           </div>
-          {actions && <div className="flex flex-wrap gap-2 shrink-0">{actions}</div>}
+          <div className="vg-internal-screen-actions flex flex-wrap items-center gap-2 shrink-0 justify-end">
+            {actions}
+            {onBack && (
+              <Button variant="soft" icon="chevronLeft" onClick={requestBack} className="shrink-0">
+                {backLabel}
+              </Button>
+            )}
+          </div>
         </div>
         {guard && (
           <div className="mb-4 rounded-xl border border-amber-500/35 bg-amber-500/10 p-4 animate-fade-up">

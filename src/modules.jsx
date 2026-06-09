@@ -493,7 +493,7 @@
             onHome={() => setSection("dashboard")}
           />
         ) : null}
-        {!isDashboard ? children : null}
+        {!isDashboard ? <div className="vg-list-page-host w-full max-w-none">{children}</div> : null}
       </div>
     );
   }

@@ -128,17 +128,18 @@
   VG._uiLayout = "premium-full-page";
 
   /* ============ Modal (legacy name — inline full-width InternalScreen in main workspace) ============ */
-  function Modal({ open, onClose, title, subtitle, children, footer, dirty = false, breadcrumbs, backLabel }) {
+  function Modal({ open, onClose, title, subtitle, children, footer, dirty = false, breadcrumbs, backLabel, actions }) {
     if (!open) return null;
     const Screen = VG.InternalScreen;
     if (Screen) {
       return (
         <Screen
           onBack={onClose}
-          backLabel={backLabel || "Cancel"}
+          backLabel={backLabel || "Back"}
           title={title}
           subtitle={subtitle}
           footer={footer}
+          actions={actions}
           dirty={dirty}
           breadcrumbs={breadcrumbs}
           className="w-full min-h-0"
@@ -151,8 +152,8 @@
     return (
       <div className="vg-internal-screen w-full min-h-0">
         <div className="flex items-center gap-3 mb-4 border-b border-white/10 pb-3">
-          <Button variant="soft" icon="chevronLeft" onClick={onClose}>{backLabel || "Cancel"}</Button>
-          <div><h2 className="text-lg font-semibold">{title}</h2>{subtitle && <p className="text-xs opacity-60">{subtitle}</p>}</div>
+          <div className="flex-1 min-w-0"><h2 className="text-lg font-semibold">{title}</h2>{subtitle && <p className="text-xs opacity-60">{subtitle}</p>}</div>
+          <div className="flex gap-2 shrink-0">{actions}<Button variant="soft" icon="chevronLeft" onClick={onClose}>{backLabel || "Back"}</Button></div>
         </div>
         <div className="w-full">{children}</div>
         {footer && <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-white/10">{footer}</div>}
@@ -363,7 +364,7 @@
     }
     return (
       <Modal open={open} onClose={onClose} title={"New " + cfg.label} size="md" dirty={dirty}
-        footer={<><Button variant="soft" onClick={onClose}>Close</Button><Button icon="check" onClick={save}>Save {cfg.label}</Button></>}>
+        actions={<Button icon="check" onClick={save}>Save {cfg.label}</Button>}>
         <div className="grid sm:grid-cols-2 gap-3">
           {cfg.fields.map((f) => (
             <Field key={f.k} label={f.l} required={f.req} error={err[f.k]} className={f.type === "area" ? "sm:col-span-2" : ""}>
@@ -603,7 +604,7 @@
   function RecordTable({
     tableId, title, columns, rows, search = true, searchKeys, filters, can, onView, onEdit, onDelete, onNew,
     newLabel = "New", extra, printTitle, empty = "No records yet", pageSize = 75, columnToggle = true,
-    stickyHeader = true, defaultDensity = "comfortable",
+    stickyHeader = true, defaultDensity = "comfortable", embedded = false, suppressNew = false,
   }) {
     const stateKey = tableId || (title ? "tbl-" + String(title).replace(/\s+/g, "-").toLowerCase() : "");
     const saved = stateKey && VG.getTableState ? VG.getTableState(stateKey) : {};
@@ -680,10 +681,12 @@
       onView(r);
     }
 
+    const showNew = onNew && can && can("add") && !suppressNew;
+
     return (
-      <div className="vg-record-table w-full max-w-none">
-        <div className="vg-workspace-inset flex flex-wrap items-center gap-2 py-3">
-          {title && <div className="font-semibold text-sm mr-auto">{title}</div>}
+      <div className={"vg-record-table w-full max-w-none" + (embedded ? " vg-record-table--embedded" : "")}>
+        <div className={"vg-record-table-toolbar flex flex-wrap items-center gap-2 py-2.5 " + (embedded ? "vg-list-page-toolbar" : "vg-workspace-inset py-3")}>
+          {title && <div className="font-semibold text-sm mr-auto text-[var(--vg-heading)]">{title}</div>}
           {search && (
             <div className="relative">
               <Icon name="search" size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 opacity-50" />
@@ -719,7 +722,7 @@
             {extra}
             {can && can("export") && <Button variant="soft" icon="download" className="hidden sm:inline-flex" onClick={() => exportCSV((printTitle || title || "export").replace(/\s+/g, "-"), visibleCols, data)}>Export</Button>}
             {can && can("print") && <Button variant="ghost" icon="printer" className="hidden md:inline-flex" onClick={() => printTable(printTitle || title, visibleCols, data)}>Print</Button>}
-            {onNew && can && can("add") && <Button icon="plus" onClick={onNew}>{newLabel}</Button>}
+            {showNew && <Button icon="plus" onClick={onNew}>{newLabel}</Button>}
           </div>
         </div>
         <div
@@ -766,7 +769,7 @@
             </tbody>
           </table>
         </div>
-        <div className="vg-workspace-inset px-0 py-2.5 text-[11px] opacity-50 border-t border-white/10 flex flex-wrap items-center gap-2 justify-between">
+        <div className={(embedded ? "vg-list-page-footer" : "vg-workspace-inset") + " px-0 py-2.5 text-[11px] opacity-50 border-t border-white/10 flex flex-wrap items-center gap-2 justify-between"}>
           <span>{data.length} record{data.length !== 1 ? "s" : ""}{data.length !== rows.length ? " (filtered)" : ""}</span>
           {totalPages > 1 && (
             <div className="flex items-center gap-2">
@@ -894,10 +897,14 @@
       </>
     );
   }
-  function PageHead({ title, desc, icon, accent, children }) {
+  function PageHead({ title, desc, icon, accent, children, integrated, onNew, newLabel, can, breadcrumbs }) {
+    const Crumbs = VG.Breadcrumbs;
+    const addBtn = onNew && (!can || can("add")) ? <Button key="vg-add" icon="plus" onClick={onNew}>{newLabel || "Add new"}</Button> : null;
+    const actions = [children, addBtn].filter(Boolean);
     return (
-      <div className="vg-page-head vg-workspace-inset mb-4 pt-2 animate-fade-up">
-        <div className="vg-page-head-inner flex flex-wrap items-center justify-between gap-3">
+      <header className={"vg-page-head animate-fade-up" + (integrated ? " vg-page-head--integrated" : " vg-workspace-inset mb-4 pt-2")}>
+        {breadcrumbs && Crumbs ? <div className="vg-page-head-crumb"><Crumbs items={breadcrumbs} /></div> : null}
+        <div className={"vg-page-head-inner flex flex-wrap items-center justify-between gap-3" + (integrated ? " vg-page-head-inner--integrated" : "")}>
           <div className="flex items-start gap-3 min-w-0">
             {icon && (
               <span className="vg-page-head-icon" style={{ background: accent || "var(--accent)" }}>
@@ -909,7 +916,20 @@
               {desc && <p className="text-xs text-[var(--vg-text-muted)] mt-1 leading-snug max-w-3xl">{desc}</p>}
             </div>
           </div>
-          {children ? <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">{children}</div> : null}
+          {actions.length ? <div className="vg-page-head-actions flex items-center gap-2 shrink-0 flex-wrap justify-end">{actions}</div> : null}
+        </div>
+      </header>
+    );
+  }
+
+  /** Integrated list page: header card + list/table body, equal width, minimal gap. */
+  function ListPage({ title, desc, icon, accent, breadcrumbs, onNew, newLabel, can, headerExtra, children, className = "" }) {
+    return (
+      <div className={"vg-list-page w-full max-w-none animate-fade-up " + className}>
+        <div className="vg-list-page-panel">
+          <PageHead integrated title={title} desc={desc} icon={icon} accent={accent} breadcrumbs={breadcrumbs}
+            onNew={onNew} newLabel={newLabel} can={can}>{headerExtra}</PageHead>
+          <div className="vg-list-page-body">{children}</div>
         </div>
       </div>
     );
@@ -917,7 +937,7 @@
 
   VG.fx = {
     Toaster, Confirmer, BannerHost, Modal, Field, Text, Area, Num, DateF, Select, Checkbox, MasterSelect, QuickCreate,
-    RecordTable, exportCSV, printDocument, printTable, StatusTag, PageHead, DocActions, labelOf,
+    RecordTable, exportCSV, printDocument, printTable, StatusTag, PageHead, ListPage, DocActions, labelOf,
     TransactionLinesShell, itemDropdownLine, itemSearchHaystack,
   };
 })(window.VG);

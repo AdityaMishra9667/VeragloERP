@@ -3,7 +3,7 @@
   const { useState, useEffect, useRef, useMemo } = React;
   const ui = VG.ui, fx = VG.fx, store = VG.store, today = VG.fmt.todayISO, inr = VG.fmt.inr;
   const { Icon, Button, Pill, Card } = ui;
-  const { Field, Text, Area, Num, DateF, Select, Checkbox, Modal, RecordTable, PageHead, StatusTag, printDocument, DocActions } = fx;
+  const { Field, Text, Area, Num, DateF, Select, Checkbox, Modal, RecordTable, PageHead, ListPage, StatusTag, printDocument, DocActions } = fx;
 
   /* ---------- reference data ---------- */
   const CUST_TYPES = ["Individual", "Company", "Government", "Dealer", "Export", "Other"];
@@ -343,9 +343,9 @@
       });
     }
     return (
-      <Modal open={open} onClose={onClose} size="full" dirty={dirty && !disabled} title={isEdit ? "Edit Customer " + (c.code || "") : "New Customer"}
+      <Modal open={open} onClose={onClose} size="full" dirty={dirty && !disabled} title={isEdit ? "Edit Customer " + (c.code || "") : "Add New Customer"}
         subtitle="GSTIN is optional · all linked addresses & contacts supported"
-        footer={<><Button variant="soft" onClick={onClose}>Close</Button>{!disabled && <Button icon="check" onClick={save}>{isEdit ? "Save changes" : "Create customer"}</Button>}</>}>
+        actions={!disabled ? <Button icon="check" onClick={save}>{isEdit ? "Save changes" : "Create customer"}</Button> : null}>
         {disabled && <div className="mb-3 text-xs rounded-lg p-2" style={{ background: "#f59e0b22", color: "#f59e0b" }}><Icon name="lock" size={12} className="inline mr-1" />You have view-only access — editing requires permission.</div>}
         <div className="flex flex-wrap gap-1.5 mb-4">
           {TABS.map(([id, label]) => (
@@ -964,24 +964,24 @@
       return <CustomerForm open record={form.id ? form : null} roleKey={roleKey} can={can} onClose={() => setForm(null)} onSaved={() => {}} />;
     }
     return (
-      <div className="vg-list-page w-full max-w-none">
-        <PageHead title="Customer Master" desc="Click any customer name for the full Customer 360° dashboard" />
-        <RecordTable tableId="customers" title="Customers" columns={cols} rows={rows} can={can} printTitle="Customer Master"
+      <ListPage title="Customer Master" desc="Manage customer profiles, contacts, addresses and commercial terms. Click a name for the 360° dashboard."
+        icon="users" onNew={() => setForm({})} newLabel="Add New Customer" can={can}
+        headerExtra={can("approve") && rows.some((r) => r.approvalStatus === "Pending") ? <Pill color="#f59e0b">{rows.filter((r) => r.approvalStatus === "Pending").length} pending</Pill> : null}>
+        <RecordTable embedded suppressNew tableId="customers" title="Customer List" columns={cols} rows={rows} can={can} printTitle="Customer Master"
           searchKeys={["code", "legalName", "tradeName", "gstin", "pan"]}
           filters={[{ key: "type", label: "All types", options: CUST_TYPES }, { key: "status", label: "All status", options: STATUSES }, { key: "approvalStatus", label: "All approval", options: ["Approved", "Pending", "Rejected"] }]}
-          onNew={() => setForm({})} newLabel="New Customer" onView={(r) => setView(r.id)}
+          onNew={() => setForm({})} onView={(r) => setView(r.id)}
           onEdit={can("edit") ? (r) => setForm(r) : null}
-          onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete " + r.legalName + "?", danger: true, confirmLabel: "Delete" })) { store.remove("customers", r.id, roleKey); VG.toast("Deleted"); } } : null}
-          extra={can("approve") && rows.some((r) => r.approvalStatus === "Pending") ? <Pill color="#f59e0b">{rows.filter((r) => r.approvalStatus === "Pending").length} pending approval</Pill> : null} />
+          onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete " + r.legalName + "?", danger: true, confirmLabel: "Delete" })) { store.remove("customers", r.id, roleKey); VG.toast("Deleted"); } } : null} />
         {can("approve") && rows.some((r) => r.approvalStatus === "Pending") && (
-          <Card className="p-4 mt-3">
-            <div className="text-sm font-semibold mb-2">Pending customer approvals</div>
+          <div className="vg-list-page-aux px-4 pb-4">
+            <div className="text-sm font-semibold mb-2 pt-1">Pending customer approvals</div>
             <div className="space-y-2">{rows.filter((r) => r.approvalStatus === "Pending").map((r) => (
               <div key={r.id} className="flex items-center gap-3 text-sm glass rounded-lg p-2.5"><span className="flex-1">{r.code} · {r.legalName}</span><Button variant="soft" onClick={() => setView(r.id)}>360° View</Button><Button icon="check" onClick={() => approve(r)}>Approve</Button></div>
             ))}</div>
-          </Card>
+          </div>
         )}
-      </div>
+      </ListPage>
     );
   }
 
@@ -1000,12 +1000,11 @@
       return <VG.MasterForm title="Currency" open onClose={() => setEdit(null)} record={edit} roleKey={roleKey} can={can} fields={currencyFields} onSave={save} />;
     }
     return (
-      <div>
-        <PageHead title="Currency Master" desc="Multi-currency support for customer transactions" />
-        <RecordTable title="Currencies" columns={cols} rows={rows} can={can} printTitle="Currency Master" searchKeys={["code", "name"]}
-          onNew={() => setEdit({})} newLabel="New Currency" onEdit={can("edit") ? (r) => setEdit(r) : null}
+      <ListPage title="Currency Master" desc="Multi-currency support for customer transactions" onNew={() => setEdit({})} newLabel="Add Currency" can={can}>
+        <RecordTable embedded suppressNew title="Currency List" columns={cols} rows={rows} can={can} printTitle="Currency Master" searchKeys={["code", "name"]}
+          onNew={() => setEdit({})} onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete currency?", danger: true, confirmLabel: "Delete" })) { store.remove("currencies", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-      </div>
+      </ListPage>
     );
   }
   function PincodesPage({ roleKey, can }) {
@@ -1022,12 +1021,11 @@
       return <VG.MasterForm title="PIN code" open onClose={() => setEdit(null)} record={edit} roleKey={roleKey} can={can} fields={pinFields} onSave={save} />;
     }
     return (
-      <div>
-        <PageHead title="PIN Code Master" desc="Auto-populated from lookups; used to auto-fill city/state/code" />
-        <RecordTable title="PIN codes" columns={cols} rows={rows} can={can} printTitle="PIN Code Master" searchKeys={["pin", "city", "state"]}
-          onNew={() => setEdit({ country: "India" })} newLabel="New PIN" onEdit={can("edit") ? (r) => setEdit(r) : null}
+      <ListPage title="PIN Code Master" desc="Auto-populated from lookups; used to auto-fill city/state/code" onNew={() => setEdit({ country: "India" })} newLabel="Add PIN" can={can}>
+        <RecordTable embedded suppressNew title="PIN Code List" columns={cols} rows={rows} can={can} printTitle="PIN Code Master" searchKeys={["pin", "city", "state"]}
+          onNew={() => setEdit({ country: "India" })} onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete PIN?", danger: true, confirmLabel: "Delete" })) { store.remove("pincodes", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-      </div>
+      </ListPage>
     );
   }
 

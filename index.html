@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0b1220" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
-    <meta name="vg-build" content="2026-06-compact-dash-v1" />
+    <meta name="vg-build" content="2026-06-list-page-v1" />
     <title>Veraglo ERP — Enterprise Workspace</title>
     <link rel="icon" type="image/png" href="assets/veraglo-logo.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -1409,11 +1409,129 @@
       .vg-data-table {
         table-layout: auto;
       }
-      .vg-internal-workspace .vg-page-head {
+      .vg-internal-workspace .vg-page-head:not(.vg-page-head--integrated) {
         margin-bottom: 0.75rem;
       }
       .vg-internal-workspace .vg-module-crumb + .vg-page-head h2 {
         font-size: 1rem;
+      }
+      /* Integrated list page — header + table as one premium panel */
+      .vg-list-page-host:has(> .vg-page-head),
+      .vg-list-page-panel {
+        background: var(--vg-panel-bg);
+        border: 1px solid var(--vg-border);
+        border-radius: var(--vg-radius-xl);
+        box-shadow: var(--vg-shadow-card);
+        overflow: hidden;
+        width: 100%;
+        max-width: none;
+      }
+      .vg-list-page-host:has(> .vg-list-page),
+      .vg-list-page-host:has(> .vg-internal-screen),
+      .vg-list-page-host:has(> .vg-main-fullpage) {
+        background: transparent;
+        border: none;
+        box-shadow: none;
+        overflow: visible;
+      }
+      .vg-list-page {
+        width: 100%;
+        max-width: none;
+      }
+      .vg-list-page-panel {
+        display: flex;
+        flex-direction: column;
+      }
+      .vg-page-head--integrated {
+        margin: 0;
+        padding: 0;
+      }
+      .vg-page-head--integrated .vg-page-head-crumb {
+        padding: 0.65rem 1rem 0;
+      }
+      .vg-page-head-inner--integrated,
+      .vg-list-page-host > .vg-page-head .vg-page-head-inner {
+        border: none;
+        border-radius: 0;
+        box-shadow: none;
+        background: transparent;
+        border-bottom: 1px solid var(--vg-border);
+        padding: 0.85rem 1rem 0.9rem;
+      }
+      @media (min-width: 768px) {
+        .vg-page-head-inner--integrated,
+        .vg-list-page-host > .vg-page-head .vg-page-head-inner {
+          padding: 0.95rem 1.15rem 1rem;
+        }
+      }
+      @media (min-width: 1024px) {
+        .vg-page-head-inner--integrated,
+        .vg-list-page-host > .vg-page-head .vg-page-head-inner {
+          padding: 1rem 1.35rem 1.05rem;
+        }
+      }
+      .vg-list-page-host > .vg-page-head {
+        margin: 0;
+        padding: 0;
+      }
+      .vg-list-page-body,
+      .vg-list-page-host > .vg-record-table,
+      .vg-list-page-host .vg-record-table--embedded,
+      .vg-list-page .vg-record-table {
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+      }
+      .vg-list-page-toolbar,
+      .vg-list-page-host .vg-record-table .vg-record-table-toolbar,
+      .vg-list-page .vg-record-table .vg-record-table-toolbar {
+        padding-left: 1rem;
+        padding-right: 1rem;
+        border-bottom: 1px solid color-mix(in srgb, var(--vg-border) 70%, transparent);
+      }
+      @media (min-width: 768px) {
+        .vg-list-page-toolbar,
+        .vg-list-page-host .vg-record-table .vg-record-table-toolbar,
+        .vg-list-page .vg-record-table .vg-record-table-toolbar {
+          padding-left: 1.15rem;
+          padding-right: 1.15rem;
+        }
+      }
+      @media (min-width: 1024px) {
+        .vg-list-page-toolbar,
+        .vg-list-page-host .vg-record-table .vg-record-table-toolbar,
+        .vg-list-page .vg-record-table .vg-record-table-toolbar {
+          padding-left: 1.35rem;
+          padding-right: 1.35rem;
+        }
+      }
+      .vg-list-page-footer,
+      .vg-list-page-host .vg-record-table > div:last-child,
+      .vg-list-page .vg-record-table > div:last-child {
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+      }
+      @media (min-width: 1024px) {
+        .vg-list-page-footer,
+        .vg-list-page-host .vg-record-table > div:last-child,
+        .vg-list-page .vg-record-table > div:last-child {
+          padding-left: 1.35rem !important;
+          padding-right: 1.35rem !important;
+        }
+      }
+      .vg-list-page-host > *:not(.vg-page-head):not(.vg-record-table) {
+        padding-left: 1rem;
+        padding-right: 1rem;
+      }
+      .vg-list-page-host > .vg-record-table {
+        margin-top: 0;
+      }
+      .vg-form-page-head {
+        padding-top: 0.15rem;
+      }
+      .vg-internal-screen-actions .vg-btn-soft:last-child {
+        min-width: 5.5rem;
       }
       .vg-module-dashboard .vg-module-nav {
         margin-top: 0;

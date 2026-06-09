@@ -152,9 +152,9 @@
     }
     return (
       <InternalScreen onBack={onClose} backLabel="Back to items" dirty={dirty && !disabled}
-        title={isEdit ? "Edit Item · " + (form.sku || "") : "New Item"}
+        title={isEdit ? "Edit Item · " + (form.sku || "") : "Add New Item"}
         subtitle={isEdit ? form.name : "SKU auto-generated from Admin numbering rules — select category first"}
-        footer={!disabled && <Button icon="check" onClick={save}>{isEdit ? "Save changes" : "Create item"}</Button>}>
+        actions={!disabled ? <Button icon="check" onClick={save}>{isEdit ? "Save changes" : "Create item"}</Button> : null}>
         <div className="grid lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-5">
             <div>
