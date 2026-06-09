@@ -168,11 +168,11 @@
   }
 
   /* ---------------- Building blocks ---------------- */
-  function Card({ className = "", children, glow = false, ...rest }) {
+  function Card({ className = "", children, glow = false, hover = false, ...rest }) {
     return (
       <div
         className={
-          "vg-panel rounded-lg " + (glow ? "accent-ring " : "") + className
+          "vg-panel rounded-xl " + (glow ? "accent-ring " : "") + (hover ? "vg-panel-hover " : "") + className
         }
         {...rest}
       >
@@ -198,10 +198,10 @@
     const down = kpi.trend === "down";
     const tone = up ? "#34d399" : down ? "#f87171" : "#94a3b8";
     return (
-      <Card className="p-4 animate-fade-up overflow-hidden relative" style={{ animationDelay: delay + "ms" }}>
+      <Card className="vg-kpi-card p-4 animate-fade-up overflow-hidden relative vg-panel-hover" style={{ animationDelay: delay + "ms" }}>
         <div className="absolute -right-6 -top-6 w-20 h-20 rounded-full opacity-20" style={{ background: "var(--accent)" }} />
-        <div className="text-[11px] uppercase tracking-wider opacity-60">{kpi.label}</div>
-        <div className="mt-1.5 text-2xl font-semibold font-display">{kpi.value}</div>
+        <div className="text-[11px] uppercase tracking-wider text-[var(--vg-text-muted)]">{kpi.label}</div>
+        <div className="mt-1.5 text-2xl font-semibold font-display text-[var(--vg-heading)]">{kpi.value}</div>
         <div className="mt-1 flex items-center gap-1 text-xs font-medium" style={{ color: tone }}>
           <Icon name={up ? "trending" : down ? "chart" : "dot"} size={13} />
           <span>{kpi.delta}</span>
@@ -210,11 +210,16 @@
     );
   }
 
-  function Pill({ children, color }) {
+  function Pill({ children, color, className = "" }) {
+    const c = color || "#94a3b8";
     return (
       <span
-        className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full"
-        style={{ background: (color || "#94a3b8") + "22", color: color || "#94a3b8" }}
+        className={"vg-status-badge " + className}
+        style={{
+          background: "color-mix(in srgb, " + c + " 14%, transparent)",
+          color: c,
+          borderColor: "color-mix(in srgb, " + c + " 28%, transparent)",
+        }}
       >
         {children}
       </span>
@@ -223,16 +228,14 @@
 
   function Button({ children, variant = "solid", icon, className = "", ...rest }) {
     const base =
-      "inline-flex items-center justify-center gap-2 rounded-xl text-sm font-medium px-3.5 py-2 transition-all duration-200 active:scale-[.97] disabled:opacity-40 disabled:cursor-not-allowed";
+      "vg-btn-premium inline-flex items-center justify-center gap-2 rounded-xl text-sm font-semibold px-4 py-2.5 disabled:opacity-40 disabled:cursor-not-allowed";
     const styles = {
-      solid: "text-white hover:brightness-110",
-      soft: "glass hover:bg-white/10",
-      ghost: "hover:bg-white/10 opacity-80 hover:opacity-100",
+      solid: "vg-btn-solid",
+      soft: "vg-btn-soft",
+      ghost: "opacity-85 hover:opacity-100 hover:bg-white/10",
     };
-    const inline =
-      variant === "solid" ? { background: "var(--accent)" } : undefined;
     return (
-      <button className={`${base} ${styles[variant]} ${className}`} style={inline} {...rest}>
+      <button className={`${base} ${styles[variant] || styles.soft} ${className}`} {...rest}>
         {icon && <Icon name={icon} size={15} />}
         {children}
       </button>

@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0b1220" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
-    <meta name="vg-build" content="2026-06-home-grid-table-headers-v3" />
+    <meta name="vg-build" content="2026-06-premium-workspace-v1" />
     <title>Veraglo ERP — Enterprise Workspace</title>
     <link rel="icon" type="image/png" href="assets/veraglo-logo.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -94,6 +94,12 @@
         --vg-table-head-border: rgba(148, 163, 184, 0.22);
         --vg-border: rgba(255, 255, 255, 0.1);
         --vg-panel-bg: rgba(15, 23, 42, 0.72);
+        --vg-panel-border: rgba(255, 255, 255, 0.1);
+        --vg-shadow-sm: 0 4px 18px rgba(2, 8, 23, 0.22);
+        --vg-shadow-md: 0 12px 40px rgba(2, 8, 23, 0.28);
+        --vg-shadow-card: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 8px 32px rgba(2, 8, 23, 0.24);
+        --vg-radius-lg: 1rem;
+        --vg-radius-xl: 1.25rem;
         --vg-font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         --vg-font-pdf: Inter, "Segoe UI", Arial, sans-serif;
         --vg-fs-base: 14px;
@@ -126,6 +132,12 @@
         --vg-table-head-border: #dde3ec;
         --vg-border: rgba(15, 23, 42, 0.1);
         --vg-panel-bg: #ffffff;
+        --vg-panel-border: rgba(15, 23, 42, 0.08);
+        --vg-shadow-sm: 0 4px 16px rgba(15, 23, 42, 0.06);
+        --vg-shadow-md: 0 12px 36px rgba(15, 23, 42, 0.08);
+        --vg-shadow-card: 0 1px 0 rgba(255, 255, 255, 0.95) inset, 0 8px 28px rgba(15, 23, 42, 0.06);
+        --vg-radius-lg: 1rem;
+        --vg-radius-xl: 1.25rem;
       }
       body,
       #root,
@@ -608,29 +620,72 @@
       #vg-main-content {
         position: relative;
       }
-      /* Flat workspace — full width, no floating cards or drop shadows */
+      /* Premium enterprise workspace */
       .vg-panel {
         background: var(--vg-panel-bg);
-        border: 1px solid var(--vg-border);
-        box-shadow: none !important;
-        backdrop-filter: none !important;
-        -webkit-backdrop-filter: none !important;
+        border: 1px solid var(--vg-panel-border, var(--vg-border));
+        border-radius: var(--vg-radius-lg);
+        box-shadow: var(--vg-shadow-card);
+        backdrop-filter: blur(14px) saturate(130%);
+        -webkit-backdrop-filter: blur(14px) saturate(130%);
+        transition: box-shadow 0.22s ease, transform 0.22s ease, border-color 0.22s ease;
       }
+      .vg-panel-hover:hover,
+      .vg-kpi-card:hover {
+        box-shadow: var(--vg-shadow-md);
+        transform: translateY(-2px);
+        border-color: color-mix(in srgb, var(--accent) 22%, var(--vg-border));
+      }
+      #vg-main-content.vg-premium-workspace,
       #vg-main-content.vg-flat-workspace {
         padding: 0;
-        background: var(--vg-bg);
-        --vg-panel-bg: var(--vg-bg);
+        background-color: var(--vg-bg);
+        background-image:
+          radial-gradient(ellipse 900px 420px at 8% -8%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 58%),
+          radial-gradient(ellipse 700px 380px at 96% 4%, rgba(56, 189, 248, 0.07), transparent 55%),
+          linear-gradient(180deg, color-mix(in srgb, var(--vg-bg) 96%, white), var(--vg-bg));
       }
+      html.light #vg-main-content.vg-premium-workspace,
+      html.light #vg-main-content.vg-flat-workspace {
+        background-image:
+          radial-gradient(ellipse 900px 420px at 8% -8%, rgba(99, 102, 241, 0.07), transparent 58%),
+          radial-gradient(ellipse 700px 380px at 96% 4%, rgba(14, 165, 233, 0.05), transparent 55%),
+          linear-gradient(180deg, #f8fafc, var(--vg-bg));
+      }
+      #vg-main-content.vg-premium-workspace::before,
+      #vg-main-content.vg-flat-workspace::before {
+        content: "";
+        pointer-events: none;
+        position: absolute;
+        inset: 0;
+        opacity: 0.35;
+        background-image: radial-gradient(circle at 1px 1px, rgba(148, 163, 184, 0.14) 1px, transparent 0);
+        background-size: 22px 22px;
+      }
+      html.light #vg-main-content.vg-premium-workspace::before,
+      html.light #vg-main-content.vg-flat-workspace::before {
+        opacity: 0.45;
+        background-image: radial-gradient(circle at 1px 1px, rgba(148, 163, 184, 0.18) 1px, transparent 0);
+      }
+      #vg-main-content.vg-premium-workspace .vg-workspace-inset,
       #vg-main-content.vg-flat-workspace .vg-workspace-inset {
         padding-left: 1rem;
         padding-right: 1rem;
+        position: relative;
+        z-index: 1;
       }
       @media (min-width: 1024px) {
+        #vg-main-content.vg-premium-workspace .vg-workspace-inset,
         #vg-main-content.vg-flat-workspace .vg-workspace-inset {
-          padding-left: 1.25rem;
-          padding-right: 1.25rem;
+          padding-left: 1.35rem;
+          padding-right: 1.35rem;
         }
       }
+      #vg-main-content.vg-premium-workspace .vg-full-width-workspace,
+      #vg-main-content.vg-premium-workspace .vg-internal-workspace,
+      #vg-main-content.vg-premium-workspace .vg-module-dashboard,
+      #vg-main-content.vg-premium-workspace .vg-internal-screen,
+      #vg-main-content.vg-premium-workspace .vg-list-page,
       #vg-main-content.vg-flat-workspace .vg-full-width-workspace,
       #vg-main-content.vg-flat-workspace .vg-internal-workspace,
       #vg-main-content.vg-flat-workspace .vg-module-dashboard,
@@ -640,78 +695,140 @@
         max-width: none;
         padding: 0;
         margin: 0;
+        position: relative;
+        z-index: 1;
       }
-      #vg-main-content.vg-flat-workspace .shadow-glass,
-      #vg-main-content.vg-flat-workspace .shadow-glow,
-      #vg-main-content.vg-flat-workspace .shadow-md,
-      #vg-main-content.vg-flat-workspace .shadow-lg,
-      #vg-main-content.vg-flat-workspace .shadow,
-      #vg-main-content.vg-flat-workspace .drop-shadow,
-      #vg-main-content.vg-flat-workspace .drop-shadow-md {
-        box-shadow: none !important;
-        filter: none !important;
-      }
-      #vg-main-content.vg-flat-workspace .glass-dark:not(.vg-master-dropdown-panel):not(.vg-dropdown-menu),
-      #vg-main-content.vg-flat-workspace .vg-panel {
-        background: var(--vg-bg);
-        border-color: var(--vg-border);
-        backdrop-filter: none !important;
-        -webkit-backdrop-filter: none !important;
-      }
+      #vg-main-content.vg-premium-workspace .vg-record-table,
       #vg-main-content.vg-flat-workspace .vg-record-table {
-        background: transparent !important;
-        border: none !important;
-        border-radius: 0 !important;
-        box-shadow: none !important;
+        background: var(--vg-panel-bg) !important;
+        border: 1px solid var(--vg-border) !important;
+        border-radius: var(--vg-radius-xl) !important;
+        box-shadow: var(--vg-shadow-card) !important;
+        overflow: hidden;
       }
-      #vg-main-content.vg-flat-workspace .vg-record-table .vg-record-table-scroll {
-        border-top: 1px solid var(--vg-border);
-        border-bottom: 1px solid var(--vg-border);
-      }
-      #vg-main-content.vg-flat-workspace .vg-record-table .vg-data-table th,
-      #vg-main-content.vg-flat-workspace .vg-record-table .vg-data-table td {
-        padding-left: 1rem;
-        padding-right: 1rem;
-      }
-      @media (min-width: 1024px) {
-        #vg-main-content.vg-flat-workspace .vg-record-table .vg-data-table th,
-        #vg-main-content.vg-flat-workspace .vg-record-table .vg-data-table td {
-          padding-left: 1.25rem;
-          padding-right: 1.25rem;
-        }
-      }
-      #vg-main-content.vg-flat-workspace .accent-ring {
-        box-shadow: none !important;
-      }
+      #vg-main-content.vg-premium-workspace .vg-module-nav,
       #vg-main-content.vg-flat-workspace .vg-module-nav {
-        box-shadow: none !important;
-        border-radius: 0.5rem;
-        background: var(--vg-bg);
+        border-radius: var(--vg-radius-lg);
+        background: var(--vg-panel-bg);
         border: 1px solid var(--vg-border);
+        box-shadow: var(--vg-shadow-sm);
       }
+      #vg-main-content.vg-premium-workspace .vg-module-banner,
       #vg-main-content.vg-flat-workspace .vg-module-banner {
-        box-shadow: none !important;
-        border-radius: 0.5rem;
+        border-radius: var(--vg-radius-xl);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        box-shadow: var(--vg-shadow-md);
+      }
+      #vg-main-content.vg-premium-workspace .glass,
+      #vg-main-content.vg-flat-workspace .glass {
+        background: color-mix(in srgb, var(--vg-panel-bg) 88%, transparent) !important;
+        border: 1px solid var(--vg-border) !important;
+        backdrop-filter: blur(12px) saturate(130%) !important;
+        -webkit-backdrop-filter: blur(12px) saturate(130%) !important;
+      }
+      .vg-page-head-inner {
+        background: var(--vg-panel-bg);
+        border: 1px solid var(--vg-border);
+        border-radius: var(--vg-radius-xl);
+        padding: 1rem 1.15rem;
+        box-shadow: var(--vg-shadow-sm);
+        backdrop-filter: blur(12px);
+      }
+      .vg-page-head-icon {
+        display: grid;
+        place-items: center;
+        width: 2.5rem;
+        height: 2.5rem;
+        border-radius: 0.85rem;
+        color: #fff;
+        box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 35%, transparent);
+        flex-shrink: 0;
+      }
+      .vg-status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        padding: 0.2rem 0.55rem;
+        border-radius: 999px;
+        border: 1px solid transparent;
+        line-height: 1.25;
+        white-space: nowrap;
+      }
+      .vg-status-badge::before {
+        content: "";
+        width: 5px;
+        height: 5px;
+        border-radius: 999px;
+        background: currentColor;
+        opacity: 0.85;
+      }
+      .vg-table-row {
+        transition: background-color 0.15s ease;
+      }
+      .vg-app-shell .vg-data-table tbody tr.vg-table-row:nth-child(even),
+      .vg-record-table .vg-data-table tbody tr.vg-table-row:nth-child(even) {
+        background: rgba(255, 255, 255, 0.025);
+      }
+      html.light .vg-app-shell .vg-data-table tbody tr.vg-table-row:nth-child(even),
+      html.light .vg-record-table .vg-data-table tbody tr.vg-table-row:nth-child(even) {
+        background: rgba(15, 23, 42, 0.025);
+      }
+      .vg-app-shell .vg-data-table tbody tr.vg-table-row:hover,
+      .vg-record-table .vg-data-table tbody tr.vg-table-row:hover {
+        background: color-mix(in srgb, var(--accent) 10%, transparent) !important;
+      }
+      .vg-line-table-wrap {
+        border-radius: var(--vg-radius-xl);
+        box-shadow: var(--vg-shadow-card);
         border: 1px solid var(--vg-border);
       }
-      #vg-main-content.vg-flat-workspace .vg-tab:hover,
-      #vg-main-content.vg-flat-workspace .vg-tab-group:hover,
-      #vg-main-content.vg-flat-workspace .hover\:-translate-y-0\.5:hover,
-      #vg-main-content.vg-flat-workspace .hover\:-translate-y-1:hover,
-      #vg-main-content.vg-flat-workspace .hover\:-translate-y-1\.5:hover {
-        transform: none !important;
+      .vg-workspace-fade {
+        animation: vg-welcome-in 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
       }
-      #vg-main-content.vg-flat-workspace .glass {
-        backdrop-filter: none !important;
-        -webkit-backdrop-filter: none !important;
-        background: var(--vg-input-bg) !important;
-        border: 1px solid var(--vg-input-border) !important;
+      .vg-btn-premium {
+        border-radius: 0.75rem;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease, background 0.18s ease;
       }
-      #vg-main-content.vg-flat-workspace .vg-home-module-card {
-        box-shadow: none !important;
+      .vg-btn-premium:hover:not(:disabled) {
+        transform: translateY(-1px);
       }
-      #vg-main-content.vg-flat-workspace .vg-home-module-card:hover {
-        box-shadow: none !important;
+      .vg-btn-solid {
+        color: #fff;
+        background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 78%, #312e81));
+        box-shadow: 0 6px 20px color-mix(in srgb, var(--accent) 38%, transparent);
+      }
+      .vg-btn-solid:hover:not(:disabled) {
+        filter: brightness(1.06);
+        box-shadow: 0 8px 26px color-mix(in srgb, var(--accent) 45%, transparent);
+      }
+      .vg-btn-soft {
+        background: color-mix(in srgb, var(--vg-panel-bg) 90%, var(--accent) 10%);
+        border: 1px solid var(--vg-border);
+        color: var(--vg-text);
+      }
+      .vg-btn-soft:hover:not(:disabled) {
+        border-color: color-mix(in srgb, var(--accent) 35%, var(--vg-border));
+        background: color-mix(in srgb, var(--accent) 12%, var(--vg-panel-bg));
+      }
+      .vg-kpi-card {
+        position: relative;
+        overflow: hidden;
+      }
+      .vg-kpi-card::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 40%, transparent));
+        opacity: 0.85;
       }
       @media (prefers-reduced-motion: reduce) {
         * {
@@ -815,8 +932,6 @@
       .vg-module-banner img {
         object-position: center 35%;
       }
-      .vg-internal-workspace {
-        max-width: 1600px;
       .vg-full-width-workspace,
       .vg-internal-workspace {
         max-width: none;
@@ -982,7 +1097,7 @@
           }
           VG.apiBase = "";
           VG.buildId = document.querySelector('meta[name="vg-build"]')?.content || "dev";
-          console.info("[Veraglo ERP] UI build:", VG.buildId, "— homepage grid needs v3+. Run: git pull origin main");
+          console.info("[Veraglo ERP] UI build:", VG.buildId, "— premium workspace needs v1+. Run: git pull origin main");
           var initInfo = await VG.store.init();
           if (VG.applyTypography) {
             var st = VG.store.settings();

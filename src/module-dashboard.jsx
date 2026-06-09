@@ -70,8 +70,7 @@
         <div className="flex flex-wrap gap-2">
           {actions.map((a) => (
             <button key={a.label} type="button" disabled={a.perm && !can(a.perm)} onClick={a.onClick}
-              className={"inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition " + (a.primary ? "text-white" : "glass chrome-hover") + (a.perm && !can(a.perm) ? " opacity-40 cursor-not-allowed" : "")}
-              style={a.primary ? { background: "var(--accent)" } : undefined}>
+              className={"vg-btn-premium inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold " + (a.primary ? "vg-btn-solid" : "vg-btn-soft") + (a.perm && !can(a.perm) ? " opacity-40 cursor-not-allowed" : "")}>
               <Icon name={a.icon || "plus"} size={16} />
               {a.label}
             </button>
@@ -202,7 +201,7 @@
               const meta = STOCK_HEALTH[h];
               const pct = it.reorder > 0 ? Math.min(100, Math.round((it.qty / it.reorder) * 100)) : 100;
               return (
-                <div key={it.id} className="rounded-xl glass p-4">
+                <div key={it.id} className="vg-panel vg-panel-hover rounded-xl p-4">
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="min-w-0">
                       <div className="font-mono text-[11px] opacity-55">{it.sku}</div>
@@ -236,7 +235,7 @@
     return (
       <div className="grid sm:grid-cols-2 gap-3">
         {insights.map((ins, i) => (
-          <div key={i} className="rounded-xl glass p-4 flex gap-3">
+          <div key={i} className="vg-panel vg-panel-hover rounded-xl p-4 flex gap-3">
             <span className="grid place-items-center w-10 h-10 rounded-xl shrink-0 text-white" style={{ background: ins.color || "var(--accent)" }}>
               <Icon name={ins.icon || "sparkle"} size={18} />
             </span>

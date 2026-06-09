@@ -276,7 +276,7 @@
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} className="border-b border-white/5 hover:bg-white/5 transition">
+                <tr key={r.id} className="vg-table-row border-b border-white/5">
                   <td className="px-4 py-3 font-mono text-xs opacity-70">{r.id}</td>
                   <td className="px-4 py-3 max-w-[280px] truncate">{r.label}</td>
                   <td className="px-4 py-3 hidden md:table-cell opacity-75">{r.owner}</td>
@@ -386,7 +386,7 @@
     const b = BANNERS[mod.id] || { c1: mod.accent, c2: "#22d3ee", desc: mod.tagline };
     const img = (VG.MODULE_BANNER_IMG && VG.MODULE_BANNER_IMG[mod.id]) || null;
     return (
-      <div className="vg-module-banner relative overflow-hidden rounded-lg mb-4 border border-white/10 animate-fade-up min-h-[112px] sm:min-h-[128px]">
+      <div className="vg-module-banner relative overflow-hidden rounded-2xl mb-4 border border-white/10 animate-fade-up min-h-[120px] sm:min-h-[140px] shadow-lg">
         {img && <img src={img} alt="" className="absolute inset-0 w-full h-full object-cover" loading="lazy" decoding="async" />}
         <div className="absolute inset-0" style={{ background: `linear-gradient(105deg, ${b.c1}e6 0%, ${b.c2}bb 45%, rgba(8,13,24,.88) 100%)` }} />
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/20" />
@@ -494,7 +494,7 @@
     const current = visibleSections.find((s) => s.id === section);
     const isDashboard = isDashboardSection(section);
     return (
-      <div className={"animate-fade-up vg-full-width-workspace" + (isDashboard ? "" : " vg-internal-workspace")}>
+      <div className={"vg-workspace-fade vg-full-width-workspace" + (isDashboard ? "" : " vg-internal-workspace")}>
         {isDashboard ? (
           <ModuleBanner mod={mod} actions={actions} />
         ) : current ? (

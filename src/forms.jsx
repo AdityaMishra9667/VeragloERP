@@ -125,7 +125,7 @@
   }
 
   /* Full-page workspace UI — Modal is an alias for inline InternalScreen (no portal overlay). */
-  VG._uiLayout = "flat-full-page";
+  VG._uiLayout = "premium-full-page";
 
   /* ============ Modal (legacy name — inline full-width InternalScreen in main workspace) ============ */
   function Modal({ open, onClose, title, subtitle, children, footer, dirty = false, breadcrumbs, backLabel }) {
@@ -729,7 +729,7 @@
             <tbody>
               {pageData.length === 0 && <tr><td colSpan={visibleCols.length + (showActions ? 1 : 0)} className="px-4 py-10 text-center opacity-50">{empty}</td></tr>}
               {pageData.map((r) => (
-                <tr key={r.id} className="border-b border-white/5 chrome-hover transition">
+                <tr key={r.id} className="vg-table-row border-b border-white/5">
                   {visibleCols.map((c) => <td key={c.key} className={"px-3 sm:px-4 " + cellPy + " " + (c.tdClass || "")} style={colWidths[c.key] ? { width: colWidths[c.key], minWidth: colWidths[c.key] } : undefined}>{c.render ? c.render(r) : r[c.key]}</td>)}
                   {showActions && (
                     <td className={"px-3 sm:px-4 " + cellPy}>
@@ -846,7 +846,12 @@
 
   /* ============ small atoms ============ */
   function StatusTag({ value, map }) {
-    const color = (map && map[value]) || "#94a3b8";
+    const defaults = {
+      Created: "#60a5fa", Pending: "#f59e0b", Approved: "#22c55e", Rejected: "#ef4444",
+      "In Progress": "#a855f7", Completed: "#34d399", Delayed: "#f97316", Closed: "#64748b",
+      Open: "#60a5fa", Won: "#22c55e", Lost: "#ef4444", Active: "#34d399", Inactive: "#94a3b8",
+    };
+    const color = (map && map[value]) || defaults[value] || "#94a3b8";
     return <Pill color={color}>{value}</Pill>;
   }
   /* Standard document action set for any printable transaction. `build` returns
@@ -868,14 +873,23 @@
       </>
     );
   }
-  function PageHead({ title, desc, children }) {
+  function PageHead({ title, desc, icon, accent, children }) {
     return (
-      <div className="vg-page-head vg-workspace-inset flex flex-wrap items-center justify-between gap-2 mb-3 pt-2">
-        <div className="min-w-0">
-          <h2 className="text-base sm:text-lg font-semibold font-display leading-tight">{title}</h2>
-          {desc && <p className="text-xs opacity-55 mt-0.5 leading-snug">{desc}</p>}
+      <div className="vg-page-head vg-workspace-inset mb-4 pt-2 animate-fade-up">
+        <div className="vg-page-head-inner flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-start gap-3 min-w-0">
+            {icon && (
+              <span className="vg-page-head-icon" style={{ background: accent || "var(--accent)" }}>
+                <Icon name={icon} size={18} />
+              </span>
+            )}
+            <div className="min-w-0">
+              <h2 className="text-base sm:text-lg font-semibold font-display leading-tight text-[var(--vg-heading)]">{title}</h2>
+              {desc && <p className="text-xs text-[var(--vg-text-muted)] mt-1 leading-snug max-w-3xl">{desc}</p>}
+            </div>
+          </div>
+          {children ? <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">{children}</div> : null}
         </div>
-        {children ? <div className="flex items-center gap-2 shrink-0">{children}</div> : null}
       </div>
     );
   }
