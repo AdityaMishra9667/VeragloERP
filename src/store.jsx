@@ -322,7 +322,7 @@
         loginBackground: "assets/happy-employees.png",
       },
       weatherLogin: {
-        enabled: true,
+        enabled: false,
         locationSource: "company",
         manualCity: "",
         refreshIntervalMins: 30,

@@ -62,9 +62,9 @@
       <Shell
         header={(
           <header className="flex items-center justify-between">
-            <img src={LOGO} alt="Veraglo" className="h-9 w-auto drop-shadow" />
-            <button type="button" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} className="glass rounded-xl p-2.5 text-white/90">
-              <Icon name={theme === "dark" ? "sun" : "moon"} size={18} />
+            <img src={LOGO} alt="Veraglo" className="h-9 w-auto" />
+            <button type="button" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} className="vg-sun-chip rounded-xl p-2.5">
+              <Icon name={theme === "dark" ? "sun" : "moon"} size={18} className="text-slate-600" />
             </button>
           </header>
         )}
@@ -142,27 +142,27 @@
         header={(
           <header className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <img src={LOGO} alt="Veraglo" className="h-9 w-auto drop-shadow" />
-              <span className="text-white/90 font-display font-semibold tracking-wide hidden sm:block">Veraglo ERP</span>
+              <img src={LOGO} alt="Veraglo" className="h-9 w-auto" />
+              <span className="text-slate-800 font-display font-semibold tracking-wide hidden sm:block">Veraglo ERP</span>
             </div>
-            <button onClick={() => setTheme(theme === "dark" ? "light" : "dark")} className="glass rounded-xl p-2.5 text-white/90 hover:bg-white/15 transition">
-              <Icon name={theme === "dark" ? "sun" : "moon"} size={18} />
+            <button onClick={() => setTheme(theme === "dark" ? "light" : "dark")} className="vg-sun-chip rounded-xl p-2.5 transition">
+              <Icon name={theme === "dark" ? "sun" : "moon"} size={18} className="text-slate-600" />
             </button>
           </header>
         )}
         hero={(
           <>
-            <Pill color="var(--login-accent, #a5b4fc)">Enterprise Resource Planning</Pill>
-            <h1 className="mt-4 text-4xl xl:text-5xl font-display font-bold leading-[1.1] text-balance">
+            <span className="vg-login-hero-pill">Enterprise Resource Planning</span>
+            <h1 className="mt-4 text-4xl xl:text-5xl font-display font-bold leading-[1.1] text-balance text-slate-900">
               One workspace for your whole factory floor.
             </h1>
-            <p className="mt-4 text-lg leading-relaxed opacity-80">
+            <p className="mt-4 text-lg leading-relaxed text-slate-600">
               Sales, production, quality, inventory, dispatch, accounts and people —
               each team gets its own focused, premium environment with role-based access.
             </p>
             <div className="mt-7 flex flex-wrap gap-2">
-              {["Role-based access", "15 modules", "Weather-aware login", "Real-time KPIs"].map((f) => (
-                <span key={f} className="glass rounded-full px-3.5 py-1.5 text-sm opacity-90">{f}</span>
+              {["Role-based access", "15 modules", "Premium workspace", "Real-time KPIs"].map((f) => (
+                <span key={f} className="vg-login-hero-chip">{f}</span>
               ))}
             </div>
           </>
@@ -869,15 +869,14 @@
     ));
     return (
       <Shell
-        showWidget={false}
         header={(
           <header className="flex items-center justify-between px-6 sm:px-10 py-6">
-            <img src={LOGO} alt="Veraglo" className="h-9 w-auto drop-shadow" />
+            <img src={LOGO} alt="Veraglo" className="h-9 w-auto" />
           </header>
         )}
       >
         <div className="flex items-center justify-center px-6 pb-14">
-          <div className="w-full max-w-lg glass-dark rounded-2xl p-8 animate-scale-in">
+          <div className="w-full max-w-lg login-panel rounded-2xl p-8 animate-scale-in">
             <div className="flex items-center gap-3 mb-6">
               <img src={LOGO} alt="" className="h-10" />
               <div>

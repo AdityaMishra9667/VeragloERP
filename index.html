@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0b1220" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
-    <meta name="vg-build" content="2026-06-sidebar-workspace-gap-v1" />
+    <meta name="vg-build" content="2026-06-sunlight-home-v1" />
     <title>Veraglo ERP — Enterprise Workspace</title>
     <link rel="icon" type="image/png" href="assets/veraglo-logo.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -115,6 +115,10 @@
         --vg-fw-semibold: 600;
         --vg-fw-heading: 650;
         --vg-letter-spacing: -0.015em;
+        --vg-sun-bg: #fffef9;
+        --vg-sun-ivory: #faf8f3;
+        --vg-sun-gold: #d97706;
+        --vg-sun-gold-soft: rgba(251, 191, 36, 0.14);
       }
       html.light {
         --vg-text: #1e293b;
@@ -1347,7 +1351,81 @@
       .vg-module-dashboard .vg-module-nav {
         margin-top: 0;
       }
-      /* Post-login module home — 5-column card grid (Tailwind + CSS fallback) */
+      /* Post-login module home — bright sunlight workspace */
+      .vg-module-home-sunlight {
+        background: var(--vg-sun-bg);
+      }
+      .vg-sunlight-bg {
+        pointer-events: none;
+        background:
+          radial-gradient(ellipse 100% 55% at 50% -8%, rgba(251, 191, 36, 0.14), transparent 58%),
+          radial-gradient(ellipse 70% 45% at 92% 8%, rgba(254, 243, 199, 0.35), transparent 50%),
+          radial-gradient(ellipse 55% 40% at 4% 92%, rgba(226, 232, 240, 0.4), transparent 48%),
+          linear-gradient(168deg, #fffef9 0%, #faf8f3 42%, #f5f3ee 100%);
+      }
+      .vg-sunlight-rays {
+        pointer-events: none;
+        background: conic-gradient(from 180deg at 50% -5%, transparent 0deg, rgba(253, 230, 138, 0.06) 18deg, transparent 36deg, rgba(253, 230, 138, 0.04) 54deg, transparent 72deg);
+        opacity: 0.65;
+        animation: vg-sun-rays 32s linear infinite;
+      }
+      @keyframes vg-sun-rays {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+      .vg-sunlight-glow {
+        pointer-events: none;
+        background: radial-gradient(ellipse 80% 40% at 50% -5%, rgba(251, 191, 36, 0.1), transparent 65%);
+        filter: blur(20px);
+      }
+      .vg-sun-header {
+        border-bottom: 1px solid rgba(214, 211, 209, 0.45);
+        background: rgba(255, 255, 255, 0.55);
+        backdrop-filter: blur(12px);
+        box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset;
+      }
+      .vg-sun-chip {
+        color: #57534e;
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid rgba(214, 211, 209, 0.65);
+        box-shadow: 0 1px 2px rgba(28, 25, 23, 0.04);
+        backdrop-filter: blur(8px);
+        transition: box-shadow 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+      }
+      .vg-sun-chip:hover {
+        border-color: rgba(251, 191, 36, 0.35);
+        box-shadow: 0 4px 14px rgba(217, 119, 6, 0.08);
+      }
+      .vg-sun-input {
+        border: 1px solid rgba(214, 211, 209, 0.8);
+        background: rgba(255, 255, 255, 0.85);
+        color: #1c1917;
+        box-shadow: 0 1px 3px rgba(28, 25, 23, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+        backdrop-filter: blur(10px);
+        transition: border-color 0.2s, box-shadow 0.2s;
+      }
+      .vg-sun-input::placeholder {
+        color: #a8a29e;
+      }
+      .vg-sun-input:focus {
+        outline: none;
+        border-color: rgba(217, 119, 6, 0.45);
+        box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.18), 0 1px 3px rgba(28, 25, 23, 0.06);
+      }
+      .vg-sun-cta {
+        color: #78350f;
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(254, 243, 199, 0.55) 100%);
+        border: 1px solid rgba(251, 191, 36, 0.35);
+        box-shadow: 0 4px 16px rgba(217, 119, 6, 0.1);
+      }
+      .vg-sun-cta:hover {
+        border-color: rgba(217, 119, 6, 0.45);
+        box-shadow: 0 8px 24px rgba(217, 119, 6, 0.14);
+      }
+      .vg-sun-empty {
+        background: rgba(255, 255, 255, 0.55);
+        border: 1px dashed rgba(214, 211, 209, 0.65);
+      }
       .vg-home-module-grid {
         display: grid !important;
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1373,55 +1451,87 @@
           gap: 1rem;
         }
       }
-      .vg-home-module-card {
-        background: rgba(255, 255, 255, 0.06);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        box-shadow: 0 4px 24px rgba(2, 8, 23, 0.25);
+      .vg-home-module-card,
+      .vg-home-sun-card {
+        background: linear-gradient(165deg, rgba(255, 255, 255, 0.92) 0%, rgba(255, 253, 248, 0.88) 100%);
+        border: 1px solid rgba(255, 255, 255, 0.95);
+        box-shadow:
+          0 1px 2px rgba(28, 25, 23, 0.04),
+          0 8px 24px rgba(28, 25, 23, 0.06),
+          inset 0 1px 0 rgba(255, 255, 255, 1);
+        backdrop-filter: blur(12px);
         height: 100%;
         min-height: 152px;
         max-height: 168px;
         width: 100%;
       }
-      .vg-home-module-card:hover {
-        border-color: rgba(255, 255, 255, 0.18);
-        box-shadow: 0 12px 40px rgba(2, 8, 23, 0.35);
+      .vg-home-sun-card-shine {
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.65) 0%, transparent 52%);
+        border-radius: inherit;
       }
-      html.light .vg-module-home {
-        color: #1e293b;
+      .vg-home-module-card:hover,
+      .vg-home-sun-card:hover {
+        border-color: rgba(251, 191, 36, 0.35);
+        box-shadow:
+          0 4px 8px rgba(28, 25, 23, 0.04),
+          0 16px 40px rgba(217, 119, 6, 0.1),
+          0 0 0 1px rgba(251, 191, 36, 0.12),
+          inset 0 1px 0 rgba(255, 255, 255, 1);
       }
-      html.light .vg-home-module-card {
+      .vg-home-sun-card--highlight {
+        border-color: rgba(217, 119, 6, 0.4);
+        box-shadow:
+          0 0 0 1px rgba(251, 191, 36, 0.2),
+          0 12px 32px rgba(217, 119, 6, 0.12),
+          inset 0 1px 0 rgba(255, 255, 255, 1);
+      }
+      .vg-home-sun-card--pinned {
+        border-color: rgba(251, 191, 36, 0.28);
+      }
+      /* Login sunlight shell (weather removed from UI) */
+      .vg-login-sunlight {
+        background: var(--vg-sun-bg);
+      }
+      .vg-login-sunlight .vg-sunlight-bg,
+      .vg-login-sunlight .vg-sunlight-rays,
+      .vg-login-sunlight .vg-sunlight-glow {
+        position: fixed;
+        inset: 0;
+      }
+      .vg-login-sunlight .login-panel {
         background: rgba(255, 255, 255, 0.92);
-        border-color: rgba(15, 23, 42, 0.08);
-        color: #0f172a;
+        border: 1px solid rgba(214, 211, 209, 0.55);
+        box-shadow:
+          0 1px 2px rgba(28, 25, 23, 0.04),
+          0 20px 50px rgba(28, 25, 23, 0.08),
+          inset 0 1px 0 rgba(255, 255, 255, 1);
+        backdrop-filter: blur(14px);
       }
-      html.light .vg-home-module-card .font-display,
-      html.light .vg-home-module-card .font-semibold {
-        color: #0f172a !important;
+      .vg-login-hero-pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.35rem 0.85rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #92400e;
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid rgba(251, 191, 36, 0.35);
+        box-shadow: 0 2px 8px rgba(217, 119, 6, 0.08);
       }
-      html.light .vg-home-module-card .text-white\/60 {
-        color: rgba(15, 23, 42, 0.62) !important;
+      .vg-login-hero-chip {
+        display: inline-flex;
+        padding: 0.4rem 0.9rem;
+        border-radius: 9999px;
+        font-size: 0.8125rem;
+        color: #57534e;
+        background: rgba(255, 255, 255, 0.65);
+        border: 1px solid rgba(214, 211, 209, 0.55);
+        backdrop-filter: blur(8px);
       }
-      /* Weather-aware login */
-      .vg-login-weather .vg-weather-widget {
-        color: #f8fafc;
-        background: rgba(15, 23, 42, 0.42);
-        border-color: rgba(255, 255, 255, 0.14);
-        box-shadow: 0 12px 40px rgba(2, 8, 23, 0.35);
-      }
-      .vg-login-weather[data-weather="clear"] .vg-weather-widget {
-        border-color: rgba(56, 189, 248, 0.25);
-      }
-      .vg-login-weather[data-weather="rain"] .vg-weather-widget,
-      .vg-login-weather[data-weather="cloudy"] .vg-weather-widget {
-        border-color: rgba(148, 163, 184, 0.22);
-      }
-      .vg-login-weather[data-weather="night"] .vg-weather-widget,
-      .vg-login-weather[data-weather="storm"] .vg-weather-widget {
-        border-color: rgba(129, 140, 248, 0.22);
-      }
-      .vg-login-weather img {
-        transition: opacity 0.7s ease, transform 8s ease;
-      }
+      /* Admin weather preview (settings page only) */
       .vg-weather-preview {
         aspect-ratio: 16 / 9;
         border-radius: 0.75rem;
@@ -1471,7 +1581,7 @@
           }
           VG.apiBase = "";
           VG.buildId = document.querySelector('meta[name="vg-build"]')?.content || "dev";
-          console.info("[Veraglo ERP] UI build:", VG.buildId, "— sidebar/workspace gap needs v1+. Run: git pull origin main");
+          console.info("[Veraglo ERP] UI build:", VG.buildId, "— sunlight homepage v1+. Run: git pull origin main");
           var initInfo = await VG.store.init();
           if (VG.applyTypography) {
             var st = VG.store.settings();

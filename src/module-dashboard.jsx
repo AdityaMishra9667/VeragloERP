@@ -44,7 +44,7 @@
   function KpiTile({ kpi, onClick, delay }) {
     return (
       <button type="button" onClick={onClick} disabled={!onClick} className="text-left w-full group">
-        <Card className="p-5 h-full transition-all duration-200 group-hover:shadow-glow group-disabled:opacity-90 animate-fade-up" style={{ animationDelay: (delay || 0) + "ms" }}>
+        <Card hover className="vg-kpi-card p-5 h-full group-disabled:opacity-90 animate-fade-up" style={{ animationDelay: (delay || 0) + "ms" }}>
           <div className="flex items-start justify-between gap-3">
             <span className="grid place-items-center w-11 h-11 rounded-2xl shrink-0 text-white shadow" style={{ background: kpi.color || "var(--accent)" }}>
               <Icon name={kpi.icon || "chart"} size={20} />
@@ -115,7 +115,7 @@
       <ul className="space-y-2">
         {tasks.map((t, i) => (
           <li key={i}>
-            <button type="button" onClick={() => go && go(t.section)} className="w-full flex items-center gap-3 text-sm glass rounded-xl p-3 text-left chrome-hover transition">
+            <button type="button" onClick={() => go && go(t.section)} className="w-full flex items-center gap-3 text-sm vg-panel rounded-xl p-3 text-left transition hover:shadow-md">
               <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: t.tone || "var(--accent)" }} />
               <span className="flex-1 min-w-0">{t.label}</span>
               <Pill color={t.tone || "var(--accent)"}>{t.count}</Pill>
