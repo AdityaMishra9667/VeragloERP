@@ -14,17 +14,342 @@
     "Material Returned": "#14b8a6", "Sent to Finished Goods Store": "#10b981", Closed: "#64748b", Planned: "#a78bfa", Released: "#22d3ee", Running: "#f59e0b", Completed: "#34d399"
   };
 
-  function woDoc(wo) {
-    const so = wo.salesOrderId ? store.get("salesOrders", wo.salesOrderId) : null;
-    const inner = `
-      <div class="vg-cols">
-        <div class="vg-card"><b>Work Order</b>No: ${wo.no}<br>Date: ${wo.date}<br>Line: ${wo.line || "—"}<br>Status: ${wo.status}</div>
-        <div class="vg-card"><b>Sales Order</b>${wo.salesOrderNoMasked || wo.salesOrderNo || so && so.no || "—"}<br>Customer: ${wo.customerId ? custName(wo.customerId) : "Restricted"}</div>
-        <div class="vg-card"><b>Output</b>Planned: ${wo.qtyPlanned || 0}<br>Produced: ${wo.qtyProduced || 0}<br>Target: ${wo.targetDate || "—"}</div>
+  const { Field, Text, Area, Num, DateF, Select, MasterSelect, Modal, InternalScreen, RecordTable, PageHead, StatusTag, printDocument, DocActions, exportCSV } = fx;
+
+  const custName = (id) => (store.get("customers", id) || {}).name || "—";
+  const canSeeCustomer = (roleKey) => store.canViewCustomerForRole ? store.canViewCustomerForRole(roleKey) : (roleKey === "admin");
+  const fmtTs = (ts) => ts ? new Date(ts).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "—";
+  const fmtDate = (d) => d || "—";
+  const priorityColor = (p) => (p === "Critical" ? "#ef4444" : p === "High Priority" ? "#f59e0b" : p === "Urgent" ? "#a855f7" : "#6366f1");
+
+  function woItem(wo) {
+    return wo.finishedItemId ? store.get("items", wo.finishedItemId) : (store.findItemBySku ? store.findItemBySku(wo.sku) : null);
+  }
+
+  function woBundle(wo, roleKey) {
+    const raw = store.get("workOrders", wo.id) || wo;
+    const view = store.workOrderViewForRole ? store.workOrderViewForRole(raw, roleKey) : raw;
+    const so = view.salesOrderId ? (store.salesOrderProductionView ? store.salesOrderProductionView(store.get("salesOrders", view.salesOrderId), roleKey) : store.get("salesOrders", view.salesOrderId)) : null;
+    const bom = view.bomId ? store.get("boms", view.bomId) : (store.getDefaultBom && store.getDefaultBom(view.finishedItemId || (woItem(view) || {}).id));
+    const mr = view.materialRequirementId ? store.get("materialRequirements", view.materialRequirementId) : null;
+    const item = woItem(view);
+    const timeline = store.workOrderTimeline ? store.workOrderTimeline(view.id) : [];
+    const reqs = bom && store.explodeBom ? store.explodeBom(bom.id, view.qtyPlanned || 1) : [];
+    return { wo: view, so, bom, mr, item, timeline, reqs };
+  }
+
+  function DetailField({ label, value, mono, full, className }) {
+    return (
+      <div className={(full ? "sm:col-span-2 lg:col-span-3 " : "") + (className || "")}>
+        <div className="text-[11px] uppercase tracking-wide text-[var(--vg-text-muted)] mb-1">{label}</div>
+        <div className={"text-sm whitespace-pre-wrap break-words " + (mono ? "vg-doc-no" : "")}>{value != null && value !== "" ? value : "—"}</div>
       </div>
-      <div class="vg-terms"><b>Product:</b> ${wo.product || ""} ${wo.sku ? "(" + wo.sku + ")" : ""}<br>${wo.remarks ? "<b>Remarks:</b> " + wo.remarks : ""}</div>
-      <div class="vg-sign"><div>Prepared by: <b>${wo.preparedBy || "—"}</b></div><div>Checked by: <b>—</b></div><div>Approved by: <b>—</b></div></div>`;
-    return { title: "Work Order", subtitle: wo.no, inner };
+    );
+  }
+
+  function WorkOrderTimeline({ steps }) {
+    if (!steps || !steps.length) return null;
+    return (
+      <Card className="p-4 mt-4">
+        <div className="text-xs font-semibold uppercase tracking-wider text-[var(--vg-text-muted)] mb-4">Production timeline</div>
+        <div className="relative">
+          <div className="hidden lg:block absolute left-[11px] top-2 bottom-2 w-px bg-white/10" aria-hidden="true" />
+          <div className="space-y-3">
+            {steps.map((s) => (
+              <div key={s.id} className="flex gap-3 items-start">
+                <span className={"relative z-[1] mt-0.5 grid place-items-center w-6 h-6 rounded-full shrink-0 text-[10px] font-bold "
+                  + (s.state === "done" ? "bg-emerald-500/20 text-emerald-400 ring-1 ring-emerald-500/30"
+                    : s.state === "current" ? "bg-amber-500/20 text-amber-400 ring-2 ring-amber-400/50"
+                      : "bg-white/5 text-[var(--vg-text-muted)] ring-1 ring-white/10")}>
+                  {s.state === "done" ? "✓" : s.state === "current" ? "●" : ""}
+                </span>
+                <div className="flex-1 min-w-0 pb-1">
+                  <div className={"text-sm font-medium " + (s.state === "pending" ? "opacity-55" : "")}>{s.label}</div>
+                  <div className="text-xs text-[var(--vg-text-muted)] mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                    {s.at && <span>{typeof s.at === "number" ? fmtTs(s.at) : fmtDate(s.at)}</span>}
+                    {s.by && <span>By {s.by}</span>}
+                    {s.note && <span>{s.note}</span>}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
+  function buildWoDoc(wo, roleKey) {
+    const { wo: w, so, bom, mr, item, timeline, reqs } = woBundle(wo, roleKey);
+    const co = store.company();
+    const matRows = (mr && mr.lines && mr.lines.length ? mr.lines : reqs).map((ln, i) => {
+      const sku = ln.sku || (store.get("items", ln.itemId) || {}).sku || "";
+      const name = ln.itemName || ln.name || (store.get("items", ln.itemId) || {}).name || "";
+      const req = Number(ln.requiredQty ?? ln.qty) || 0;
+      const issued = Number(ln.issuedQty) || 0;
+      const pending = Math.max(0, req - issued);
+      return `<tr><td>${i + 1}</td><td><span class="vg-doc-no">${sku}</span><br>${name}</td><td class="vg-right">${req} ${ln.unit || ""}</td><td class="vg-right">${issued}</td><td class="vg-right">${pending}</td><td>${ln.issueStatus || ln.issueMethod || "—"}</td></tr>`;
+    }).join("");
+    const tlRows = (timeline || []).map((s) => `<tr><td>${s.label}</td><td>${s.state === "done" ? "Complete" : s.state === "current" ? "In progress" : "Pending"}</td><td>${s.at ? (typeof s.at === "number" ? fmtTs(s.at) : fmtDate(s.at)) : "—"}</td><td>${s.by || "—"}</td></tr>`).join("");
+    const revRows = (w.revisionHistory || so && so.revisionHistory || []).slice().reverse().map((h) =>
+      `<tr><td>${h.woRevisionNo || h.revisionNo || h.revision || "—"}</td><td>SO Rev ${h.soRevisionNo != null ? h.soRevisionNo : (h.revisionNo != null ? h.revisionNo : "—")}</td><td>${h.reason || "—"}</td><td>${h.revisedAt ? fmtTs(h.revisedAt) : "—"}</td><td>${h.revisedBy || h.approvedBy || "—"}</td></tr>`
+    ).join("");
+    const inner = `
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:18px">
+        <div><img src="${co.logo || "assets/veraglo-logo.png"}" alt="" style="height:48px;max-width:180px;object-fit:contain" onerror="this.style.display='none'"/>
+        <div style="font-size:16pt;font-weight:700;margin-top:8px">${co.tradeName || co.name || "Veraglo ERP"}</div></div>
+        <div style="text-align:right;font-size:9pt;line-height:1.5">
+          <div style="font-size:14pt;font-weight:800">WORK ORDER</div>
+          <div><b>No:</b> ${w.no}</div>
+          <div><b>Date:</b> ${w.date || "—"}</div>
+          <div><b>Print:</b> ${new Date().toLocaleString("en-IN")}</div>
+        </div>
+      </div>
+      <div class="vg-cols">
+        <div class="vg-card"><b>Linked sales order</b>SO: ${w.salesOrderNo || "—"}<br>SO revision: ${w.soRevisionNo != null ? w.soRevisionNo : (so && so.revisionNo != null ? so.revisionNo : "—")}<br>WO revision: ${w.revisionNo || "Rev-00"}</div>
+        <div class="vg-card"><b>Product</b>SKU: ${w.sku || "—"}<br>${w.product || item && item.name || "—"}<br>Qty: ${w.qtyPlanned || 0} ${w.unit || item && item.unit || "Nos"}</div>
+        <div class="vg-card"><b>Schedule</b>Priority: ${w.priority || "Normal"}<br>Required: ${fmtDate(w.requiredDate)}<br>Dispatch: ${fmtDate(w.expectedDispatchDate || w.targetDate)}<br>Status: ${w.status}</div>
+      </div>
+      <div class="vg-terms"><b>Description</b><br>${(item && item.description) || w.product || "—"}</div>
+      <div class="vg-terms"><b>Technical specifications</b><br>${w.technicalSpec || "—"}</div>
+      <div class="vg-terms"><b>Special manufacturing instructions</b><br>${w.productionInstructions || "—"}</div>
+      <div class="vg-terms"><b>Internal remarks</b><br>${w.internalRemarks || w.remarks || "—"}</div>
+      <div class="vg-terms"><b>BOM reference</b> ${w.bomNo || "—"} · ${w.bomRevisionNo || "—"} · Drawing: ${w.drawingRef || "—"} · Docs: ${w.documentRef || "—"}</div>
+      ${revRows ? `<div style="margin-top:14px"><b>Revision history</b><table class="vg-tbl"><thead><tr><th>WO Rev</th><th>SO Rev</th><th>Reason</th><th>Date</th><th>By</th></tr></thead><tbody>${revRows}</tbody></table></div>` : ""}
+      <div style="margin-top:14px"><b>Material requirement summary</b><table class="vg-tbl"><thead><tr><th>#</th><th>Material</th><th class="vg-right">Required</th><th class="vg-right">Issued</th><th class="vg-right">Pending</th><th>Issue</th></tr></thead><tbody>${matRows || "<tr><td colspan=6>No materials</td></tr>"}</tbody></table></div>
+      <div style="margin-top:14px"><b>Production timeline</b><table class="vg-tbl"><thead><tr><th>Stage</th><th>Status</th><th>Date</th><th>By</th></tr></thead><tbody>${tlRows || "<tr><td colspan=4>No timeline</td></tr>"}</tbody></table></div>
+      <div class="vg-sign"><div>Prepared by: <b>${w.preparedBy || "—"}</b></div><div>Approved by: <b>${w.revisionApprovedBy || w.acceptedBy || "—"}</b></div><div>Production sign-off: <b>________________</b></div><div>For ${co.name || co.tradeName || "Company"}</div></div>`;
+    return { title: "Work Order", subtitle: w.no + (w.salesOrderNo ? " · SO " + w.salesOrderNo : ""), inner, docType: "Work Order" };
+  }
+
+  function exportWoExcel(bundle) {
+    const { wo: w, mr, reqs } = bundle;
+    const rows = (mr && mr.lines && mr.lines.length ? mr.lines : reqs).map((ln) => {
+      const item = store.get("items", ln.itemId) || {};
+      const req = Number(ln.requiredQty ?? ln.qty) || 0;
+      const issued = Number(ln.issuedQty) || 0;
+      return {
+        sku: ln.sku || item.sku || "",
+        name: ln.itemName || ln.name || item.name || "",
+        required: req,
+        issued,
+        pending: Math.max(0, req - issued),
+        unit: ln.unit || item.unit || "Nos",
+        availability: ln.issueStatus || (store.onHand(ln.itemId) >= req ? "Available" : "Short"),
+        alternate: ln.alternateItemId ? ((store.get("items", ln.alternateItemId) || {}).sku || ln.alternateItemId) : "",
+      };
+    });
+    exportCSV("Work-Order-" + w.no.replace(/\//g, "-"), [
+      { key: "sku", label: "SKU" }, { key: "name", label: "Material" }, { key: "required", label: "Required" },
+      { key: "issued", label: "Issued" }, { key: "pending", label: "Pending" }, { key: "unit", label: "Unit" },
+      { key: "availability", label: "Availability" }, { key: "alternate", label: "Alternate" },
+    ], rows);
+  }
+
+  function WorkOrderDetailPage({ wo, roleKey, can, onBack, onComplete, onRefresh }) {
+    const bundle = woBundle(wo, roleKey);
+    const { wo: w, so, bom, mr, item, timeline, reqs } = bundle;
+    const showCust = canSeeCustomer(roleKey);
+    const matLines = mr && mr.lines && mr.lines.length ? mr.lines : reqs.map((r) => {
+      const it = store.get("items", r.itemId) || {};
+      const req = Number(r.qty) || 0;
+      const avail = store.onHand(r.itemId);
+      return {
+        itemId: r.itemId, sku: r.sku || it.sku, itemName: r.name || it.name, description: it.description,
+        requiredQty: req, issuedQty: 0, pendingQty: req, unit: r.unit || it.unit || "Nos",
+        availableStock: avail, issueStatus: avail >= req ? "Ready" : "Shortage", issueMethod: r.issueMethod || "Manual",
+        alternateItemId: r.altItemId || "", alternateApproved: false, expectedAvailabilityDate: "",
+      };
+    });
+    const shortages = (matLines || []).filter((ln) => (Number(ln.pendingQty ?? (Number(ln.requiredQty) - Number(ln.issuedQty))) || 0) > 0 || ln.issueStatus === "Shortage" || (Number(ln.availableStock) || 0) < (Number(ln.requiredQty) || 0));
+
+    return (
+      <InternalScreen
+        onBack={onBack}
+        backLabel="Back to work orders"
+        breadcrumbs={[
+          { label: "Production Planning", onClick: onBack },
+          { label: "Work Orders", onClick: onBack },
+          { label: w.no },
+        ]}
+        title={"Work Order " + w.no}
+        subtitle={[w.product, w.salesOrderNo ? "SO " + w.salesOrderNo : null, showCust && w.customerId ? custName(w.customerId) : null].filter(Boolean).join(" · ")}
+        footer={<>
+          {can("print") && <DocActions docType="Work Order" build={() => buildWoDoc(w, roleKey)} onEmail={() => {
+            const subject = encodeURIComponent("Work Order " + w.no);
+            const body = encodeURIComponent("Work order " + w.no + " — please refer to the attached PDF/print copy from Veraglo ERP for manufacturing record.");
+            window.location.href = "mailto:?subject=" + subject + "&body=" + body;
+          }} />}
+          {can("export") && <Button variant="soft" icon="download" onClick={() => exportWoExcel(bundle)}>Export Excel</Button>}
+          {can("edit") && bom && (
+            <Button variant="soft" icon="check" onClick={() => { store.useExistingBomForWorkOrder(w.id, bom.id, roleKey); VG.toast("BOM attached to WO"); onRefresh(); }}>Use this BOM</Button>
+          )}
+          {!bom && can("edit") && (
+            <Button variant="soft" icon="plus" onClick={() => {
+              const created = store.createWorkOrderSpecificBom(w.id, { name: "WO " + w.no + " BOM", qtyOutput: 1, lines: [] }, roleKey);
+              if (created) VG.toast("WO-specific BOM created: " + created.no);
+              onRefresh();
+            }}>Create WO BOM</Button>
+          )}
+          {w.bomId && can("approve") && (
+            <Button variant="soft" icon="shield" onClick={() => { store.approveBomForWorkOrder(w.id, roleKey); VG.toast("BOM approved for WO"); onRefresh(); }}>Approve BOM</Button>
+          )}
+          {w.bomId && can("edit") && (
+            <Button variant="soft" icon="edit" onClick={() => { const reason = window.prompt("Revision reason (mandatory):", ""); if (!reason) return; store.reviseWorkOrderBom(w.id, { reason }, roleKey); VG.toast("BOM revision raised"); onRefresh(); }}>Revise BOM</Button>
+          )}
+          {bom && (w.status === "Production Planned" || w.status === "Production In Progress" || w.status === "Released" || w.status === "Running") && can("edit") && (
+            <Button variant="soft" icon="logout" onClick={() => {
+              const res = store.issueBomForWorkOrder(w.id, roleKey, { allowPartial: true });
+              if (!res.ok) VG.toast(res.reason || "Issue failed", "error");
+              else { VG.toast("Issued " + res.issued.length + " component(s)" + (res.skipped.length ? " · " + res.skipped.length + " short" : ""), res.skipped.length ? "warn" : "success"); onRefresh(); }
+            }}>Issue BOM materials</Button>
+          )}
+          {w.revisionPendingAck && can("edit") && (
+            <Button variant="soft" onClick={() => { store.acknowledgeWorkOrderRevision(w.id, roleKey); VG.toast("Revision acknowledged"); onRefresh(); }}>Acknowledge revision</Button>
+          )}
+          {w.status !== "Completed" && w.status !== "Production Completed" && can("edit") && (
+            <Button icon="check" onClick={() => onComplete(w)}>Mark complete</Button>
+          )}
+        </>}
+      >
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <StatusTag value={w.status} map={WO_STATUS} />
+          <Pill color={priorityColor(w.priority)}>{w.priority || "Normal"}</Pill>
+          {w.revisionPendingAck && <Pill color="#f59e0b">Revision pending acknowledgement</Pill>}
+          {w.productionStatus && <Pill color="#6366f1">{w.productionStatus}</Pill>}
+          {w.issueStatus && w.issueStatus !== "Not Issued" && <Pill color="#8b5cf6">{w.issueStatus}</Pill>}
+        </div>
+
+        <Card className="p-4 mb-4">
+          <div className="text-xs font-semibold uppercase tracking-wider text-[var(--vg-text-muted)] mb-3">Work order details</div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">
+            <DetailField label="Work order number" value={w.no} mono />
+            <DetailField label="Work order date" value={w.date} />
+            <DetailField label="Current status" value={w.status} />
+            <DetailField label="Linked sales order" value={w.salesOrderNo} mono />
+            <DetailField label="Sales order revision" value={w.soRevisionNo != null ? w.soRevisionNo : (so && so.revisionNo)} />
+            <DetailField label="Work order revision" value={w.revisionNo || "Rev-00"} />
+            <DetailField label="Product / item SKU" value={w.sku} mono />
+            <DetailField label="Product / item name" value={w.product || (item && item.name)} />
+            <DetailField label="Quantity to manufacture" value={(w.qtyPlanned || 0) + " " + (w.unit || (item && item.unit) || "Nos")} />
+            <DetailField label="Qty produced" value={(w.qtyProduced || 0) + " / " + (w.qtyPlanned || 0)} />
+            <DetailField label="Priority" value={w.priority || "Normal"} />
+            <DetailField label="Required delivery date" value={w.requiredDate || w.targetDate} />
+            <DetailField label="Production planned start" value={mr && mr.productionStartDate ? mr.productionStartDate : (w.acceptedAt ? fmtTs(w.acceptedAt) : "—")} />
+            <DetailField label="Production planned completion" value={mr && mr.expectedProductionDate ? mr.expectedProductionDate : "—"} />
+            <DetailField label="Expected dispatch date" value={w.expectedDispatchDate || w.targetDate || w.requiredDate} />
+            <DetailField label="BOM number" value={w.bomNo || (bom && bom.no)} mono />
+            <DetailField label="BOM revision" value={w.bomRevisionNo || (bom && bom.revision)} />
+            <DetailField label="Drawing / document reference" value={[w.drawingRef, w.documentRef].filter(Boolean).join(" · ")} />
+            <DetailField label="Prepared by" value={w.preparedBy} />
+            <DetailField label="Accepted by" value={w.acceptedBy} />
+            <DetailField label="Complete item description" value={(item && item.description) || w.product} full />
+            <DetailField label="Technical specifications" value={w.technicalSpec} full />
+            <DetailField label="Special manufacturing instructions" value={w.productionInstructions} full />
+            <DetailField label="Internal remarks" value={w.internalRemarks || w.remarks} full />
+          </div>
+        </Card>
+
+        {(so || (w.revisionHistory || []).length > 0) && (
+          <Card className="p-4 mb-4">
+            <div className="text-xs font-semibold uppercase tracking-wider text-[var(--vg-text-muted)] mb-3">Sales order → work order revision tracking</div>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+              <DetailField label="Linked SO number" value={w.salesOrderNo} mono />
+              <DetailField label="SO revision (latest approved)" value={w.soRevisionNo != null ? w.soRevisionNo : (so && so.revisionNo)} />
+              <DetailField label="WO revision" value={w.revisionNo || "Rev-00"} />
+              <DetailField label="Latest approved" value={w.revisionApprovedAt ? fmtTs(w.revisionApprovedAt) + (w.revisionApprovedBy ? " · " + w.revisionApprovedBy : "") : (so && so.revisionApprovedAt ? fmtTs(so.revisionApprovedAt) : "—")} />
+            </div>
+            {(w.revisionHistory || so && so.revisionHistory || []).length > 0 ? (
+              <div className="overflow-x-auto rounded-xl border border-white/10">
+                <table className="w-full text-sm vg-tbl">
+                  <thead><tr><th>WO Rev</th><th>SO Rev</th><th>Reason</th><th>Revision date</th><th>Revised / approved by</th></tr></thead>
+                  <tbody>
+                    {(w.revisionHistory && w.revisionHistory.length ? w.revisionHistory : (so && so.revisionHistory) || []).slice().reverse().map((h, i) => (
+                      <tr key={i} className="border-t border-white/5">
+                        <td className="px-3 py-2 vg-doc-no">{h.woRevisionNo || h.revision || ("Rev-" + String(h.revisionNo || 0).padStart(2, "0"))}</td>
+                        <td className="px-3 py-2">{h.soRevisionNo != null ? h.soRevisionNo : h.revisionNo}</td>
+                        <td className="px-3 py-2">{h.reason || "—"}</td>
+                        <td className="px-3 py-2">{h.revisedAt ? fmtTs(h.revisedAt) : (h.approvedAt ? fmtTs(h.approvedAt) : "—")}</td>
+                        <td className="px-3 py-2">{h.revisedBy || h.approvedBy || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-sm text-[var(--vg-text-muted)]">No revision history recorded yet.</p>
+            )}
+            {!showCust && <p className="text-xs text-[var(--vg-text-muted)] mt-3">Customer commercial details are hidden for your role. Contact Admin if you need access.</p>}
+          </Card>
+        )}
+
+        <Card className="p-4 mb-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div className="text-xs font-semibold uppercase tracking-wider text-[var(--vg-text-muted)]">Material &amp; BOM information</div>
+            {mr && <Pill color="#8b5cf6">{mr.no}</Pill>}
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+            <DetailField label="BOM selected" value={w.bomNo || (bom && bom.no) || "None"} mono />
+            <DetailField label="BOM revision" value={w.bomRevisionNo || (bom && bom.revision) || "—"} />
+            <DetailField label="Material issue status" value={w.issueStatus || "Not Issued"} />
+            <DetailField label="Issue method" value="Manual / backflush (per BOM line)" />
+          </div>
+          {matLines.length === 0 ? (
+            <p className="text-sm text-[var(--vg-text-muted)]">No BOM or material requirement linked yet.</p>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-white/10">
+              <table className="w-full text-sm vg-record-table">
+                <thead><tr>
+                  <th>Material</th><th className="text-right">Required</th><th className="text-right">Issued</th><th className="text-right">Pending</th>
+                  <th>Availability</th><th>Expected date</th><th>Issue</th><th>Alternate</th>
+                </tr></thead>
+                <tbody>
+                  {matLines.map((ln, i) => {
+                    const itemRow = store.get("items", ln.itemId) || {};
+                    const req = Number(ln.requiredQty ?? ln.qty) || 0;
+                    const issued = Number(ln.issuedQty) || 0;
+                    const pending = Number(ln.pendingQty) || Math.max(0, req - issued);
+                    const avail = Number(ln.availableStock != null ? ln.availableStock : store.onHand(ln.itemId));
+                    const short = pending > 0 || avail < req;
+                    return (
+                      <tr key={i} className="border-t border-white/5">
+                        <td className="px-3 py-2">
+                          <div className="vg-doc-no text-xs">{ln.sku || itemRow.sku}</div>
+                          <div>{ln.itemName || ln.name || itemRow.name}</div>
+                        </td>
+                        <td className="px-3 py-2 text-right">{req} {ln.unit || itemRow.unit || "Nos"}</td>
+                        <td className="px-3 py-2 text-right">{issued}</td>
+                        <td className={"px-3 py-2 text-right " + (pending > 0 ? "text-amber-400" : "")}>{pending}</td>
+                        <td className="px-3 py-2">{ln.issueStatus || (short ? "Shortage" : "Available")}</td>
+                        <td className="px-3 py-2">{ln.expectedAvailabilityDate || ln.expectedReceiptDate || "—"}</td>
+                        <td className="px-3 py-2">{ln.issueMethod || "Manual"}</td>
+                        <td className="px-3 py-2">
+                          {ln.alternateItemId ? (
+                            <span>{(store.get("items", ln.alternateItemId) || {}).sku || ln.alternateItemId}{ln.alternateApproved ? " ✓" : ""}</span>
+                          ) : "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {shortages.length > 0 && (
+            <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
+              <div className="text-sm font-semibold text-amber-200 mb-2">Shortage list ({shortages.length})</div>
+              <ul className="text-sm space-y-1 opacity-90">
+                {shortages.map((ln, i) => (
+                  <li key={i}>{ln.sku || (store.get("items", ln.itemId) || {}).sku} — pending {Number(ln.pendingQty) || Math.max(0, (Number(ln.requiredQty) || 0) - (Number(ln.issuedQty) || 0))} {ln.unit || "Nos"}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </Card>
+
+        <WorkOrderTimeline steps={timeline} />
+      </InternalScreen>
+    );
   }
 
   function CompleteModal({ wo, onClose, roleKey }) {
@@ -70,7 +395,7 @@
     const cols = [
       { key: "no", label: "WO #", render: (r) => <span className="font-mono text-xs">{r.no}</span> },
       { key: "date", label: "Date" },
-      { key: "salesOrderNo", label: "Sales order", render: (r) => r.salesOrderNoMasked || r.salesOrderNo || "—" },
+      { key: "salesOrderNo", label: "Sales order", render: (r) => r.salesOrderNo || "—" },
       ...(showCust ? [{ key: "customerId", label: "Customer", render: (r) => custName(r.customerId), csv: (r) => custName(r.customerId) }] : []),
       { key: "product", label: "Product" },
       { key: "bomNo", label: "BOM", render: (r) => r.bomNo || "—" },
@@ -97,61 +422,15 @@
       return <CompleteModal wo={complete} onClose={(ok) => { setComplete(null); if (ok) setView(null); }} roleKey={roleKey} />;
     }
     if (view) {
-      const wo = store.get("workOrders", view.id) || view;
-      const bom = wo.bomId ? store.get("boms", wo.bomId) : (store.getDefaultBom && store.getDefaultBom(wo.finishedItemId || (store.findItemBySku && store.findItemBySku(wo.sku) || {}).id));
-      const reqs = bom && store.explodeBom ? store.explodeBom(bom.id, wo.qtyPlanned || 1) : [];
       return (
-          <InternalScreen onBack={() => setView(null)} backLabel="Back to work orders" title={"Work Order " + wo.no} subtitle={custName(wo.customerId)}
-            footer={<>
-              <DocActions build={() => woDoc(wo)} />
-              {can("edit") && bom && (
-                <Button variant="soft" icon="check" onClick={() => { store.useExistingBomForWorkOrder(wo.id, bom.id, roleKey); VG.toast("BOM attached to WO"); setView(store.get("workOrders", wo.id)); }}>Use this BOM</Button>
-              )}
-              {!bom && can("edit") && (
-                <Button variant="soft" icon="plus" onClick={() => {
-                  const created = store.createWorkOrderSpecificBom(wo.id, { name: "WO " + wo.no + " BOM", qtyOutput: 1, lines: [] }, roleKey);
-                  if (created) VG.toast("WO-specific BOM created: " + created.no);
-                  setView(store.get("workOrders", wo.id));
-                }}>Create WO BOM</Button>
-              )}
-              {wo.bomId && can("approve") && (
-                <Button variant="soft" icon="shield" onClick={() => { store.approveBomForWorkOrder(wo.id, roleKey); VG.toast("BOM approved for WO"); setView(store.get("workOrders", wo.id)); }}>Approve BOM</Button>
-              )}
-              {wo.bomId && can("edit") && (
-                <Button variant="soft" icon="edit" onClick={() => { const reason = window.prompt("Revision reason (mandatory):", ""); if (!reason) return; store.reviseWorkOrderBom(wo.id, { reason }, roleKey); VG.toast("BOM revision raised"); setView(store.get("workOrders", wo.id)); }}>Revise BOM</Button>
-              )}
-              {bom && (wo.status === "Production Planned" || wo.status === "Production In Progress" || wo.status === "Released" || wo.status === "Running") && can("edit") && (
-                <Button variant="soft" icon="logout" onClick={() => {
-                  const res = store.issueBomForWorkOrder(wo.id, roleKey, { allowPartial: true });
-                  if (!res.ok) VG.toast(res.reason || "Issue failed", "error");
-                  else VG.toast("Issued " + res.issued.length + " component(s)" + (res.skipped.length ? " · " + res.skipped.length + " short" : ""), res.skipped.length ? "warn" : "success");
-                }}>Issue BOM materials</Button>
-              )}
-              {wo.status !== "Completed" && can("edit") && <Button icon="check" onClick={() => { setComplete(wo); }}>Mark complete</Button>}
-            </>}>
-            <StatusTag value={wo.status} map={WO_STATUS} />
-            <div className="grid sm:grid-cols-4 gap-3 mt-4 text-sm">
-              <Card className="p-3"><div className="text-[11px] uppercase opacity-55">SO</div>{wo.salesOrderNo}</Card>
-              <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Product</div>{wo.product}</Card>
-              <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Qty</div>{wo.qtyProduced || 0} / {wo.qtyPlanned}</Card>
-              <Card className="p-3"><div className="text-[11px] uppercase opacity-55">BOM</div>{bom ? <span className="font-mono text-xs">{bom.no}</span> : <span className="text-rose-400/80">None</span>}</Card>
-            </div>
-            {reqs.length > 0 && (
-              <div className="mt-4">
-                <div className="text-xs font-semibold uppercase opacity-55 mb-2">Component requirements</div>
-                <div className="overflow-x-auto rounded-xl glass">
-                  <table className="w-full text-xs">
-                    <thead><tr className="opacity-55 text-[10px] uppercase border-b border-white/10"><th className="text-left px-3 py-2">Item</th><th className="text-right px-3 py-2">Qty</th><th className="text-right px-3 py-2">Stock</th></tr></thead>
-                    <tbody>{reqs.map((r, i) => {
-                      const it = store.get("items", r.itemId);
-                      const avail = store.onHand(r.itemId);
-                      return <tr key={i} className="border-b border-white/5"><td className="px-3 py-1.5">{it ? (VG.itemMfr ? VG.itemMfr.label(it) : it.sku + " — " + it.name) : r.itemId}</td><td className="px-3 py-1.5 text-right">{r.qty} {r.unit}</td><td className={"px-3 py-1.5 text-right " + (avail < r.qty ? "text-amber-400" : "")}>{avail}</td></tr>;
-                    })}</tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </InternalScreen>
+        <WorkOrderDetailPage
+          wo={view}
+          roleKey={roleKey}
+          can={can}
+          onBack={() => setView(null)}
+          onComplete={setComplete}
+          onRefresh={() => setView(store.get("workOrders", view.id) || view)}
+        />
       );
     }
     return (

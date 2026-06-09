@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0b1220" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
-    <meta name="vg-build" content="2026-06-global-typography-v1" />
+    <meta name="vg-build" content="2026-06-wo-detail-v1" />
     <title>Veraglo ERP — Enterprise Workspace</title>
     <link rel="icon" type="image/png" href="assets/veraglo-logo.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -1648,7 +1648,7 @@
           }
           VG.apiBase = "";
           VG.buildId = document.querySelector('meta[name="vg-build"]')?.content || "dev";
-          console.info("[Veraglo ERP] UI build:", VG.buildId, "— global typography v1+. Run: git pull origin main");
+          console.info("[Veraglo ERP] UI build:", VG.buildId, "— work order detail v1+. Run: git pull origin main");
           var initInfo = await VG.store.init();
           if (VG.applyTypography) {
             var st = VG.store.settings();

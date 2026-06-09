@@ -1392,11 +1392,8 @@
     workOrderViewForRole(wo, roleKey) {
       if (!wo) return wo;
       if (this.canViewCustomerForRole(roleKey)) return wo;
-      const masked = wo.salesOrderNo ? this._soMask(wo.salesOrderNo) : "";
       return {
         ...wo,
-        salesOrderNoMasked: masked,
-        salesOrderNo: masked || wo.salesOrderNo,
         customerId: "",
         customerName: "",
         customerPoRef: "",
@@ -1405,6 +1402,67 @@
         contact: "",
         dispatchAddress: "",
       };
+    },
+    salesOrderProductionView(so, roleKey) {
+      if (!so) return null;
+      if (this.canViewCustomerForRole(roleKey)) return so;
+      return {
+        id: so.id,
+        no: so.no,
+        date: so.date,
+        revisionNo: so.revisionNo,
+        revisionHistory: so.revisionHistory,
+        revisionApprovedAt: so.revisionApprovedAt,
+        revisionApprovedBy: so.revisionApprovedBy,
+        revisionPendingApproval: so.revisionPendingApproval,
+        deliveryDate: so.deliveryDate,
+        priority: so.priority,
+        technicalSpec: so.technicalSpec,
+        specialInstructions: so.specialInstructions,
+        internalRemarks: so.internalRemarks,
+        drawingRef: so.drawingRef,
+        stage: so.stage,
+        status: so.status,
+      };
+    },
+    workOrderTimeline(woId) {
+      const wo = this.get("workOrders", woId);
+      if (!wo) return [];
+      const mr = wo.materialRequirementId ? this.get("materialRequirements", wo.materialRequirementId) : null;
+      const bom = wo.bomId ? this.get("boms", wo.bomId) : null;
+      const qc = wo.qcInspectionId ? this.get("qcInspections", wo.qcInspectionId) : (DB.qcInspections || []).find((q) => q.workOrderId === woId);
+      const fg = (DB.finishedGoodsTransfers || []).find((f) => f.workOrderId === woId);
+      const dispatch = (DB.dispatchQueue || []).find((d) => d.workOrderId === woId)
+        || (DB.shipments || []).find((s) => s.salesOrderId === wo.salesOrderId && s.status !== "Cancelled");
+      const statusOrder = this.workOrderStatuses();
+      const legacy = { Planned: "Production Planned", Released: "Production In Progress", Running: "Production In Progress", Completed: "Production Completed" };
+      const curStatus = legacy[wo.status] || wo.status;
+      const curIdx = Math.max(0, statusOrder.indexOf(curStatus));
+
+      const steps = [
+        { id: "received", label: "Work Order received from Sales", rank: 0, done: true, at: wo.date, by: wo.preparedBy },
+        { id: "bom-selected", label: "BOM selected/created", rank: 1, done: !!wo.bomId, at: bom && bom.date, by: bom && (bom.createdBy || bom.preparedBy) },
+        { id: "bom-approved", label: "BOM approved", rank: 2, done: !!wo.bomApprovedAt || (bom && bom.approvalStatus === "Approved"), at: wo.bomApprovedAt || (bom && bom.approvedAt), by: wo.bomApprovedBy || (bom && bom.approvedBy) },
+        { id: "mr-generated", label: "Material requirement generated", rank: 3, done: !!wo.materialRequirementId, at: mr && mr.date, by: mr && mr.requestedBy },
+        { id: "mr-checked", label: "Material availability checked", rank: 4, done: curIdx >= 4 || !!(mr && (mr.availabilityCheckedAt || (mr.lines || []).some((l) => l.availableStock != null))), at: mr && mr.availabilityCheckedAt },
+        { id: "material-issued", label: "Material issued partially/fully", rank: 5, done: !!wo.materialsIssuedAt || (wo.issueStatus && wo.issueStatus !== "Not Issued"), at: wo.materialsIssuedAt || (mr && mr.lastIssuedAt), by: mr && mr.lastIssuedBy },
+        { id: "planned", label: "Production planned", rank: 6, done: !!wo.acceptedAt || curIdx >= 6, at: wo.acceptedAt, by: wo.acceptedBy },
+        { id: "started", label: "Production started", rank: 7, done: curIdx >= 7 && curStatus !== "Production Planned", at: wo.releasedAt || (curStatus === "Production In Progress" ? wo.materialsIssuedAt : null) },
+        { id: "completed", label: "Production completed", rank: 8, done: !!wo.completedAt || curIdx >= 8, at: wo.completedAt, by: wo.operatorName },
+        { id: "fg-transfer", label: "Finished goods transferred", rank: 9, done: !!fg, at: fg && fg.date, by: fg && fg.sentBy },
+        { id: "qc-pending", label: "QC pending", rank: 10, done: !!qc, at: qc && qc.date, note: qc && qc.status },
+        { id: "qc-result", label: "QC accepted/rejected", rank: 11, done: !!(qc && qc.result), at: qc && qc.completedAt, note: qc && qc.result },
+        { id: "dispatch", label: "Sent to dispatch", rank: 12, done: !!dispatch, at: dispatch && (dispatch.date || dispatch.createdAt) },
+        { id: "closed", label: "Closed", rank: 13, done: wo.status === "Closed", at: wo.closedAt },
+      ];
+
+      let foundCurrent = false;
+      return steps.map((s) => {
+        let state = "pending";
+        if (s.done) state = "done";
+        else if (!foundCurrent) { state = "current"; foundCurrent = true; }
+        return { ...s, state };
+      });
     },
     createProductionRequestFromSO(soId, actor) {
       const so = this.get("salesOrders", soId);
@@ -1418,10 +1476,12 @@
       const wo = this.create("workOrders", {
         no: this.nextNo("WO", so.date), date: todayISO(), salesOrderId: soId, salesOrderNo: so.no,
         customerId: so.customerId, customerPoRef: so.customerPoRef || "", priority: so.priority || "Normal",
-        product: line.name || line.desc || line.sku || "Order " + so.no, sku: line.sku || "", technicalSpec: so.technicalSpec || line.spec || "",
-        productionInstructions: so.specialInstructions || "", drawingRef: so.drawingRef || "", documentRef: so.documents || "",
+        product: line.name || line.desc || line.sku || "Order " + so.no, sku: line.sku || "", unit: line.unit || (fgItem && fgItem.unit) || "Nos",
+        technicalSpec: so.technicalSpec || line.spec || "", productionInstructions: so.specialInstructions || "",
+        internalRemarks: so.internalRemarks || "", drawingRef: so.drawingRef || "", documentRef: so.documents || "",
         finishedItemId: fgItem ? fgItem.id : "", bomId: bom ? bom.id : "", bomNo: bom ? bom.no : "",
         qtyPlanned: qty, qtyProduced: 0, targetDate: so.deliveryDate || "", requiredDate: so.deliveryDate || "",
+        expectedDispatchDate: so.deliveryDate || "", soRevisionNo: Number(so.revisionNo || 0),
         status: bom ? "Received from Sales" : "BOM Pending", productionStatus: "Not Started", issueStatus: "Not Issued", preparedBy: actor,
         revisionNo: "Rev-00", revisionIndex: 0, revisionHistory: [],
         bomRevisionNo: bom ? (bom.revision || "Rev-00") : "",
@@ -1455,8 +1515,16 @@
           priority: so.priority || wo.priority,
           technicalSpec: so.technicalSpec || wo.technicalSpec,
           productionInstructions: so.specialInstructions || wo.productionInstructions,
+          internalRemarks: so.internalRemarks || wo.internalRemarks,
           requiredDate: so.deliveryDate || wo.requiredDate,
-          revisionNo: revNo,
+          expectedDispatchDate: so.deliveryDate || wo.expectedDispatchDate,
+          soRevisionNo: revNo,
+          revisionNo: "Rev-" + String(revNo).padStart(2, "0"),
+          revisionHistory: (wo.revisionHistory || []).concat({
+            revisionNo: revNo, soRevisionNo: revNo, woRevisionNo: "Rev-" + String(revNo).padStart(2, "0"),
+            reason: so.revisionReason || so.lastRevisionReason || "Sales order revision approved",
+            revisedAt: approvedAt, revisedBy: so.revisionApprovedBy || actor, approvedAt, approvedBy: actor,
+          }),
           revisionPendingAck: true,
           revisionApprovedAt: approvedAt,
           revisionApprovedBy: actor,
