@@ -3,7 +3,7 @@
   const { useState, useMemo, useEffect, useRef } = React;
   const ui = VG.ui, fx = VG.fx, store = VG.store, inr = VG.fmt.inr, today = VG.fmt.todayISO;
   const { Icon, Button, Pill, Card } = ui;
-  const { Field, Text, Area, Num, DateF, Select, MasterSelect, Modal, InternalScreen, RecordTable, PageHead, StatusTag, printDocument, DocActions } = fx;
+  const { Field, Text, Area, Num, DateF, Select, MasterSelect, Modal, InternalScreen, RecordTable, PageHead, StatusTag, printDocument, DocActions, TransactionLinesShell, exportCSV } = fx;
   const MasterForm = VG.MasterForm;
 
   const itemName = (id) => (VG.itemDisplay && VG.itemDisplay.tableLabel(id)) || (VG.itemMfr && VG.itemMfr.label(id)) || "—";
@@ -12,6 +12,7 @@
   const PartNumberSuggest = (VG.itemMfr && VG.itemMfr.PartNumberSuggest) || function () { return null; };
   const readDatasheet = (VG.itemMfr && VG.itemMfr.readDatasheet) || function (file, done) { done(null, null); };
   const locName = (id) => (store.get("locations", id) || {}).name || "—";
+  const itemLocName = (id) => (store.itemLocationLabel ? store.itemLocationLabel(id) : (store.get("itemLocations", id) || {}).name) || "—";
   const suppName = (id) => (store.get("suppliers", id) || {}).name || "—";
   const unitsOpt = () => store.list("units").map((u) => u.name);
   const taxRate = (id) => (store.get("taxes", id) || {}).rate || 0;
@@ -225,8 +226,18 @@
                 <Field label="Batch / lot tracked">
                   <Select value={form.batchTracked} onChange={(v) => set("batchTracked", v)} options={["Yes", "No"].map((x) => ({ value: x, label: x }))} />
                 </Field>
-                <Field label="Default store location" className="sm:col-span-2">
-                  <MasterSelect collection="locations" value={form.locationId} onChange={(v) => set("locationId", v)} actorRole={roleKey} can={can("add")} />
+                <Field label="Default storage location" className="sm:col-span-2">
+                  <MasterSelect collection="locations" value={form.locationId} onChange={(v) => { setDirty(true); setForm((f) => ({ ...f, locationId: v, itemLocationId: "" })); }} actorRole={roleKey} can={can("add")} />
+                </Field>
+                <Field label="Default item location" hint="Rack / shelf / bin under the storage location" className="sm:col-span-2">
+                  <MasterSelect
+                    collection="itemLocations"
+                    value={form.itemLocationId}
+                    onChange={(v) => set("itemLocationId", v)}
+                    actorRole={roleKey}
+                    can={can("add")}
+                    filterFn={(il) => !form.locationId || il.locationId === form.locationId}
+                  />
                 </Field>
               </div>
             </div>
@@ -475,18 +486,81 @@
     VG.useDB();
     const [edit, setEdit] = useState(null);
     const rows = store.list("locations");
-    const cols = [{ key: "code", label: "Code", render: (r) => <span className="font-mono text-xs">{r.code}</span> }, { key: "name", label: "Location / Rack / Bin" }];
+    const cols = [{ key: "code", label: "Code", render: (r) => <span className="font-mono text-xs">{r.code}</span> }, { key: "name", label: "Storage location" }, { key: "locType", label: "Type", render: (r) => r.locType || "—" }];
     function save(form) { if (!form.name) return VG.toast("Name required", "error"); if (form.id) store.update("locations", form.id, form, roleKey); else store.create("locations", form, roleKey); VG.toast("Saved"); setEdit(null); }
-    const locFields = [{ k: "code", l: "Code", req: true }, { k: "name", l: "Name", req: true }];
+    const locFields = [{ k: "code", l: "Code", req: true }, { k: "name", l: "Storage location name", req: true }];
     if (edit) {
-      return <MasterForm title="Location" open onClose={() => setEdit(null)} record={edit} onSave={save} fields={locFields} roleKey={roleKey} can={can} />;
+      return <MasterForm title="Storage Location" open onClose={() => setEdit(null)} record={edit} onSave={save} fields={locFields} roleKey={roleKey} can={can} />;
     }
     return (
       <div>
-        <PageHead title="Location / Rack / Bin Master" />
-        <RecordTable title="Locations" columns={cols} rows={rows} can={can} printTitle="Locations" searchKeys={["name", "code"]}
-          onNew={() => setEdit({})} newLabel="New Location" onEdit={can("edit") ? (r) => setEdit(r) : null}
+        <PageHead title="Storage Location Master" desc="Warehouses and stores — item locations (rack / shelf / bin) are managed separately" />
+        <RecordTable title="Storage locations" columns={cols} rows={rows} can={can} printTitle="Storage Locations" searchKeys={["name", "code"]}
+          onNew={() => setEdit({})} newLabel="New Storage Location" onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete location?", danger: true, confirmLabel: "Delete" })) { store.remove("locations", r.id, roleKey); VG.toast("Deleted"); } } : null} />
+      </div>
+    );
+  }
+
+  function ItemLocationsPage({ roleKey, can }) {
+    VG.useDB();
+    const [edit, setEdit] = useState(null);
+    const rows = store.list("itemLocations");
+    const cols = [
+      { key: "code", label: "Code", render: (r) => <span className="font-mono text-xs">{r.code}</span> },
+      { key: "locationId", label: "Storage location", render: (r) => locName(r.locationId), csv: (r) => locName(r.locationId) },
+      { key: "name", label: "Item location" },
+      { key: "rack", label: "Rack" },
+      { key: "shelf", label: "Shelf" },
+      { key: "bin", label: "Bin" },
+      { key: "zone", label: "Zone" },
+      { key: "status", label: "Status", render: (r) => <Pill color={r.status === "Inactive" ? "#94a3b8" : "#34d399"}>{r.status || "Active"}</Pill> },
+    ];
+    function save(form) {
+      if (!form.name || !form.locationId) return VG.toast("Storage location and name required", "error");
+      const payload = { ...form, status: form.status || "Active", code: form.code || ("ILOC-" + String(store.list("itemLocations").length + 1).padStart(3, "0")) };
+      if (form.id) store.update("itemLocations", form.id, payload, roleKey);
+      else store.create("itemLocations", payload, roleKey);
+      VG.toast("Item location saved");
+      setEdit(null);
+    }
+    const fields = [
+      { k: "locationId", l: "Storage location", req: true },
+      { k: "name", l: "Item location name", req: true },
+      { k: "rack", l: "Rack" },
+      { k: "shelf", l: "Shelf" },
+      { k: "bin", l: "Bin" },
+      { k: "zone", l: "Zone" },
+      { k: "description", l: "Description" },
+      { k: "status", l: "Status" },
+    ];
+    if (edit !== null) {
+      return (
+        <InternalScreen onBack={() => setEdit(null)} backLabel="Back to item locations" title={edit.id ? "Edit Item Location" : "New Item Location"} dirty={false}
+          footer={<><Button variant="soft" onClick={() => setEdit(null)}>Cancel</Button><Button icon="check" onClick={() => {
+            const form = edit;
+            save(form);
+          }}>Save</Button></>}>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <Field label="Code"><Text value={edit.code || ""} onChange={(v) => setEdit((p) => ({ ...p, code: v }))} /></Field>
+            <Field label="Status"><Select value={edit.status || "Active"} onChange={(v) => setEdit((p) => ({ ...p, status: v }))} options={[{ value: "Active", label: "Active" }, { value: "Inactive", label: "Inactive" }]} /></Field>
+            <Field label="Storage location" required className="sm:col-span-2"><MasterSelect collection="locations" value={edit.locationId} onChange={(v) => setEdit((p) => ({ ...p, locationId: v }))} actorRole={roleKey} can={can("add")} /></Field>
+            <Field label="Item location name" required className="sm:col-span-2"><Text value={edit.name || ""} onChange={(v) => setEdit((p) => ({ ...p, name: v }))} placeholder="Rack A / Shelf 2 / Bin 05" /></Field>
+            <Field label="Rack"><Text value={edit.rack || ""} onChange={(v) => setEdit((p) => ({ ...p, rack: v }))} /></Field>
+            <Field label="Shelf"><Text value={edit.shelf || ""} onChange={(v) => setEdit((p) => ({ ...p, shelf: v }))} /></Field>
+            <Field label="Bin"><Text value={edit.bin || ""} onChange={(v) => setEdit((p) => ({ ...p, bin: v }))} /></Field>
+            <Field label="Zone"><Text value={edit.zone || ""} onChange={(v) => setEdit((p) => ({ ...p, zone: v }))} /></Field>
+            <Field label="Description" className="sm:col-span-2"><Area value={edit.description || ""} onChange={(v) => setEdit((p) => ({ ...p, description: v }))} rows={2} /></Field>
+          </div>
+        </InternalScreen>
+      );
+    }
+    return (
+      <div>
+        <PageHead title="Item Location Master" desc="Rack, shelf, bin and zone under each storage location" />
+        <RecordTable title="Item locations" columns={cols} rows={rows} can={can} printTitle="Item Locations" searchKeys={["name", "code", "rack", "bin", "zone"]}
+          onNew={() => setEdit({ status: "Active" })} newLabel="New Item Location" onEdit={can("edit") ? (r) => setEdit(r) : null}
+          onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete item location?", danger: true, confirmLabel: "Delete" })) { store.remove("itemLocations", r.id, roleKey); VG.toast("Deleted"); } } : null} />
       </div>
     );
   }
@@ -501,7 +575,8 @@
     const TYPE_COLOR = { opening: "#64748b", receipt: "#34d399", issue: "#f87171", "transfer-in": "#60a5fa", "transfer-out": "#f59e0b", return: "#22d3ee", scrap: "#ef4444", adjustment: "#a78bfa" };
     const ecols = [
       { key: "date", label: "Date" }, { key: "itemId", label: "Item", render: (r) => itemName(r.itemId), csv: (r) => itemName(r.itemId) },
-      { key: "locationId", label: "Location", render: (r) => locName(r.locationId), csv: (r) => locName(r.locationId) },
+      { key: "locationId", label: "Storage", render: (r) => locName(r.locationId), csv: (r) => locName(r.locationId) },
+      { key: "itemLocationId", label: "Item location", render: (r) => itemLocName(r.itemLocationId), csv: (r) => itemLocName(r.itemLocationId) },
       { key: "type", label: "Type", render: (r) => <Pill color={TYPE_COLOR[r.type] || "#94a3b8"}>{r.type}</Pill> },
       { key: "qty", label: "Qty", render: (r) => <span className={r.qty < 0 ? "text-rose-400" : "text-emerald-400"}>{r.qty > 0 ? "+" : ""}{r.qty}</span> },
       { key: "ref", label: "Reference" }, { key: "batch", label: "Batch" },
@@ -528,26 +603,113 @@
   }
 
   /* ================= Material Receipt ================= */
+  function blankGrnLine() {
+    return { key: Math.random().toString(36).slice(2), itemId: "", qtyInvoiced: "", qtyReceived: "", unit: "", qtyAccepted: "", qtyRejected: "", locationId: "", itemLocationId: "", remarks: "", rate: 0, taxId: "" };
+  }
+  const GRN_TABLE_HEAD = (
+    <tr className="text-left border-b border-white/10 text-[11px] uppercase opacity-70">
+      <th className="w-10 px-2">Sr.</th>
+      <th className="min-w-[200px] px-2">Item SKU</th>
+      <th className="min-w-[160px] px-2">Description</th>
+      <th className="w-20 px-2">HSN/SAC</th>
+      <th className="w-24 px-2">Qty Invoiced</th>
+      <th className="w-24 px-2">Qty Received</th>
+      <th className="w-16 px-2">Unit</th>
+      <th className="w-24 px-2">Accepted</th>
+      <th className="w-24 px-2">Rejected</th>
+      <th className="min-w-[140px] px-2">Storage Location</th>
+      <th className="min-w-[140px] px-2">Item Location</th>
+      <th className="min-w-[120px] px-2">Remarks</th>
+      <th className="w-10" />
+    </tr>
+  );
+  function grnLineDesc(itemId) {
+    if (!itemId) return "";
+    if (VG.itemDisplay && VG.itemDisplay.itemDescription) return VG.itemDisplay.itemDescription(itemId);
+    const it = store.get("items", itemId) || {};
+    return it.description || it.name || "";
+  }
+  function grnItemsLabel(r) {
+    const lines = store.normalizeReceiptLines ? store.normalizeReceiptLines(r) : [];
+    if (lines.length <= 1) return itemName(lines[0] ? lines[0].itemId : r.itemId);
+    return itemName(lines[0].itemId) + " +" + (lines.length - 1) + " more";
+  }
   function ReceiptBuilder({ open, onClose, roleKey, can }) {
-    const [f, setF] = useState({ date: today(), qcRequired: "Yes", qcStatus: "Pending", unit: "Nos" });
+    const [f, setF] = useState({ date: today(), qcRequired: "Yes", qcStatus: "Pending" });
+    const [lines, setLines] = useState([blankGrnLine()]);
     const [dirty, setDirty] = useState(false);
+    const canEditUnit = can("approve");
     const set = (k, v) => { setDirty(true); setF((p) => ({ ...p, [k]: v })); };
-    function pickItem(id) { const it = store.get("items", id) || {}; setF((p) => ({ ...p, itemId: id, unit: it.unit, rate: it.rate, taxId: it.taxId, locationId: it.locationId, warranty: it.warranty })); }
-    const total = (Number(f.qtyAccepted ?? f.qtyReceived) || 0) * (Number(f.rate) || 0) * (1 + taxRate(f.taxId) / 100);
+    const setLine = (key, patch) => { setDirty(true); setLines((rows) => rows.map((r) => (r.key === key ? { ...r, ...patch } : r))); };
+    const addLine = () => setLines((rows) => [...rows, blankGrnLine()]);
+    const delLine = (key) => { if (lines.length <= 1) return; setLines((rows) => rows.filter((r) => r.key !== key)); };
+    function pickItem(key, id) {
+      const it = store.get("items", id) || {};
+      setLine(key, { itemId: id, unit: it.unit || "Nos", rate: it.rate || 0, taxId: it.taxId || "gst18", locationId: it.locationId || "", itemLocationId: it.itemLocationId || "" });
+    }
+    function pickStorage(key, locationId) { setLine(key, { locationId, itemLocationId: "" }); }
+    const lineTotals = lines.map((l) => {
+      const acc = l.qtyAccepted === "" ? (Number(l.qtyReceived) || 0) : (Number(l.qtyAccepted) || 0);
+      return acc * (Number(l.rate) || 0) * (1 + taxRate(l.taxId) / 100);
+    });
+    const total = lineTotals.reduce((s, v) => s + v, 0);
+    function validateLines() {
+      for (let i = 0; i < lines.length; i++) {
+        const ln = lines[i];
+        const n = i + 1;
+        if (!ln.itemId) return "Row " + n + ": select item SKU.";
+        if (!ln.locationId) return "Row " + n + ": select storage location.";
+        const qi = Number(ln.qtyInvoiced);
+        const qr = Number(ln.qtyReceived);
+        if (!Number.isFinite(qi) || qi < 0) return "Row " + n + ": qty invoiced must be ≥ 0.";
+        if (!Number.isFinite(qr) || qr <= 0) return "Row " + n + ": qty received must be > 0.";
+        const acc = ln.qtyAccepted === "" ? qr : Number(ln.qtyAccepted);
+        const rej = ln.qtyRejected === "" ? 0 : Number(ln.qtyRejected);
+        if (!Number.isFinite(acc) || acc < 0 || !Number.isFinite(rej) || rej < 0) return "Row " + n + ": invalid accepted/rejected qty.";
+        if (Math.abs(acc + rej - qr) > 0.0001) return "Row " + n + ": accepted + rejected must equal qty received.";
+        const locOpts = store.itemLocationsForStorage ? store.itemLocationsForStorage(ln.locationId) : [];
+        if (ln.itemLocationId && locOpts.length && !locOpts.some((x) => x.id === ln.itemLocationId)) return "Row " + n + ": item location does not belong to selected storage.";
+      }
+      return "";
+    }
     function save() {
       if (!f.supplierId) return VG.toast("Select supplier from master", "error");
-      if (!f.itemId) return VG.toast("Select item from master", "error");
-      const acc = Number(f.qtyAccepted ?? f.qtyReceived) || 0;
-      if (acc <= 0) return VG.toast("Accepted quantity must be > 0", "error");
-      const rec = store.postReceipt({ ...f, totalValue: total }, roleKey);
+      const lineErr = validateLines();
+      if (lineErr) return VG.toast(lineErr, "error");
+      const payload = {
+        ...f,
+        lines: lines.map((ln, idx) => {
+          const qr = Number(ln.qtyReceived) || 0;
+          const acc = ln.qtyAccepted === "" ? qr : Number(ln.qtyAccepted);
+          const rej = ln.qtyRejected === "" ? 0 : Number(ln.qtyRejected);
+          return {
+            lineNo: idx + 1, itemId: ln.itemId, qtyInvoiced: Number(ln.qtyInvoiced) || 0, qtyReceived: qr, qtyAccepted: acc, qtyRejected: rej,
+            unit: ln.unit || (store.get("items", ln.itemId) || {}).unit || "Nos", rate: Number(ln.rate) || 0, taxId: ln.taxId,
+            locationId: ln.locationId, itemLocationId: ln.itemLocationId || "", remarks: ln.remarks || "",
+          };
+        }),
+        totalValue: total,
+      };
+      const rec = store.postReceipt(payload, roleKey);
+      if (!rec) return VG.toast("Could not post receipt", "error");
       if (f.qcRequired === "Yes") VG.toast("Receipt " + rec.no + " posted · sent to Quality for inspection", "success");
       else VG.toast("Receipt " + rec.no + " posted · stock updated");
       onClose();
     }
-    const avail = f.itemId ? store.onHand(f.itemId) : 0;
+    function previewDoc() {
+      printDocument(receiptDoc({
+        ...f, no: f.no || "DRAFT", totalValue: total,
+        lines: lines.map((ln, idx) => ({
+          lineNo: idx + 1, itemId: ln.itemId, qtyInvoiced: Number(ln.qtyInvoiced) || 0, qtyReceived: Number(ln.qtyReceived) || 0,
+          qtyAccepted: ln.qtyAccepted === "" ? Number(ln.qtyReceived) || 0 : Number(ln.qtyAccepted),
+          qtyRejected: ln.qtyRejected === "" ? 0 : Number(ln.qtyRejected), unit: ln.unit, rate: ln.rate,
+          locationId: ln.locationId, itemLocationId: ln.itemLocationId, remarks: ln.remarks, lineValue: lineTotals[idx] || 0,
+        })),
+      }), "preview");
+    }
     return (
-      <InternalScreen onBack={onClose} backLabel="Back to receipts" dirty={dirty} title="Material Receipt (GRN)" subtitle="Updates stock ledger on save"
-        footer={<><Button variant="soft" icon="eye" onClick={() => printDocument(receiptDoc({ ...f, no: f.no || "DRAFT", totalValue: total }), "preview")}>Preview GRN</Button><Button icon="check" onClick={save}>Post receipt</Button></>}>
+      <InternalScreen onBack={onClose} backLabel="Back to receipts" dirty={dirty} title="Material Receipt (GRN)" subtitle="Multi-item GRN · stock ledger updates on post"
+        footer={<><Button variant="soft" icon="eye" onClick={previewDoc}>Preview GRN</Button><Button icon="check" onClick={save}>Post receipt</Button></>}>
         <div className="grid lg:grid-cols-3 gap-3">
           <Field label="Receipt date" required><DateF value={f.date} onChange={(v) => set("date", v)} /></Field>
           <Field label="Supplier (master)" required><MasterSelect collection="suppliers" value={f.supplierId} onChange={(v) => set("supplierId", v)} actorRole={roleKey} can={can("add")} /></Field>
@@ -558,41 +720,69 @@
           <Field label="Transporter"><Text value={f.transporter} onChange={(v) => set("transporter", v)} /></Field>
           <Field label="Vehicle number"><Text value={f.vehicleNo} onChange={(v) => set("vehicleNo", v)} /></Field>
           <Field label="LR number"><Text value={f.lrNo} onChange={(v) => set("lrNo", v)} /></Field>
-        </div>
-        <div className="my-3 h-px bg-white/10" />
-        <div className="grid lg:grid-cols-3 gap-3">
-          <Field label="Item (master)" required className="lg:col-span-2"><MasterSelect variant="line" collection="items" value={f.itemId} onChange={pickItem} actorRole={roleKey} can={can("add")} /></Field>
-          <Field label="Current stock"><div className="rounded-lg glass px-3 py-2 text-sm opacity-80">{avail}</div></Field>
-          <Field label="Qty received" required><Num value={f.qtyReceived} onChange={(v) => set("qtyReceived", v)} /></Field>
-          <Field label="Qty accepted" required><Num value={f.qtyAccepted} onChange={(v) => set("qtyAccepted", v)} /></Field>
-          <Field label="Qty rejected"><Num value={f.qtyRejected} onChange={(v) => set("qtyRejected", v)} /></Field>
-          <Field label="Unit"><Select value={f.unit} onChange={(v) => set("unit", v)} options={unitsOpt().map((u) => ({ value: u, label: u }))} /></Field>
-          <Field label="Rate (₹)"><Num value={f.rate} onChange={(v) => set("rate", v)} /></Field>
-          <Field label="GST"><Select value={f.taxId} onChange={(v) => set("taxId", v)} options={store.list("taxes").map((t) => ({ value: t.id, label: t.name }))} /></Field>
-          <Field label="Storage location (master)" required><MasterSelect collection="locations" value={f.locationId} onChange={(v) => set("locationId", v)} actorRole={roleKey} can={can("add")} /></Field>
-          <Field label="Batch / Lot"><Text value={f.batch} onChange={(v) => set("batch", v)} /></Field>
-          <Field label="Warranty"><Text value={f.warranty} onChange={(v) => set("warranty", v)} /></Field>
           <Field label="QC required"><Select value={f.qcRequired} onChange={(v) => set("qcRequired", v)} options={[{ value: "Yes", label: "Yes" }, { value: "No", label: "No" }]} /></Field>
-          <Field label="QC status"><Select value={f.qcStatus} onChange={(v) => set("qcStatus", v)} options={["Pending", "Passed", "Failed"].map((x) => ({ value: x, label: x }))} /></Field>
-          <Field label="Documents"><Text value={f.documents} onChange={(v) => set("documents", v)} placeholder="invoice.pdf, photo.jpg" /></Field>
-          <Field label="Remarks" className="lg:col-span-3"><Area value={f.remarks} onChange={(v) => set("remarks", v)} rows={2} /></Field>
+          <Field label="Header remarks" className="lg:col-span-3"><Area value={f.remarks} onChange={(v) => set("remarks", v)} rows={2} /></Field>
         </div>
-        <div className="mt-2 text-right text-sm">Total value: <b>{inr(total)}</b></div>
+        <TransactionLinesShell title="GRN line items" onAddLine={addLine} addLabel="Add item" minWidth={1380} headerRow={GRN_TABLE_HEAD}>
+          {lines.map((l, idx) => {
+            const item = store.get("items", l.itemId) || {};
+            const ilOpts = store.itemLocationsForStorage ? store.itemLocationsForStorage(l.locationId) : [];
+            return (
+              <tr key={l.key} className="border-b border-white/5 align-top">
+                <td className="px-2 py-1.5 text-xs opacity-70">{idx + 1}</td>
+                <td className="min-w-[200px] px-2 py-1.5"><MasterSelect variant="line" collection="items" value={l.itemId} onChange={(id) => pickItem(l.key, id)} actorRole={roleKey} can={can("add")} /></td>
+                <td className="min-w-[160px] px-2 py-1.5"><div className="text-sm leading-snug py-1 pr-2 whitespace-pre-wrap">{grnLineDesc(l.itemId) || <span className="opacity-40">—</span>}</div></td>
+                <td className="font-mono text-xs px-2 py-1.5">{item.hsn || "—"}</td>
+                <td className="px-2 py-1.5"><Num data-line-qty value={l.qtyInvoiced} onChange={(v) => setLine(l.key, { qtyInvoiced: v })} /></td>
+                <td className="px-2 py-1.5"><Num value={l.qtyReceived} onChange={(v) => setLine(l.key, { qtyReceived: v })} /></td>
+                <td className="px-2 py-1.5">{canEditUnit ? <Text value={l.unit} onChange={(v) => setLine(l.key, { unit: v })} /> : <span className="text-sm opacity-80 py-2 inline-block">{l.unit || "—"}</span>}</td>
+                <td className="px-2 py-1.5"><Num value={l.qtyAccepted} onChange={(v) => setLine(l.key, { qtyAccepted: v })} placeholder={l.qtyReceived || "0"} /></td>
+                <td className="px-2 py-1.5"><Num value={l.qtyRejected} onChange={(v) => setLine(l.key, { qtyRejected: v })} placeholder="0" /></td>
+                <td className="min-w-[140px] px-2 py-1.5"><MasterSelect collection="locations" value={l.locationId} onChange={(v) => pickStorage(l.key, v)} actorRole={roleKey} can={can("add")} /></td>
+                <td className="min-w-[140px] px-2 py-1.5">
+                  <select className="vg-input w-full text-xs" value={l.itemLocationId || ""} disabled={!l.locationId} onChange={(e) => setLine(l.key, { itemLocationId: e.target.value })}>
+                    <option value="">—</option>
+                    {ilOpts.map((il) => <option key={il.id} value={il.id}>{itemLocName(il.id)}</option>)}
+                  </select>
+                </td>
+                <td className="min-w-[120px] px-2 py-1.5"><Text value={l.remarks} onChange={(v) => setLine(l.key, { remarks: v })} placeholder="Row note…" /></td>
+                <td className="px-2 py-1.5"><button type="button" onClick={() => delLine(l.key)} disabled={lines.length <= 1} className="p-1 rounded chrome-hover hover:text-rose-400 disabled:opacity-30" title="Remove row"><Icon name="trash" size={14} /></button></td>
+              </tr>
+            );
+          })}
+        </TransactionLinesShell>
+        <div className="text-right text-sm">Total value: <b>{inr(total)}</b> · {lines.length} item row(s)</div>
       </InternalScreen>
     );
   }
   function receiptDoc(r) {
     const supp = store.get("suppliers", r.supplierId) || {};
-    const acc = (r.qtyAccepted ?? r.qtyReceived) || 0;
+    const docLines = store.normalizeReceiptLines ? store.normalizeReceiptLines(r) : [];
+    const rowsHtml = docLines.map((ln) => {
+      const acc = ln.qtyAccepted != null ? ln.qtyAccepted : ln.qtyReceived;
+      return `<tr>
+        <td>${ln.lineNo || ""}</td>
+        <td>${itemNameSkuPdf(ln.itemId)}</td>
+        <td>${(VG.itemDisplay && VG.itemDisplay.nl2br(VG.itemDisplay.itemDescription(ln.itemId))) || ln.description || ""}</td>
+        <td>${ln.hsn || (store.get("items", ln.itemId) || {}).hsn || ""}</td>
+        <td class="vg-right">${ln.qtyInvoiced != null ? ln.qtyInvoiced : "—"}</td>
+        <td class="vg-right">${ln.qtyReceived || 0} ${ln.unit || ""}</td>
+        <td class="vg-right">${acc || 0}</td>
+        <td class="vg-right">${ln.qtyRejected || 0}</td>
+        <td>${locName(ln.locationId)}</td>
+        <td>${itemLocName(ln.itemLocationId)}</td>
+        <td>${ln.remarks || "—"}</td>
+      </tr>`;
+    }).join("");
     const inner = `
       <div class="vg-cols">
         <div class="vg-card"><b>Supplier</b>${supp.name || "—"}<br>${supp.address || ""}<br>GSTIN: ${supp.gstin || "—"}</div>
         <div class="vg-card"><b>Receipt (GRN)</b>No: ${r.no}<br>Date: ${r.date}<br>PO Ref: ${r.poRef || "—"}<br>Invoice: ${r.invoiceNo || "—"}</div>
         <div class="vg-card"><b>Transport</b>Challan: ${r.challanNo || "—"}<br>Transporter: ${r.transporter || "—"}<br>Vehicle: ${r.vehicleNo || "—"}<br>LR: ${r.lrNo || "—"}</div>
       </div>
-      <table class="vg-tbl"><thead><tr><th>Item Name / SKU</th><th>Item Description</th><th>HSN/SAC</th><th class="vg-right">Received</th><th class="vg-right">Accepted</th><th class="vg-right">Rejected</th><th class="vg-right">Rate</th><th class="vg-right">Value</th></tr></thead>
-      <tbody><tr><td>${itemNameSkuPdf(r.itemId)}</td><td>${(VG.itemDisplay && VG.itemDisplay.nl2br(VG.itemDisplay.itemDescription(r.itemId))) || ""}</td><td>${(store.get("items", r.itemId) || {}).hsn || ""}</td><td class="vg-right">${r.qtyReceived || 0} ${r.unit}</td><td class="vg-right">${acc} ${r.unit}</td><td class="vg-right">${r.qtyRejected || 0}</td><td class="vg-right">${inr(r.rate || 0)}</td><td class="vg-right">${inr(r.totalValue || 0)}</td></tr></tbody></table>
-      <div class="vg-totals"><div><span>Location</span><span>${locName(r.locationId)}</span></div><div><span>Batch / Lot</span><span>${r.batch || "—"}</span></div><div><span>QC status</span><span>${r.qcStatus || "—"}</span></div><div class="grand"><span>Total Value</span><span>${inr(r.totalValue || 0)}</span></div></div>
+      <table class="vg-tbl"><thead><tr><th>Sr.</th><th>Item SKU</th><th>Description</th><th>HSN/SAC</th><th class="vg-right">Invoiced</th><th class="vg-right">Received</th><th class="vg-right">Accepted</th><th class="vg-right">Rejected</th><th>Storage</th><th>Item location</th><th>Remarks</th></tr></thead>
+      <tbody>${rowsHtml || "<tr><td colspan='11'>No lines</td></tr>"}</tbody></table>
+      <div class="vg-totals"><div><span>Line count</span><span>${docLines.length}</span></div><div><span>QC status</span><span>${r.qcStatus || "—"}</span></div><div class="grand"><span>Total Value</span><span>${inr(r.totalValue || 0)}</span></div></div>
       <div class="vg-terms">${r.remarks ? "<b>Remarks:</b> " + r.remarks : ""}</div>
       <div class="vg-sign"><div>Received by: <b>${r.createdBy || "—"}</b></div><div>Checked by: <b>—</b></div><div>Approved by: <b>—</b></div><div>For ${store.company().name}</div></div>`;
     return { title: "Material Receipt (GRN)", subtitle: r.no + " · " + r.date, inner };
@@ -604,9 +794,12 @@
     const cols = [
       { key: "no", label: "MRN", render: (r) => <span className="font-mono text-xs">{r.no}</span> }, { key: "date", label: "Date" },
       { key: "supplierId", label: "Supplier", render: (r) => suppName(r.supplierId), csv: (r) => suppName(r.supplierId) },
-      { key: "itemId", label: "Item", render: (r) => itemName(r.itemId), csv: (r) => itemName(r.itemId) },
-      { key: "qtyAccepted", label: "Accepted", render: (r) => (r.qtyAccepted ?? r.qtyReceived) + " " + r.unit },
-      { key: "qcStatus", label: "QC", render: (r) => <StatusTag value={r.qcStatus} map={{ Pending: "#f59e0b", Passed: "#34d399", Failed: "#ef4444" }} /> },
+      { key: "lineCount", label: "Items", render: (r) => (r.lineCount || (store.normalizeReceiptLines ? store.normalizeReceiptLines(r).length : 1)), csv: (r) => r.lineCount || 1 },
+      { key: "itemId", label: "Item(s)", render: (r) => grnItemsLabel(r), csv: (r) => grnItemsLabel(r) },
+      { key: "qtyInvoiced", label: "Qty invoiced", render: (r) => r.qtyInvoiced != null ? r.qtyInvoiced : "—" },
+      { key: "qtyReceived", label: "Qty received", render: (r) => (r.qtyReceived || 0) + (r.unit ? " " + r.unit : "") },
+      { key: "qtyAccepted", label: "Accepted", render: (r) => (r.qtyAccepted ?? r.qtyReceived) + (r.unit ? " " + r.unit : "") },
+      { key: "qcStatus", label: "QC", render: (r) => <StatusTag value={r.qcStatus} map={{ Pending: "#f59e0b", Passed: "#34d399", Failed: "#ef4444", "Not required": "#94a3b8" }} /> },
       { key: "totalValue", label: "Value", render: (r) => inr(r.totalValue), csv: (r) => r.totalValue },
     ];
     if (build) {
@@ -614,9 +807,9 @@
     }
     return (
       <div>
-        <PageHead title="Material Receipt" desc="Goods Receipt Notes — auto stock-in" />
+        <PageHead title="Material Receipt" desc="Multi-item GRN with qty invoiced vs received and storage → item location" />
         <RecordTable title="Receipts" columns={cols} rows={rows} can={can} printTitle="Material Receipts" searchKeys={["no", "invoiceNo"]}
-          filters={[{ key: "qcStatus", label: "All QC", options: ["Pending", "Passed", "Failed"] }]}
+          filters={[{ key: "qcStatus", label: "All QC", options: ["Pending", "Passed", "Failed", "Not required"] }]}
           onView={(r) => printDocument(receiptDoc(r), "preview")}
           onNew={() => setBuild(true)} newLabel="New Receipt" empty="No receipts yet" />
       </div>
@@ -960,9 +1153,49 @@
       </div>
     );
   }
+  function stockByLocationRows() {
+    const map = {};
+    store.list("stockLedger").forEach((e) => {
+      const key = (e.itemId || "") + "|" + (e.locationId || "");
+      if (!map[key]) map[key] = { itemId: e.itemId, locationId: e.locationId, qty: 0 };
+      map[key].qty += Number(e.qty) || 0;
+    });
+    return Object.values(map).filter((r) => r.qty !== 0).map((r) => {
+      const it = store.get("items", r.itemId) || {};
+      return { ...r, sku: it.sku || "", name: it.name || "", unit: it.unit || "", value: r.qty * (it.rate || 0) };
+    });
+  }
+  function stockByItemLocationRows() {
+    const map = {};
+    store.list("stockLedger").forEach((e) => {
+      if (!e.itemLocationId) return;
+      const key = (e.itemId || "") + "|" + (e.itemLocationId || "");
+      if (!map[key]) map[key] = { itemId: e.itemId, locationId: e.locationId, itemLocationId: e.itemLocationId, qty: 0 };
+      map[key].qty += Number(e.qty) || 0;
+    });
+    return Object.values(map).filter((r) => r.qty !== 0).map((r) => {
+      const it = store.get("items", r.itemId) || {};
+      return { ...r, sku: it.sku || "", name: it.name || "", unit: it.unit || "", value: r.qty * (it.rate || 0) };
+    });
+  }
   function ReportsPage({ roleKey, can }) {
     VG.useDB();
     const summary = store.stockSummary();
+    const grnFlat = store.grnFlattenedLines ? store.grnFlattenedLines() : [];
+    const grnItemRows = grnFlat.map(({ receipt, line, lineNo }) => ({
+      mrn: receipt.no, date: receipt.date, supplier: suppName(receipt.supplierId), lineNo,
+      item: itemName(line.itemId), sku: line.sku || (store.get("items", line.itemId) || {}).sku,
+      qtyInvoiced: line.qtyInvoiced, qtyReceived: line.qtyReceived, qtyAccepted: line.qtyAccepted, qtyRejected: line.qtyRejected,
+      unit: line.unit, storage: locName(line.locationId), itemLocation: itemLocName(line.itemLocationId), qc: receipt.qcStatus,
+    }));
+    const invVsRecvRows = grnItemRows.map((r) => ({
+      ...r, variance: (Number(r.qtyReceived) || 0) - (Number(r.qtyInvoiced) || 0),
+    }));
+    const shortRecvRows = invVsRecvRows.filter((r) => (Number(r.qtyReceived) || 0) < (Number(r.qtyInvoiced) || 0));
+    const pendingQcRows = store.list("qcInspections").filter((i) => i.status === "Pending").map((i) => ({
+      qcNo: i.no, date: i.date, receiptNo: i.receiptNo || "", item: itemName(i.itemId),
+      qty: i.qtyReceived, storage: locName(i.locationId), itemLocation: itemLocName(i.itemLocationId), supplier: suppName(i.supplierId),
+    }));
     const mfrItemRows = store.list("items").map((it) => ({
       ...it,
       manufacturer: VG.itemMfr.manufacturerName(it),
@@ -987,7 +1220,13 @@
       { n: "Items without manufacturer part number", run: () => fx.printTable("Items Missing Mfr Part No.", [{ key: "sku", label: "SKU" }, { key: "name", label: "Item" }, { key: "manufacturer", label: "Manufacturer", csv: (r) => VG.itemMfr.manufacturerName(r) }], noPartRows) },
       { n: "Manufacturer-wise purchase history", run: () => fx.printTable("Manufacturer Purchase History", [{ key: "date", label: "Date" }, { key: "docType", label: "Type" }, { key: "docNo", label: "Document" }, { key: "manufacturer", label: "Manufacturer" }, { key: "partNo", label: "Part no." }, { key: "sku", label: "SKU" }, { key: "qty", label: "Qty" }, { key: "value", label: "Value", csv: (r) => inr(r.value) }], purchHist) },
       { n: "Stock Ledger", run: () => fx.printTable("Stock Ledger", [{ key: "date", label: "Date" }, { key: "i", label: "Item", csv: (r) => itemName(r.itemId) }, { key: "type", label: "Type" }, { key: "qty", label: "Qty" }, { key: "ref", label: "Ref" }], store.list("stockLedger")) },
-      { n: "Material Receipts", run: () => fx.printTable("Material Receipts", [{ key: "no", label: "MRN" }, { key: "date", label: "Date" }, { key: "s", label: "Supplier", csv: (r) => suppName(r.supplierId) }, { key: "i", label: "Item", csv: (r) => itemName(r.itemId) }, { key: "v", label: "Value", csv: (r) => inr(r.totalValue) }], store.list("materialReceipts")) },
+      { n: "Material Receipts", run: () => fx.printTable("Material Receipts", [{ key: "no", label: "MRN" }, { key: "date", label: "Date" }, { key: "s", label: "Supplier", csv: (r) => suppName(r.supplierId) }, { key: "i", label: "Item", csv: (r) => grnItemsLabel(r) }, { key: "v", label: "Value", csv: (r) => inr(r.totalValue) }], store.list("materialReceipts")) },
+      { n: "GRN item-wise report", run: () => fx.printTable("GRN Item-wise", [{ key: "mrn", label: "MRN" }, { key: "date", label: "Date" }, { key: "lineNo", label: "Line" }, { key: "sku", label: "SKU" }, { key: "item", label: "Item" }, { key: "qtyInvoiced", label: "Qty invoiced" }, { key: "qtyReceived", label: "Qty received" }, { key: "qtyAccepted", label: "Accepted" }, { key: "storage", label: "Storage" }, { key: "itemLocation", label: "Item location" }], grnItemRows) },
+      { n: "Qty invoiced vs qty received", run: () => fx.printTable("Invoiced vs Received", [{ key: "mrn", label: "MRN" }, { key: "item", label: "Item" }, { key: "qtyInvoiced", label: "Invoiced" }, { key: "qtyReceived", label: "Received" }, { key: "variance", label: "Variance" }, { key: "unit", label: "Unit" }], invVsRecvRows) },
+      { n: "Short received material", run: () => fx.printTable("Short Received", [{ key: "mrn", label: "MRN" }, { key: "date", label: "Date" }, { key: "item", label: "Item" }, { key: "qtyInvoiced", label: "Invoiced" }, { key: "qtyReceived", label: "Received" }, { key: "variance", label: "Short qty" }], shortRecvRows) },
+      { n: "Location-wise stock", run: () => fx.printTable("Location-wise Stock", [{ key: "sku", label: "SKU" }, { key: "name", label: "Item" }, { key: "locationId", label: "Storage", csv: (r) => locName(r.locationId) }, { key: "qty", label: "On hand" }, { key: "unit", label: "Unit" }, { key: "value", label: "Value", csv: (r) => inr(r.value) }], stockByLocationRows()) },
+      { n: "Item location-wise stock", run: () => fx.printTable("Item Location Stock", [{ key: "sku", label: "SKU" }, { key: "name", label: "Item" }, { key: "locationId", label: "Storage", csv: (r) => locName(r.locationId) }, { key: "itemLocationId", label: "Item location", csv: (r) => itemLocName(r.itemLocationId) }, { key: "qty", label: "On hand" }, { key: "value", label: "Value", csv: (r) => inr(r.value) }], stockByItemLocationRows()) },
+      { n: "Pending QC by location", run: () => fx.printTable("Pending QC by Location", [{ key: "qcNo", label: "QC no." }, { key: "receiptNo", label: "GRN" }, { key: "item", label: "Item" }, { key: "qty", label: "Qty" }, { key: "storage", label: "Storage" }, { key: "itemLocation", label: "Item location" }, { key: "supplier", label: "Supplier" }], pendingQcRows) },
       { n: "Material Issues", run: () => fx.printTable("Material Issues", [{ key: "no", label: "MIN" }, { key: "date", label: "Date" }, { key: "type", label: "Type" }, { key: "i", label: "Item", csv: (r) => itemName(r.itemId) }, { key: "qtyIssued", label: "Qty" }], store.list("materialIssues")) },
     ];
     return (
@@ -1053,7 +1292,8 @@
     { id: "bom", label: "Bill of Materials", icon: "flow", group: "Masters" },
     { id: "categories", label: "Categories", icon: "folder", group: "Masters" },
     { id: "suppliers", label: "Supplier Master", icon: "handshake", group: "Masters" },
-    { id: "locations", label: "Locations", icon: "grid", group: "Masters" },
+    { id: "locations", label: "Storage Locations", icon: "grid", group: "Masters" },
+    { id: "itemLocations", label: "Item Locations", icon: "grid", group: "Masters" },
     { id: "transfer", label: "Stock Transfer", icon: "truck", group: "Operations" },
     { id: "returns", label: "Returns", icon: "chevronLeft", group: "Operations" },
     { id: "scrap", label: "Scrap / Rejection", icon: "trash", group: "Operations" },
@@ -1069,7 +1309,7 @@
 
   const PAGES = {
     dashboard: Dashboard, items: ItemsPage, manufacturers: ManufacturersPage, bom: BomPage, categories: CategoriesPage,
-    suppliers: SuppliersPage, locations: LocationsPage, ledger: LedgerPage, receipt: ReceiptPage, issue: IssuePage, requirements: MaterialReqPage,
+    suppliers: SuppliersPage, locations: LocationsPage, itemLocations: ItemLocationsPage, ledger: LedgerPage, receipt: ReceiptPage, issue: IssuePage, requirements: MaterialReqPage,
     "issue-ret": (p) => React.createElement(IssuePage, { ...p, defaultType: "Vendor Returnable Challan" }),
     "issue-nr": (p) => React.createElement(IssuePage, { ...p, defaultType: "Vendor Non-Returnable Challan" }),
     transfer: TransferPage, returns: ReturnsPage, scrap: ScrapPage, physical: PhysicalPage, alerts: AlertsPage, batches: BatchesPage, reports: ReportsPage,

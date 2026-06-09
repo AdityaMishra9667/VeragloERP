@@ -277,6 +277,7 @@
       ],
       materialReceipts: [],
       materialIssues: [],
+      itemLocations: [],
       stockTransfers: [],
       returns: [],
       scrap: [],
@@ -384,7 +385,7 @@
     if (!db.settings.backup) db.settings.backup = defaultSettings().backup;
     if (!Array.isArray(db.backups)) db.backups = [];
     ["purchaseRequests", "purchaseOrders", "qcInspections", "qcIssues", "ncrs", "boms", "workOrders", "materialRequirements", "finishedGoodsTransfers", "dispatchQueue", "orderHistory", "shipments", "invoices", "payments", "employees", "leaveRequests", "attendanceRecords", "payrollRuns", "salarySlips",
-      "erpUsers", "customRoles", "loginLog", "approvalWorkflows", "documentTemplates", "numberSeries", "fieldPermissions", "departments", "designations"].forEach((k) => { if (!Array.isArray(db[k])) db[k] = []; });
+      "erpUsers", "customRoles", "loginLog", "approvalWorkflows", "documentTemplates", "numberSeries", "fieldPermissions", "departments", "designations", "itemLocations"].forEach((k) => { if (!Array.isArray(db[k])) db[k] = []; });
     if (!db.settings.security) db.settings.security = defaultSettings().security;
     else db.settings.security = { ...defaultSettings().security, ...db.settings.security };
     if (!db.settings.theme) db.settings.theme = defaultSettings().theme;
@@ -418,6 +419,7 @@
     migrateEnquiries(db);
     migrateInvoices(db);
     migrateItems(db);
+    migrateItemLocations(db);
     db._v = VERSION;
     return db;
   }
@@ -439,6 +441,32 @@
           }
         }
       });
+    });
+  }
+
+  function migrateItemLocations(db) {
+    if (!Array.isArray(db.itemLocations)) db.itemLocations = [];
+    if (db.itemLocations.length === 0 && (db.locations || []).length) {
+      (db.locations || []).forEach((loc, i) => {
+        db.itemLocations.push({
+          id: "iloc" + i,
+          code: "ILOC-" + String(i + 1).padStart(2, "0"),
+          locationId: loc.id,
+          name: (loc.name || "Store") + " — Rack A / Shelf 1 / Bin 01",
+          rack: "A",
+          shelf: "1",
+          bin: String(i + 1).padStart(2, "0"),
+          zone: "Zone 1",
+          description: "Default item location for " + (loc.name || loc.code),
+          status: "Active",
+        });
+      });
+    }
+    (db.items || []).forEach((it) => {
+      if (it.locationId && !it.itemLocationId) {
+        const il = (db.itemLocations || []).find((x) => x.locationId === it.locationId && x.status !== "Inactive");
+        if (il) it.itemLocationId = il.id;
+      }
     });
   }
 
@@ -1200,11 +1228,62 @@
     },
 
     /* ----- stock engine ----- */
-    ledgerFor(itemId, locationId) {
-      return DB.stockLedger.filter((e) => e.itemId === itemId && (!locationId || e.locationId === locationId));
+    onHand(itemId, locationId, itemLocationId) {
+      return this.ledgerFor(itemId, locationId, itemLocationId).reduce((s, e) => s + e.qty, 0);
     },
-    onHand(itemId, locationId) {
-      return this.ledgerFor(itemId, locationId).reduce((s, e) => s + e.qty, 0);
+    ledgerFor(itemId, locationId, itemLocationId) {
+      return DB.stockLedger.filter((e) => {
+        if (e.itemId !== itemId) return false;
+        if (locationId && e.locationId !== locationId) return false;
+        if (itemLocationId && e.itemLocationId !== itemLocationId) return false;
+        return true;
+      });
+    },
+    itemLocationsForStorage(locationId, activeOnly) {
+      return (DB.itemLocations || []).filter((il) => {
+        if (locationId && il.locationId !== locationId) return false;
+        if (activeOnly !== false && il.status === "Inactive") return false;
+        return true;
+      });
+    },
+    itemLocationLabel(id) {
+      const il = this.get("itemLocations", id);
+      if (!il) return "—";
+      const parts = [il.name, il.rack && "Rack " + il.rack, il.shelf && "Shelf " + il.shelf, il.bin && "Bin " + il.bin].filter(Boolean);
+      return parts.join(" / ") || il.code || "—";
+    },
+    normalizeReceiptLines(receipt) {
+      if (!receipt) return [];
+      if (receipt.lines && receipt.lines.length) return receipt.lines;
+      if (!receipt.itemId) return [];
+      const it = this.get("items", receipt.itemId) || {};
+      return [{
+        itemId: receipt.itemId,
+        sku: it.sku || receipt.sku,
+        description: it.description || receipt.description,
+        hsn: it.hsn || receipt.hsn,
+        qtyInvoiced: receipt.qtyInvoiced != null ? receipt.qtyInvoiced : receipt.qtyReceived,
+        qtyReceived: receipt.qtyReceived,
+        qtyAccepted: receipt.qtyAccepted != null ? receipt.qtyAccepted : receipt.qtyReceived,
+        qtyRejected: receipt.qtyRejected || 0,
+        unit: receipt.unit || it.unit,
+        rate: receipt.rate != null ? receipt.rate : it.rate,
+        taxId: receipt.taxId || it.taxId,
+        locationId: receipt.locationId || it.locationId,
+        itemLocationId: receipt.itemLocationId || it.itemLocationId,
+        batch: receipt.batch,
+        remarks: receipt.remarks,
+        lineValue: receipt.totalValue,
+      }];
+    },
+    grnFlattenedLines() {
+      const out = [];
+      (DB.materialReceipts || []).forEach((r) => {
+        this.normalizeReceiptLines(r).forEach((ln, i) => {
+          out.push({ receipt: r, line: ln, lineNo: ln.lineNo || i + 1 });
+        });
+      });
+      return out;
     },
     postLedger(entry, actor) {
       const rec = { id: uid("L"), date: entry.date || todayISO(), batch: "", ref: "", by: actor || "system", ...entry };
@@ -1229,21 +1308,81 @@
     // (no stock posted) and a pending inspection lands in the Quality dept.
     // When QC is not required, accepted qty is posted to stock immediately.
     postReceipt(receipt, actor) {
-      const acc = Number(receipt.qtyAccepted ?? receipt.qtyReceived) || 0;
+      const linesIn = (receipt.lines && receipt.lines.length) ? receipt.lines : (receipt.itemId ? [receipt] : []);
+      if (!linesIn.length) return null;
       const no = receipt.no || this.nextNo("MRN", receipt.date);
-      const rec = this.create("materialReceipts", { ...receipt, no, totalValue: receipt.totalValue || 0, createdBy: actor }, actor);
+      const normalizedLines = [];
+      let totalValue = 0;
+      linesIn.forEach((raw, idx) => {
+        const it = this.get("items", raw.itemId) || {};
+        const qtyInvoiced = Number(raw.qtyInvoiced != null ? raw.qtyInvoiced : raw.qtyReceived) || 0;
+        const qtyReceived = Number(raw.qtyReceived) || 0;
+        const qtyAccepted = Number(raw.qtyAccepted != null ? raw.qtyAccepted : raw.qtyReceived) || 0;
+        const qtyRejected = Number(raw.qtyRejected) || 0;
+        const rate = Number(raw.rate != null ? raw.rate : it.rate) || 0;
+        const taxId = raw.taxId || it.taxId;
+        const tax = (this.get("taxes", taxId) || {}).rate || 0;
+        const lineValue = Math.round(qtyAccepted * rate * (1 + tax / 100) * 100) / 100;
+        totalValue += lineValue;
+        normalizedLines.push({
+          lineNo: idx + 1,
+          itemId: raw.itemId,
+          sku: it.sku || raw.sku || "",
+          description: it.description || raw.description || it.name || "",
+          hsn: it.hsn || raw.hsn || "",
+          qtyInvoiced,
+          qtyReceived,
+          qtyAccepted,
+          qtyRejected,
+          unit: raw.unit || it.unit || "Nos",
+          rate,
+          taxId,
+          locationId: raw.locationId || it.locationId,
+          itemLocationId: raw.itemLocationId || it.itemLocationId || "",
+          batch: raw.batch || "",
+          remarks: raw.remarks || "",
+          lineValue,
+        });
+      });
+      const first = normalizedLines[0] || {};
+      const rec = this.create("materialReceipts", {
+        ...receipt,
+        lines: normalizedLines,
+        lineCount: normalizedLines.length,
+        itemId: first.itemId,
+        unit: first.unit,
+        qtyReceived: normalizedLines.reduce((s, l) => s + (Number(l.qtyReceived) || 0), 0),
+        qtyAccepted: normalizedLines.reduce((s, l) => s + (Number(l.qtyAccepted) || 0), 0),
+        qtyInvoiced: normalizedLines.reduce((s, l) => s + (Number(l.qtyInvoiced) || 0), 0),
+        locationId: first.locationId,
+        no,
+        totalValue: receipt.totalValue != null ? receipt.totalValue : totalValue,
+        createdBy: actor,
+        posted: receipt.qcRequired !== "Yes",
+      }, actor);
       if (receipt.qcRequired === "Yes") {
-        const insp = this.create("qcInspections", {
-          no: this.nextNo("QC", receipt.date), date: receipt.date, source: "Incoming (GRN)",
-          receiptId: rec.id, receiptNo: rec.no, itemId: receipt.itemId, supplierId: receipt.supplierId,
-          locationId: receipt.locationId, batch: receipt.batch || "", qtyReceived: acc, sampleSize: "",
-          status: "Pending", result: "", remarks: "", inspectedBy: "",
-        }, actor);
-        this.update("materialReceipts", rec.id, { qcStatus: "Pending", qcInspectionId: insp.id }, actor);
+        normalizedLines.forEach((ln) => {
+          const acc = Number(ln.qtyAccepted) || 0;
+          if (acc <= 0) return;
+          this.create("qcInspections", {
+            no: this.nextNo("QC", receipt.date), date: receipt.date, source: "Incoming (GRN)",
+            receiptId: rec.id, receiptNo: rec.no, itemId: ln.itemId, supplierId: receipt.supplierId,
+            locationId: ln.locationId, itemLocationId: ln.itemLocationId || "", batch: ln.batch || "",
+            qtyReceived: acc, sampleSize: "", status: "Pending", result: "", remarks: ln.remarks || "", inspectedBy: "",
+          }, actor);
+        });
+        this.update("materialReceipts", rec.id, { qcStatus: "Pending" }, actor);
       } else {
-        this.postLedger({ itemId: receipt.itemId, locationId: receipt.locationId, type: "receipt", qty: acc, ref: rec.no, batch: receipt.batch || "", date: receipt.date }, actor);
-        this.update("materialReceipts", rec.id, { qcStatus: "Not required" }, actor);
-        this.audit(actor, "stock-in", "stockLedger", rec.no, "Receipt " + acc + " accepted to stock");
+        normalizedLines.forEach((ln) => {
+          const acc = Number(ln.qtyAccepted) || 0;
+          if (acc <= 0) return;
+          this.postLedger({
+            itemId: ln.itemId, locationId: ln.locationId, itemLocationId: ln.itemLocationId || "",
+            type: "receipt", qty: acc, ref: rec.no, batch: ln.batch || "", date: receipt.date,
+          }, actor);
+        });
+        this.update("materialReceipts", rec.id, { qcStatus: "Not required", posted: true }, actor);
+        this.audit(actor, "stock-in", "stockLedger", rec.no, "GRN " + rec.no + " — " + normalizedLines.length + " line(s) to stock");
       }
       return rec;
     },
@@ -1256,7 +1395,7 @@
       this.update("qcInspections", inspId, { status: result, result, acceptQty, rejectQty, remarks: payload.remarks || "", inspectedBy: actor, decidedAt: Date.now() }, actor);
       if (insp.receiptId) this.update("materialReceipts", insp.receiptId, { qcStatus: result === "Accepted" ? "Passed" : result === "Rejected" ? "Failed" : "Partial" }, actor);
       if (acceptQty > 0) {
-        this.postLedger({ itemId: insp.itemId, locationId: insp.locationId, type: "receipt", qty: acceptQty, ref: insp.receiptNo || insp.no, batch: insp.batch || "", date: todayISO() }, actor);
+        this.postLedger({ itemId: insp.itemId, locationId: insp.locationId, itemLocationId: insp.itemLocationId || "", type: "receipt", qty: acceptQty, ref: insp.receiptNo || insp.no, batch: insp.batch || "", date: todayISO() }, actor);
         this.audit(actor, "stock-in", "stockLedger", insp.no, "QC accepted " + acceptQty + " to stock");
       }
       if (rejectQty > 0 || result === "Rejected") {

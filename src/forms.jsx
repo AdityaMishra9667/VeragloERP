@@ -221,6 +221,19 @@
       ],
     },
     locations: { label: "Location", fields: [{ k: "code", l: "Code", req: true }, { k: "name", l: "Name", req: true }] },
+    itemLocations: {
+      label: "Item Location",
+      fields: [
+        { k: "locationId", l: "Storage location", master: "locations", req: true },
+        { k: "name", l: "Item location name", req: true },
+        { k: "rack", l: "Rack" },
+        { k: "shelf", l: "Shelf" },
+        { k: "bin", l: "Bin" },
+        { k: "zone", l: "Zone" },
+        { k: "description", l: "Description", type: "area" },
+        { k: "status", l: "Status", select: ["Active", "Inactive"], req: true },
+      ],
+    },
     units: { label: "Unit", fields: [{ k: "name", l: "Unit name", req: true }] },
     paymentTerms: { label: "Payment Term", fields: [{ k: "name", l: "Term", req: true }] },
     deliveryTerms: { label: "Delivery Term", fields: [{ k: "name", l: "Term", req: true }] },
@@ -300,6 +313,10 @@
       return rec.no + (c ? " · " + c.name : "");
     }
     if (coll === "categories") return (rec.code || "") + " · " + (rec.typeCode || "") + " · " + (rec.name || rec.id);
+    if (coll === "itemLocations") {
+      const loc = store.get("locations", rec.locationId);
+      return (rec.code ? rec.code + " · " : "") + (rec.name || "") + (loc ? " @ " + loc.name : "");
+    }
     if (coll === "customers") return (rec.code ? rec.code + " · " : "") + (rec.legalName || rec.name || rec.id);
     return (rec.code ? rec.code + " · " : "") + (rec.name || rec.id);
   }
@@ -334,6 +351,10 @@
       if (collection === "manufacturers") {
         if (!payload.code) payload.code = store.nextManufacturerCode();
         payload.active = payload.active !== false;
+      }
+      if (collection === "itemLocations") {
+        if (!payload.code) payload.code = "ILOC-" + String((store.list("itemLocations").length || 0) + 1).padStart(3, "0");
+        payload.status = payload.status || "Active";
       }
       const rec = store.create(collection, payload, actorRole);
       VG.toast(cfg.label + " added");
