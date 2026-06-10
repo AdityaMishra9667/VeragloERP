@@ -280,14 +280,99 @@
     return max;
   }
 
+  function masterFormatConfig(prefix) {
+    const database = db();
+    const p = sanitizeAlphaNum(prefix);
+    const custom = database && database.settings && database.settings.numbering
+      && database.settings.numbering.masterFormats
+      && database.settings.numbering.masterFormats[p];
+    return custom || null;
+  }
+
   function nextMasterCode(prefix, opts) {
     const def = MASTER_DEFS[prefix] || opts || {};
+    const custom = masterFormatConfig(prefix);
     const collection = (opts && opts.collection) || def.collection;
     const field = (opts && opts.field) || def.field || "code";
-    const pad = (opts && opts.pad) || def.pad || 6;
-    const p = sanitizeAlphaNum(prefix);
+    const pad = (custom && custom.pad) || (opts && opts.pad) || def.pad || 6;
+    const p = sanitizeAlphaNum((custom && custom.prefix) || prefix);
     const max = maxMasterSeq(p, collection, field);
     return p + String(max + 1).padStart(pad, "0");
+  }
+
+  function seriesRowFromRule(docType, prefix, rule) {
+    const row = defaultSeriesRow(docType, prefix);
+    if (!rule) return row;
+    if (rule.padding != null) row.padding = Number(rule.padding) || 5;
+    if (rule.startSequence != null) row.startSequence = Number(rule.startSequence) || 1;
+    if (rule.reset) row.reset = rule.reset;
+    if (rule.yearMode === "fy") { row.useFy = true; row.useCalendarYear = false; }
+    else if (rule.yearMode === "calendar") { row.useCalendarYear = true; row.useFy = false; }
+    else if (rule.yearMode === "none") { row.useCalendarYear = false; row.useFy = false; }
+    if (rule.branchWise != null) row.branchWise = !!rule.branchWise;
+    if (rule.manualOverride != null) row.manualOverride = !!rule.manualOverride;
+    if (rule.active != null) row.active = !!rule.active;
+    return normalizeSeriesRow(row);
+  }
+
+  function previewFromRule(prefix, rule, dateRef) {
+    const ser = seriesRowFromRule("Preview", prefix, rule);
+    const sampleSeq = Number(rule && rule.previewSeq) || 125;
+    return formatNumber(ser, sampleSeq, dateRef || new Date().toISOString().slice(0, 10));
+  }
+
+  function applyBulkNumbering(database, selections, rule) {
+    if (!database || !selections) return database;
+    const targets = (typeof VG !== "undefined" && VG.NUMBERING_APPLY_TARGETS) || [];
+    if (!database.settings) database.settings = {};
+    database.settings.numbering = database.settings.numbering || {};
+    database.settings.numbering.masterFormats = database.settings.numbering.masterFormats || {};
+    ensureDefaultSeries(database);
+
+    targets.forEach((target) => {
+      const sel = selections[target.key];
+      if (!sel || !sel.selected) return;
+      const prefix = sanitizeAlphaNum(sel.prefix || target.defaultPrefix || "");
+      if (target.type === "sku") {
+        database.settings.skuNumbering = {
+          ...(database.settings.skuNumbering || {}),
+          companyPrefix: prefix || database.settings.skuNumbering?.companyPrefix || "GLS",
+          separator: "",
+          numberLength: Number(rule.padding) || database.settings.skuNumbering?.numberLength || 7,
+          includeCategoryCode: rule.includeCategoryCode !== false,
+        };
+        if (rule.yearMode === "calendar" || rule.yearMode === "fy") {
+          database.settings.skuNumbering.includeYear = true;
+          database.settings.skuNumbering.yearMode = rule.yearMode;
+          database.settings.skuNumbering.resetRule = "yearly";
+        } else if (rule.yearMode === "none") {
+          database.settings.skuNumbering.includeYear = false;
+          database.settings.skuNumbering.resetRule = "never";
+        }
+      } else if (target.type === "master") {
+        database.settings.numbering.masterFormats[sanitizeAlphaNum(target.masterPrefix)] = {
+          prefix,
+          pad: Number(rule.padding) || 6,
+        };
+      } else if (target.type === "doc") {
+        let ser = (database.numberSeries || []).find((s) => s.docType === target.docType && s.active !== false);
+        if (!ser) {
+          ser = { id: "ns" + Date.now() + Math.random().toString(36).slice(2, 6), ...defaultSeriesRow(target.docType, prefix) };
+          database.numberSeries.push(ser);
+        }
+        Object.assign(ser, seriesRowFromRule(target.docType, prefix, rule));
+        ser.prefix = prefix;
+        normalizeSeriesRow(ser);
+      }
+    });
+
+    if (rule) {
+      database.settings.numbering.defaultPadding = Number(rule.padding) || database.settings.numbering.defaultPadding || 5;
+      database.settings.numbering.defaultYearMode = rule.yearMode || database.settings.numbering.defaultYearMode || "calendar";
+      database.settings.numbering.defaultReset = rule.reset || database.settings.numbering.defaultReset || "Yearly";
+    }
+    syncCountersFromData(database);
+    return database;
   }
 
   function syncCountersFromData(database) {
@@ -376,10 +461,14 @@
     financialYearShort,
     formatNumber,
     previewSeries,
+    previewFromRule,
+    seriesRowFromRule,
+    applyBulkNumbering,
     nextDocumentNo,
     nextMasterCode,
     seriesForPrefix,
     defaultSeriesRow,
+    normalizeSeriesRow,
     ensureDefaultSeries,
     migrateNumbering,
     syncCountersFromData,

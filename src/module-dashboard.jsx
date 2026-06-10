@@ -317,7 +317,7 @@
       id: a.id,
       action: a.action,
       summary: a.summary,
-      time: new Date(a.ts).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }),
+      time: VG.fmt.formatDateTime ? VG.fmt.formatDateTime(a.ts) : new Date(a.ts).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }),
     }));
 
   VG.dashboardBuilders = {
@@ -921,7 +921,7 @@
         opsContent: (
           <div className="text-sm space-y-2">
             <div className="glass rounded-xl p-3 flex justify-between"><span>License</span><b>{lic.plan || (store.isLicensed && store.isLicensed() ? "Active" : "Trial")}</b></div>
-            <div className="glass rounded-xl p-3 flex justify-between"><span>Last backup</span><b>{live.lastBackupAt ? new Date(live.lastBackupAt).toLocaleString("en-IN") : "Never"}</b></div>
+            <div className="glass rounded-xl p-3 flex justify-between"><span>Last backup</span><b>{live.lastBackupAt ? (VG.fmt.formatDateTime ? VG.fmt.formatDateTime(live.lastBackupAt) : new Date(live.lastBackupAt).toLocaleString("en-IN")) : "Never"}</b></div>
             {can && can("export") && <Button variant="soft" icon="cloud" onClick={() => go("backup")}>Manage backup</Button>}
           </div>
         ),

@@ -865,7 +865,7 @@
     const cols = columns.filter((c) => c.key !== "_actions");
     const head = cols.map((c) => `<th>${c.label}</th>`).join("");
     const body = rows.map((r) => "<tr>" + cols.map((c) => `<td>${c.print ? c.print(r) : (c.csv ? c.csv(r) : (r[c.key] ?? ""))}</td>`).join("") + "</tr>").join("");
-    printDocument({ title: title || "Report", subtitle: "Generated " + new Date().toLocaleString("en-IN"), inner: `<table class="vg-tbl"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>` });
+    printDocument({ title: title || "Report", subtitle: "Generated " + (VG.fmt.formatDateTime ? VG.fmt.formatDateTime(new Date()) : new Date().toLocaleString("en-IN")), inner: `<table class="vg-tbl"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>` });
   }
 
   /* ============ small atoms ============ */

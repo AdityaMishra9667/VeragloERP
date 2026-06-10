@@ -770,7 +770,7 @@
       <div class="vg-q-foot-bar">
         <div class="conf">Confidential — ERP-generated document. Unauthorised distribution prohibited.</div>
         ${tpl.showQr !== false ? `<div class="vg-q-qr-box">VERIFY<br><span style="font-size:6pt">${qrPayload}</span></div>` : "<div></div>"}
-        <div style="text-align:right">Rev ${rev} · ${new Date().toLocaleString("en-IN")}</div>
+        <div style="text-align:right">Rev ${rev} · ${VG.fmt.formatDateTime ? VG.fmt.formatDateTime(new Date()) : new Date().toLocaleString("en-IN")}</div>
       </div>
     </div>`;
   }
@@ -1453,7 +1453,7 @@
         docType,
         docTitle: docType,
         subtitle: "Template preview · " + store.company().name,
-        meta: [["Document No.", "PREVIEW-2026-001"], ["Date", new Date().toLocaleDateString("en-IN")], ["Currency", "INR"]],
+        meta: [["Document No.", "PREVIEW-2026-001"], ["Date", (VG.fmt.formatDate ? VG.fmt.formatDate(new Date()) : new Date().toLocaleDateString("en-IN"))], ["Currency", "INR"]],
         parties: {
           billTo: "Acme Industries Pvt. Ltd.<br>Andheri East, Mumbai 400069<br><span class='vg-muted'>GSTIN 27AAAAA0000A1Z5</span>",
           shipTo: "Acme Industries — Plant II<br>Pune, Maharashtra",

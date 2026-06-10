@@ -5,7 +5,7 @@
 (function (VG) {
   const { useState, useEffect } = React;
   const KEY = "veraglo-erp-db";
-  const VERSION = 16;
+  const VERSION = 17;
   const ITEM_DESC_MAX = 30000;
   const AUTH_INACTIVE_MSG = "User account does not exist or has been deactivated.";
   const ITEM_MFR_DUP_MSG = "This manufacturer and part number already exist in Item Master. Duplicate item cannot be created.";
@@ -372,8 +372,24 @@
       skuNumbering: {
         enabled: true, companyPrefix: "GLS", separator: "", numberLength: 7, startNumber: 1,
         resetRule: "never", includeBranchCode: false, branchCode: "", includeCategoryCode: true,
+        includeYear: true, yearMode: "calendar",
         categoryPrefixes: { RWM: "RWM", FNG: "FGD", SFG: "SFG", CON: "CON", PKG: "PKM", SPR: "SPR", WIP: "WIP", OTH: "OTH" },
         manualOverrideAllowed: false, duplicateCheck: true, seriesCounters: {}, auditLog: [],
+      },
+      numbering: {
+        alphanumericOnly: true,
+        preserveLegacyNumbers: true,
+        defaultPadding: 5,
+        defaultYearMode: "calendar",
+        defaultReset: "Yearly",
+        engineVersion: 2,
+        masterFormats: {},
+      },
+      dateFormat: {
+        formatId: "DD_MMM_YYYY_SPACE",
+        locale: "en-IN",
+        timeFormat: "12",
+        includeWeekday: false,
       },
     };
   }
@@ -406,6 +422,10 @@
     if (!db.settings.dashboard) db.settings.dashboard = defaultSettings().dashboard;
     if (!db.settings.skuNumbering) db.settings.skuNumbering = defaultSettings().skuNumbering;
     else db.settings.skuNumbering = { ...defaultSettings().skuNumbering, ...db.settings.skuNumbering, categoryPrefixes: { ...defaultSettings().skuNumbering.categoryPrefixes, ...(db.settings.skuNumbering.categoryPrefixes || {}) } };
+    if (!db.settings.numbering) db.settings.numbering = defaultSettings().numbering;
+    else db.settings.numbering = { ...defaultSettings().numbering, ...db.settings.numbering, masterFormats: { ...defaultSettings().numbering.masterFormats, ...(db.settings.numbering.masterFormats || {}) } };
+    if (!db.settings.dateFormat) db.settings.dateFormat = defaultSettings().dateFormat;
+    else db.settings.dateFormat = { ...defaultSettings().dateFormat, ...db.settings.dateFormat };
     if (!db.settings.activation) db.settings.activation = defaultSettings().activation;
     if (!db.settings.dataPath) db.settings.dataPath = defaultSettings().dataPath;
     if (!db.settings.weatherLogin) db.settings.weatherLogin = defaultSettings().weatherLogin;

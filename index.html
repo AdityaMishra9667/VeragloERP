@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0b1220" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
-    <meta name="vg-build" content="2026-06-alphanumeric-numbering-v2" />
+    <meta name="vg-build" content="2026-06-numbering-date-settings-v1" />
     <title>Veraglo ERP — Enterprise Workspace</title>
     <link rel="icon" type="image/png" href="assets/veraglo-logo.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -1925,7 +1925,7 @@
       (async function () {
         window.VG_BUILD = document.querySelector('meta[name="vg-build"]')?.content || "dev";
         var files = [
-          "src/data.jsx", "src/typography.jsx", "src/ui.jsx", "src/store.jsx", "src/numbering-engine.jsx", "src/sku-engine.jsx", "src/item-mfr.jsx", "src/item-display.jsx", "src/admin-config.jsx", "src/doc-designer.jsx", "src/forms.jsx", "src/screen-nav.jsx", "src/doc-conversion.jsx", "src/doc-template-designer.jsx", "src/customer.jsx",
+          "src/data.jsx", "src/typography.jsx", "src/ui.jsx", "src/store.jsx", "src/numbering-engine.jsx", "src/date-format.jsx", "src/sku-engine.jsx", "src/item-mfr.jsx", "src/item-display.jsx", "src/admin-config.jsx", "src/doc-designer.jsx", "src/forms.jsx", "src/screen-nav.jsx", "src/doc-conversion.jsx", "src/doc-template-designer.jsx", "src/customer.jsx",
           "src/module-dashboard.jsx", "src/modules.jsx", "src/shell-ui.jsx", "src/enquiry.jsx", "src/invoice-export.jsx", "src/sales.jsx", "src/bom.jsx", "src/inventory.jsx", "src/purchase.jsx", "src/quality.jsx",
           "src/production.jsx", "src/dispatch.jsx", "src/accounts.jsx", "src/hr.jsx", "src/attendance.jsx",
           "src/licensing-core.jsx", "src/admin-licensing.jsx", "src/admin-permissions.jsx", "src/weather-login.jsx", "src/forgot-password.jsx", "src/admin.jsx", "src/search.jsx", "src/welcome-home.jsx", "src/app.jsx",
@@ -1940,7 +1940,7 @@
           }
           VG.apiBase = "";
           VG.buildId = document.querySelector('meta[name="vg-build"]')?.content || "dev";
-          console.info("[Veraglo ERP] UI build:", VG.buildId, "— numbering v2 (QT202600001). Run: git pull && ./start.sh");
+          console.info("[Veraglo ERP] UI build:", VG.buildId, "— global numbering & date format settings. Run: git pull && ./start.sh");
           var initInfo = await VG.store.init();
           if (VG.numberingEngine && VG.numberingEngine.previewSeries && VG.store.list) {
             var qSer = (VG.store.list("numberSeries") || []).find(function (s) { return s.docType === "Quotation" && s.active !== false; });

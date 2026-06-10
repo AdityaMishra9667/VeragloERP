@@ -8,7 +8,7 @@
   const today = VG.fmt.todayISO;
   const clone = (x) => JSON.parse(JSON.stringify(x));
   const fmtBytes = (n) => (n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB");
-  const fmtTime = (ts) => (ts ? new Date(ts).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "Never");
+  const fmtTime = (ts) => (ts ? (VG.fmt.formatDateTime ? VG.fmt.formatDateTime(ts) : new Date(ts).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })) : "Never");
   function download(filename, text) {
     const blob = new Blob([text], { type: "application/json;charset=utf-8" });
     const a = document.createElement("a");
@@ -1058,6 +1058,149 @@
   };
 
   /* ================= Numbering Settings ================= */
+  function defaultNumberingSelections(targets, rows) {
+    const map = {};
+    (targets || []).forEach((t) => {
+      let prefix = t.defaultPrefix || "";
+      if (t.type === "doc") {
+        const ser = (rows || []).find((r) => r.docType === t.docType && r.active !== false);
+        if (ser && ser.prefix) prefix = ser.prefix;
+      }
+      map[t.key] = { selected: false, prefix };
+    });
+    return map;
+  }
+
+  function GlobalNumberingPanel({ roleKey, can, rows, onApplied }) {
+    const ne = VG.numberingEngine || {};
+    const targets = VG.NUMBERING_APPLY_TARGETS || [];
+    const [rule, setRule] = useState(() => {
+      const n = store.settings().numbering || {};
+      return {
+        padding: n.defaultPadding || 5,
+        startSequence: 1,
+        reset: n.defaultReset || "Yearly",
+        yearMode: n.defaultYearMode || "calendar",
+        previewSeq: 125,
+        branchWise: false,
+        manualOverride: false,
+      };
+    });
+    const [selections, setSelections] = useState(() => defaultNumberingSelections(targets, rows));
+    const [previewKey, setPreviewKey] = useState("quotation");
+    const setRuleField = (k, v) => setRule((p) => ({ ...p, [k]: v }));
+    const allSelected = targets.length > 0 && targets.every((t) => selections[t.key] && selections[t.key].selected);
+    const someSelected = targets.some((t) => selections[t.key] && selections[t.key].selected);
+
+    useEffect(() => {
+      setSelections(defaultNumberingSelections(targets, rows));
+    }, [rows.length]);
+
+    function toggleAll(v) {
+      setSelections((p) => {
+        const next = { ...p };
+        targets.forEach((t) => { next[t.key] = { ...(next[t.key] || {}), selected: v }; });
+        return next;
+      });
+    }
+
+    function toggleOne(key, v) {
+      setSelections((p) => ({ ...p, [key]: { ...(p[key] || {}), selected: v } }));
+    }
+
+    function setPrefix(key, v) {
+      const clean = ne.sanitizeAlphaNum ? ne.sanitizeAlphaNum(v) : String(v || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+      setSelections((p) => ({ ...p, [key]: { ...(p[key] || {}), prefix: clean } }));
+    }
+
+    const previewTarget = targets.find((t) => t.key === previewKey) || targets[0];
+    const previewPrefix = previewTarget && selections[previewTarget.key] ? selections[previewTarget.key].prefix : "";
+    const livePreview = ne.previewFromRule
+      ? ne.previewFromRule(previewPrefix || previewTarget?.defaultPrefix || "QT", rule, today())
+      : "";
+
+    const selectedPreviews = targets
+      .filter((t) => selections[t.key] && selections[t.key].selected)
+      .slice(0, 6)
+      .map((t) => {
+        const pfx = (selections[t.key] && selections[t.key].prefix) || t.defaultPrefix;
+        const sample = ne.previewFromRule ? ne.previewFromRule(pfx, rule, today()) : pfx;
+        return { label: t.label, sample };
+      });
+
+    async function applySelected() {
+      if (!someSelected) return VG.toast("Select at least one module or category", "error");
+      if (!can("edit")) return VG.toast("No permission to edit numbering", "error");
+      const ok = await VG.confirm({
+        title: "Apply numbering changes?",
+        message: "New settings apply to selected modules only. Existing document numbers are preserved.",
+        confirmLabel: "Apply",
+      });
+      if (!ok) return;
+      if (ne.applyBulkNumbering && store.db) ne.applyBulkNumbering(store.db(), selections, rule);
+      store.audit(roleKey, "settings", "numbering", "bulk_apply", "Applied numbering to " + Object.keys(selections).filter((k) => selections[k].selected).length + " modules");
+      await store.flushPersist();
+      VG.toast("Numbering applied to selected modules");
+      if (onApplied) onApplied();
+    }
+
+    return (
+      <Card className="p-4 mb-4">
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+          <div>
+            <h3 className="font-semibold text-sm">Global Numbering Control</h3>
+            <p className="text-xs opacity-60 mt-1">Configure format once, then apply to all or selected modules using checkboxes below.</p>
+          </div>
+          {can("edit") && <Button icon="check" onClick={applySelected} disabled={!someSelected}>Apply to selected</Button>}
+        </div>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+          <Field label="Sequence length (padding)"><Num value={rule.padding} onChange={(v) => setRuleField("padding", v)} /></Field>
+          <Field label="Starting sequence"><Num value={rule.startSequence} onChange={(v) => setRuleField("startSequence", v)} /></Field>
+          <Field label="Reset cycle"><Select value={rule.reset} onChange={(v) => setRuleField("reset", v)} options={["Never", "Yearly", "Monthly"].map((x) => ({ value: x, label: x }))} /></Field>
+          <Field label="Year in number"><Select value={rule.yearMode} onChange={(v) => setRuleField("yearMode", v)} options={[
+            { value: "calendar", label: "Calendar year (2026)" },
+            { value: "fy", label: "Financial year (2627)" },
+            { value: "none", label: "No year segment" },
+          ]} /></Field>
+          <Field label="Preview module"><Select value={previewKey} onChange={setPreviewKey} options={targets.map((t) => ({ value: t.key, label: t.label }))} /></Field>
+          <Field label="Live preview"><Text value={livePreview || "—"} onChange={() => {}} disabled /></Field>
+          <div className="lg:col-span-2 flex flex-wrap items-end gap-4 pb-1">
+            <Checkbox checked={!!rule.branchWise} onChange={(v) => setRuleField("branchWise", v)} label="Branch-wise series" />
+            <Checkbox checked={!!rule.manualOverride} onChange={(v) => setRuleField("manualOverride", v)} label="Allow manual override" />
+          </div>
+        </div>
+        {selectedPreviews.length > 0 && (
+          <div className="mb-4 p-3 rounded-xl glass text-xs">
+            <div className="font-medium mb-2 opacity-80">Selected module previews</div>
+            <div className="flex flex-wrap gap-3">
+              {selectedPreviews.map((p) => (
+                <span key={p.label}><span className="opacity-60">{p.label}:</span> <span className="font-mono">{p.sample}</span></span>
+              ))}
+            </div>
+          </div>
+        )}
+        <div className="border-t border-white/10 pt-4">
+          <div className="flex flex-wrap items-center gap-4 mb-3">
+            <Checkbox checked={allSelected} onChange={toggleAll} label="Select All" />
+            <span className="text-xs opacity-50">{someSelected ? targets.filter((t) => selections[t.key]?.selected).length + " selected" : "No modules selected"}</span>
+            <Button variant="ghost" onClick={() => toggleAll(false)}>Clear selection</Button>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
+            {targets.map((t) => (
+              <div key={t.key} className="flex items-center gap-2 glass rounded-lg px-3 py-2">
+                <Checkbox checked={!!(selections[t.key] && selections[t.key].selected)} onChange={(v) => toggleOne(t.key, v)} label="" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-medium truncate">{t.label}</div>
+                  <div className="font-mono text-[11px]"><Text value={(selections[t.key] && selections[t.key].prefix) || t.defaultPrefix} onChange={(v) => setPrefix(t.key, v)} placeholder="Prefix" /></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
   function SeriesForm({ open, onClose, record, roleKey }) {
     const isEdit = !!(record && record.id);
     const ne = VG.numberingEngine || {};
@@ -1108,6 +1251,7 @@
     VG.useDB();
     const ne = VG.numberingEngine || {};
     const [edit, setEdit] = useState(null);
+    const [tick, setTick] = useState(0);
     if (ne.ensureDefaultSeries && store.db) ne.ensureDefaultSeries(store.db());
     const rows = store.list("numberSeries");
     const cols = [
@@ -1123,15 +1267,72 @@
       return <SeriesForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} />;
     }
     return (
-      <ListPage title="Numbering Settings" desc="Module-wise alphanumeric document numbers · prefix + year + sequence (no special characters)" onNew={can("add") ? () => setEdit({}) : null} newLabel="Add Series" can={can}>
+      <ListPage title="Numbering Settings" desc="Centrally control prefixes, sequence length, year logic, and numbering patterns — apply globally or per module" onNew={can("add") ? () => setEdit({}) : null} newLabel="Add Series" can={can}>
+        <GlobalNumberingPanel roleKey={roleKey} can={can} rows={rows} onApplied={() => setTick((t) => t + 1)} key={tick} />
         <Card className="p-4 mb-4 text-sm opacity-75">
-          All new documents use clean alphanumeric codes (e.g. <span className="font-mono">QT202600125</span>, <span className="font-mono">SO202600045</span>).
-          Historical numbers with slashes are preserved. Master codes (Customer, Supplier, Employee) use the same rule via auto-generation.
+          Alphanumeric only — no slash, dash or special characters. Examples: <span className="font-mono">QT202600125</span>, <span className="font-mono">GLSFG202600001</span> (SKU), <span className="font-mono">PO202600001</span>.
+          Historical numbers are preserved; only new transactions use updated rules.
         </Card>
-        <RecordTable embedded suppressNew title="Document Numbering Series" columns={cols} rows={rows} can={can} printTitle="Numbering Settings" searchKeys={["prefix", "docType"]}
+        <RecordTable embedded suppressNew title="Document Numbering Series (per module)" columns={cols} rows={rows} can={can} printTitle="Numbering Settings" searchKeys={["prefix", "docType"]}
           onNew={can("add") ? () => setEdit({}) : null} onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete series?", danger: true, confirmLabel: "Delete" })) { store.remove("numberSeries", r.id, roleKey); VG.toast("Deleted"); } } : null} />
       </ListPage>
+    );
+  }
+
+  /* ================= Date Format Settings ================= */
+  function DateFormatSettingsPage({ roleKey, can }) {
+    VG.useDB();
+    const df = VG.dateFormat || {};
+    const presets = VG.DATE_FORMAT_PRESETS || [];
+    const live = store.settings().dateFormat || (df.defaultDateFormatSettings ? df.defaultDateFormatSettings() : {});
+    const [s, setS] = useState(() => clone(live));
+    const set = (k, v) => setS((p) => ({ ...p, [k]: v }));
+    const sampleDate = today();
+    const datePreview = df.previewDate ? df.previewDate(s.formatId, sampleDate) : "—";
+    const timePreview = df.formatTime ? df.formatTime(new Date(), s) : "—";
+
+    function save() {
+      store.saveAdminSettings({ dateFormat: s }, roleKey);
+      VG.toast("Date & time format applied globally");
+    }
+
+    return (
+      <div>
+        <PageHead title="Date Format Settings" desc="Control how dates and times appear across dashboards, forms, reports, PDFs, timelines, logs, and all modules.">
+          {can("edit") && <Button icon="check" onClick={save}>Save & apply globally</Button>}
+        </PageHead>
+        <Card className="p-4 mb-4">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <Field label="Date format" className="lg:col-span-2">
+              <Select value={s.formatId} onChange={(v) => set("formatId", v)} options={presets.map((p) => ({ value: p.id, label: p.label + " · e.g. " + p.example }))} />
+            </Field>
+            <Field label="Locale"><Select value={s.locale || "en-IN"} onChange={(v) => set("locale", v)} options={[
+              { value: "en-IN", label: "English (India)" },
+              { value: "en-GB", label: "English (UK)" },
+              { value: "en-US", label: "English (US)" },
+            ]} /></Field>
+            <Field label="Time format"><Select value={s.timeFormat || "12"} onChange={(v) => set("timeFormat", v)} options={[
+              { value: "12", label: "12-hour (e.g. 3:45 PM)" },
+              { value: "24", label: "24-hour (e.g. 15:45)" },
+            ]} /></Field>
+            <div className="flex items-end pb-1"><Checkbox checked={!!s.includeWeekday} onChange={(v) => set("includeWeekday", v)} label="Include weekday in dates" /></div>
+          </div>
+          <div className="mt-4 p-4 rounded-xl glass grid sm:grid-cols-2 gap-4">
+            <div>
+              <div className="text-xs opacity-60 mb-1">Today (date preview)</div>
+              <div className="text-lg font-semibold">{datePreview}</div>
+              <div className="text-[11px] opacity-50 mt-1">Sample ISO: {sampleDate}</div>
+            </div>
+            <div>
+              <div className="text-xs opacity-60 mb-1">Time preview</div>
+              <div className="text-lg font-semibold">{timePreview}</div>
+              <div className="text-[11px] opacity-50 mt-1">Applies to timelines, logs, audit trail, notifications</div>
+            </div>
+          </div>
+          <p className="text-[11px] opacity-55 mt-3">Internal storage remains ISO (YYYY-MM-DD). Display format applies to UI, print, and PDF output.</p>
+        </Card>
+      </div>
     );
   }
 
@@ -1718,6 +1919,7 @@
     { id: "numberSeries", label: "Numbering Settings", icon: "grid", group: "Documents" },
     { id: "skuNumbering", label: "SKU Numbering", icon: "box", group: "Masters" },
     { id: "security", label: "Security", icon: "shield", group: "System" },
+    { id: "dateFormat", label: "Date Format", icon: "calendar", group: "System" },
     { id: "notifications", label: "Notifications", icon: "bell", group: "System" },
     { id: "uiSettings", label: "Typography", icon: "settings", group: "System" },
     { id: "theme", label: "Theme", icon: "sparkle", group: "System" },
@@ -1743,7 +1945,7 @@
     permissions: PermissionsPage, fieldPermissions: FieldPermissionsPage, approvals: ApprovalsPage,
     masterData: MasterDataPage, importExport: ImportExportPage, templates: DocumentTemplatesPage,
     numberSeries: NumberSeriesPage, skuNumbering: (p) => VG.SkuNumberingPage ? React.createElement(VG.SkuNumberingPage, p) : null,
-    security: SecurityPage, notifications: NotificationsPage,
+    security: SecurityPage, dateFormat: DateFormatSettingsPage, notifications: NotificationsPage,
     uiSettings: UiSettingsPage, theme: ThemePage, weatherLogin: WeatherLoginPage, backup: BackupRestore, audit: AuditTrail,
     licDashboard: licensePages.licDashboard, licGenerate: licensePages.licGenerate,
     licActivate: licensePages.licActivate, licRenew: licensePages.licRenew,

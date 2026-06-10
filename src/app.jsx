@@ -324,7 +324,7 @@
               </button>
               <div className="hidden md:flex items-center gap-2 glass rounded-xl px-3 py-2 text-sm">
                 <Icon name="calendar" size={15} className="opacity-70" />
-                {now.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}
+                {VG.fmt.formatDate ? VG.fmt.formatDate(now, { includeWeekday: true }) : now.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}
                 <span className="opacity-60">·</span>
                 {now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
               </div>

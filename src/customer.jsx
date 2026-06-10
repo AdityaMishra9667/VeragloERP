@@ -902,7 +902,7 @@
           <Card className="p-4">
             {(c.documents || []).length === 0 ? <div className="text-sm opacity-50 text-center py-6">No documents uploaded — attach files in customer edit form.</div> : (
               <ul className="space-y-2 text-sm">{(c.documents || []).map((d, i) => (
-                <li key={i} className="flex items-center gap-2 glass rounded-lg px-3 py-2"><Icon name="folder" size={14} /><span>{d.name || d.type || "Document"}</span>{d.uploadedAt && <span className="text-xs opacity-50 ml-auto">{new Date(d.uploadedAt).toLocaleDateString()}</span>}</li>
+                <li key={i} className="flex items-center gap-2 glass rounded-lg px-3 py-2"><Icon name="folder" size={14} /><span>{d.name || d.type || "Document"}</span>{d.uploadedAt && <span className="text-xs opacity-50 ml-auto">{VG.fmt.formatDate ? VG.fmt.formatDate(d.uploadedAt) : new Date(d.uploadedAt).toLocaleDateString()}</span>}</li>
               ))}</ul>
             )}
           </Card>
