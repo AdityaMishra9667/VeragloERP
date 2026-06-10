@@ -5,7 +5,7 @@
 (function (VG) {
   const { useState, useEffect } = React;
   const KEY = "veraglo-erp-db";
-  const VERSION = 18;
+  const VERSION = 19;
   const ITEM_DESC_MAX = 30000;
   const AUTH_INACTIVE_MSG = "User account does not exist or has been deactivated.";
   const ITEM_MFR_DUP_MSG = "This manufacturer and part number already exist in Item Master. Duplicate item cannot be created.";
@@ -1414,16 +1414,129 @@
     },
 
     /* ----- stock engine ----- */
-    onHand(itemId, locationId, itemLocationId) {
-      return this.ledgerFor(itemId, locationId, itemLocationId).reduce((s, e) => s + e.qty, 0);
+    ledgerMatchesAvailabilityScope(entry, itemId, opts) {
+      if (!entry || entry.itemId !== itemId) return false;
+      const o = opts || {};
+      if (o.batch) {
+        const want = String(o.batch).trim();
+        if (want && String(entry.batch || "").trim() !== want) return false;
+      }
+      if (!o.locationId) return true;
+      if (entry.locationId !== o.locationId) return false;
+      if (!o.itemLocationId) return true;
+      const entryBin = entry.itemLocationId || "";
+      if (!entryBin) return true;
+      return entryBin === o.itemLocationId;
     },
-    ledgerFor(itemId, locationId, itemLocationId) {
-      return DB.stockLedger.filter((e) => {
-        if (e.itemId !== itemId) return false;
-        if (locationId && e.locationId !== locationId) return false;
-        if (itemLocationId && e.itemLocationId !== itemLocationId) return false;
-        return true;
+    ledgerFor(itemId, locationId, itemLocationId, batch) {
+      const opts = {
+        locationId: locationId || null,
+        itemLocationId: itemLocationId || null,
+        batch: batch || null,
+      };
+      return (DB.stockLedger || []).filter((e) => this.ledgerMatchesAvailabilityScope(e, itemId, opts));
+    },
+    reservedQtyForItem(itemId, locationId, itemLocationId) {
+      const item = this.get("items", itemId) || {};
+      let reserved = Number(item.reservedQty) || 0;
+      (DB.materialRequirements || []).forEach((mr) => {
+        if (mr.status === "Closed" || mr.status === "Cancelled" || mr.status === "Fully Issued") return;
+        (mr.lines || []).forEach((ln) => {
+          if (ln.itemId !== itemId) return;
+          const required = Number(ln.totalRequiredQty != null ? ln.totalRequiredQty : ln.requiredQty) || 0;
+          const issued = Number(ln.issuedQty) || 0;
+          reserved += Math.max(0, required - issued);
+        });
       });
+      if (locationId || itemLocationId) {
+        const scopedStock = this.ledgerFor(itemId, locationId || null, itemLocationId || null)
+          .reduce((s, e) => s + (Number(e.qty) || 0), 0);
+        const globalStock = this.ledgerFor(itemId).reduce((s, e) => s + (Number(e.qty) || 0), 0);
+        if (globalStock > 0 && scopedStock < globalStock) {
+          reserved = Math.min(reserved, scopedStock);
+        }
+      }
+      return Math.max(0, reserved);
+    },
+    stockAvailability(itemId, opts) {
+      const o = opts || {};
+      const item = this.get("items", itemId) || {};
+      const entries = this.ledgerFor(itemId, o.locationId || null, o.itemLocationId || null, o.batch || null);
+      const totalStock = entries.reduce((s, e) => s + (Number(e.qty) || 0), 0);
+      const reserved = this.reservedQtyForItem(itemId, o.locationId, o.itemLocationId);
+      const available = Math.max(0, totalStock - reserved);
+      const ledgerBalance = (DB.stockLedger || []).filter((e) => e.itemId === itemId)
+        .reduce((s, e) => s + (Number(e.qty) || 0), 0);
+      const globalStock = ledgerBalance;
+      const rows = this.itemLedgerRows(itemId, {});
+      const runningClosing = rows.length ? Number(rows[rows.length - 1].balance) || 0 : 0;
+      let mismatch = Math.abs(ledgerBalance - runningClosing) > 0.0001;
+      let mismatchMessage = "";
+      if (mismatch) {
+        mismatchMessage = "Stock mismatch detected. Please run stock reconciliation.";
+      } else if (totalStock <= 0 && globalStock > 0 && (o.locationId || o.itemLocationId)) {
+        mismatchMessage = "No stock at selected location — " + globalStock + " available elsewhere.";
+      } else if (available <= 0 && globalStock > reserved && !o.locationId && !o.itemLocationId) {
+        mismatch = true;
+        mismatchMessage = "Available quantity mismatch with stock ledger. Please check stock reconciliation.";
+      }
+      let unitWarning = "";
+      const masterUnit = item.unit || "Nos";
+      if (o.unit && o.unit !== masterUnit) {
+        unitWarning = "Issue unit (" + o.unit + ") differs from Item Master (" + masterUnit + ").";
+      }
+      let scope = "all";
+      if (o.batch) scope = "batch";
+      else if (o.itemLocationId) scope = "bin";
+      else if (o.locationId) scope = "store";
+      return {
+        itemId,
+        sku: item.sku || "",
+        unit: masterUnit,
+        totalStock,
+        reserved,
+        available,
+        freeAvailable: available,
+        ledgerBalance,
+        runningClosing,
+        globalStock,
+        mismatch,
+        mismatchMessage,
+        unitWarning,
+        scope,
+      };
+    },
+    onHand(itemId, locationId, itemLocationId, batch) {
+      return this.stockAvailability(itemId, {
+        locationId: locationId || null,
+        itemLocationId: itemLocationId || null,
+        batch: batch || null,
+      }).available;
+    },
+    stockReconciliationReport() {
+      return (DB.items || []).map((it) => {
+        const avail = this.stockAvailability(it.id, {});
+        return {
+          itemId: it.id,
+          sku: it.sku,
+          name: it.name,
+          ledgerBalance: avail.ledgerBalance,
+          runningClosing: avail.runningClosing,
+          reserved: avail.reserved,
+          available: avail.available,
+          mismatch: avail.mismatch,
+        };
+      }).filter((r) => r.mismatch);
+    },
+    reconcileStock(actor) {
+      const mismatches = this.stockReconciliationReport();
+      if (!DB.settings.inventory) DB.settings.inventory = {};
+      DB.settings.inventory.lastStockReconcileAt = Date.now();
+      DB.settings.inventory.lastStockReconcileBy = actor || "system";
+      DB.settings.inventory.lastStockMismatchCount = mismatches.length;
+      this.audit(actor || "system", "reconcile", "stockLedger", "ALL", "Stock reconciliation — " + mismatches.length + " mismatch(es)");
+      notify();
+      return { mismatches, count: mismatches.length, ok: mismatches.length === 0 };
     },
     itemLocationsForStorage(locationId, activeOnly) {
       return (DB.itemLocations || []).filter((il) => {
@@ -1552,9 +1665,9 @@
     },
     itemLedgerMeta(itemId) {
       const it = this.get("items", itemId) || {};
-      const qty = this.onHand(itemId);
-      const reserved = (DB.materialRequirements || []).filter((mr) => mr.itemId === itemId && mr.status !== "Closed" && mr.status !== "Cancelled")
-        .reduce((s, mr) => s + (Number(mr.qty) || 0), 0);
+      const avail = this.stockAvailability(itemId, {});
+      const qty = avail.totalStock;
+      const reserved = avail.reserved;
       const rejected = Math.abs((DB.stockLedger || []).filter((e) => e.itemId === itemId && e.type === "scrap").reduce((s, e) => s + (Number(e.qty) || 0), 0));
       const opening = (DB.stockLedger || []).filter((e) => e.itemId === itemId && (e.type === "opening" || e.type === "opening-balance"))
         .reduce((s, e) => s + (Number(e.qty) || 0), 0);
@@ -1584,7 +1697,7 @@
         stockIn,
         stockOut,
         closing: qty,
-        available: qty,
+        available: avail.available,
         reserved,
         rejected,
         value: qty * (it.rate || 0),
@@ -1627,13 +1740,16 @@
       return rec;
     },
     stockSummary() {
-      return DB.items.map((it) => {
-        const qty = this.onHand(it.id);
+      return (DB.items || []).map((it) => {
+        const avail = this.stockAvailability(it.id, {});
+        const qty = avail.totalStock;
         return {
           ...it, qty,
-          value: qty * it.rate,
-          below: qty < it.minStock,
-          reorderNeeded: qty < it.reorder,
+          available: avail.available,
+          reserved: avail.reserved,
+          value: avail.available * (it.rate || 0),
+          below: avail.available < (it.minStock || 0),
+          reorderNeeded: avail.available < (it.reorder || 0),
         };
       });
     },
@@ -1767,15 +1883,29 @@
         const ln = normalizedLines[i];
         const qty = Number(ln.qtyIssued) || 0;
         if (qty <= 0) continue;
-        const avail = this.onHand(ln.itemId, ln.locationId, ln.itemLocationId || undefined);
-        if (qty > avail) {
+        const stk = this.stockAvailability(ln.itemId, {
+          locationId: ln.locationId || null,
+          itemLocationId: ln.itemLocationId || null,
+          batch: ln.batch || null,
+          unit: ln.unit,
+        });
+        if (qty > stk.available) {
           this.remove("materialIssues", rec.id, actor);
-          return { error: "Row " + (i + 1) + ": insufficient stock — only " + avail + " available" };
+          const msg = stk.mismatchMessage || ("Row " + (i + 1) + ": insufficient stock — only " + stk.available + " free available (" + stk.totalStock + " on hand, " + stk.reserved + " reserved).");
+          return { error: msg };
         }
       }
       normalizedLines.forEach((ln) => {
         const qty = Number(ln.qtyIssued) || 0;
         if (qty <= 0) return;
+        const stk = this.stockAvailability(ln.itemId, {
+          locationId: ln.locationId || null,
+          itemLocationId: ln.itemLocationId || null,
+          batch: ln.batch || null,
+        });
+        if (stk.mismatch && stk.available <= 0 && stk.globalStock > 0) {
+          console.warn("[Veraglo stock] Issue row mismatch:", ln.itemId, stk);
+        }
         this.postLedger({
           itemId: ln.itemId,
           locationId: ln.locationId,

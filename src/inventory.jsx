@@ -657,7 +657,15 @@
     ];
     return (
       <div className="space-y-4">
-        <PageHead title="Stock Ledger" desc="Click any item row to open full item ledger with stock in/out history" />
+        <PageHead title="Stock Ledger" desc="Click any item row to open full item ledger with stock in/out history">
+          {can("settings") && store.reconcileStock && (
+            <Button variant="soft" icon="refresh" onClick={async () => {
+              const res = store.reconcileStock(roleKey);
+              if (res.ok) VG.toast("Stock reconciliation OK — all balances match ledger");
+              else VG.toast("Stock mismatch detected in " + res.count + " item(s). Check admin report.", "warn");
+            }}>Recalculate stock balance</Button>
+          )}
+        </PageHead>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {[["SKUs", summary.length], ["Stock value", inr(summary.reduce((s, x) => s + x.value, 0))], ["Below min", summary.filter((x) => x.below).length], ["Reorder due", summary.filter((x) => x.reorderNeeded).length]].map(([l, v]) => (
             <Card key={l} className="p-4"><div className="text-[11px] uppercase tracking-wider opacity-60">{l}</div><div className="text-2xl font-semibold font-display mt-1">{v}</div></Card>
@@ -912,6 +920,15 @@
   function issueItemsLabel(r) {
     return store.issueItemsLabel ? store.issueItemsLabel(r) : itemName(r.itemId);
   }
+  function issueStockAvail(line) {
+    if (!line || !line.itemId || !store.stockAvailability) return null;
+    return store.stockAvailability(line.itemId, {
+      locationId: line.locationId || null,
+      itemLocationId: line.itemLocationId || null,
+      batch: line.batch || null,
+      unit: line.unit || null,
+    });
+  }
   const MIN_TABLE_HEAD = (
     <tr className="text-left border-b border-white/10 text-[11px] uppercase opacity-70">
       <th className="w-10 px-2">Sr.</th>
@@ -920,7 +937,7 @@
       <th className="w-24 px-2">Qty Requested</th>
       <th className="w-24 px-2">Qty Issued</th>
       <th className="w-16 px-2">Unit</th>
-      <th className="w-20 px-2">Available</th>
+      <th className="w-24 px-2">Free Avail.</th>
       <th className="min-w-[130px] px-2">Store Location</th>
       <th className="min-w-[130px] px-2">Item Location</th>
       <th className="w-20 px-2">Pending</th>
@@ -939,7 +956,24 @@
     const delLine = (key) => { if (lines.length <= 1) return; setLines((rows) => rows.filter((r) => r.key !== key)); };
     function pickItem(key, id) {
       const it = store.get("items", id) || {};
-      setLine(key, { itemId: id, unit: it.unit || "Nos", locationId: it.locationId || "", itemLocationId: it.itemLocationId || "" });
+      let locationId = it.locationId || "";
+      let itemLocationId = it.itemLocationId || "";
+      if (store.stockAvailability) {
+        const atBin = itemLocationId && locationId
+          ? store.stockAvailability(id, { locationId, itemLocationId }).totalStock
+          : 0;
+        const atStore = locationId ? store.stockAvailability(id, { locationId }).totalStock : 0;
+        const global = store.stockAvailability(id, {}).totalStock;
+        if (!locationId && global > 0) {
+          const ledgerRows = (store.list("stockLedger") || []).filter((e) => e.itemId === id);
+          const locQty = {};
+          ledgerRows.forEach((e) => { locQty[e.locationId] = (locQty[e.locationId] || 0) + (Number(e.qty) || 0); });
+          const best = Object.entries(locQty).sort((a, b) => b[1] - a[1])[0];
+          if (best && best[1] > 0) locationId = best[0];
+        }
+        if (itemLocationId && atBin <= 0 && atStore > 0) itemLocationId = "";
+      }
+      setLine(key, { itemId: id, unit: it.unit || "Nos", locationId, itemLocationId });
     }
     function pickStorage(key, locationId) { setLine(key, { locationId, itemLocationId: "" }); }
     function pickOrder(id) { const o = store.get("salesOrders", id) || {}; setF((p) => ({ ...p, salesOrderId: id, customerId: o.customerId })); }
@@ -956,8 +990,13 @@
         if (!Number.isFinite(iss) || iss < 0) return "Row " + n + ": invalid qty issued.";
         if (iss > 0) issuedAny = true;
         if (iss > 0) {
-          const avail = store.onHand(ln.itemId, ln.locationId, ln.itemLocationId || undefined);
-          if (iss > avail) return "Row " + n + ": insufficient stock — only " + avail + " available.";
+          const stk = issueStockAvail(ln);
+          if (!stk) return "Row " + n + ": could not read stock.";
+          if (stk.unitWarning) return "Row " + n + ": " + stk.unitWarning;
+          if (iss > stk.available) {
+            if (stk.mismatchMessage) return "Row " + n + ": " + stk.mismatchMessage;
+            return "Row " + n + ": qty issued exceeds free available (" + stk.available + "). On hand: " + stk.totalStock + ", reserved: " + stk.reserved + ".";
+          }
           if (req > 0 && iss > req) return "Row " + n + ": qty issued cannot exceed qty requested.";
         }
         const locOpts = store.itemLocationsForStorage ? store.itemLocationsForStorage(ln.locationId) : [];
@@ -1022,11 +1061,17 @@
         </div>
         <TransactionLinesShell title="Issue line items" onAddLine={addLine} addLabel="Add line item" minWidth={1320} headerRow={MIN_TABLE_HEAD}>
           {lines.map((l, idx) => {
-            const avail = l.itemId && l.locationId ? store.onHand(l.itemId, l.locationId, l.itemLocationId || undefined) : 0;
+            const stk = issueStockAvail(l);
+            const avail = stk ? stk.available : null;
             const req = l.qtyRequested === "" ? null : Number(l.qtyRequested);
             const iss = Number(l.qtyIssued) || 0;
             const pending = req != null && Number.isFinite(req) ? Math.max(0, req - iss) : "—";
             const ilOpts = store.itemLocationsForStorage ? store.itemLocationsForStorage(l.locationId) : [];
+            const availTitle = stk
+              ? ("On hand: " + stk.totalStock + " · Reserved: " + stk.reserved + " · Free: " + stk.available
+                + (stk.globalStock !== stk.totalStock ? " · Global: " + stk.globalStock : "")
+                + (stk.mismatchMessage ? " · " + stk.mismatchMessage : ""))
+              : "";
             return (
               <tr key={l.key} className="border-b border-white/5 align-top">
                 <td className="px-2 py-1.5 text-xs opacity-70">{idx + 1}</td>
@@ -1035,7 +1080,17 @@
                 <td className="px-2 py-1.5"><Num data-line-qty value={l.qtyRequested} onChange={(v) => setLine(l.key, { qtyRequested: v })} /></td>
                 <td className="px-2 py-1.5"><Num data-line-qty value={l.qtyIssued} onChange={(v) => setLine(l.key, { qtyIssued: v })} /></td>
                 <td className="px-2 py-1.5"><span className="text-sm opacity-80 py-2 inline-block">{l.unit || "—"}</span></td>
-                <td className="px-2 py-1.5 text-sm"><span className={avail <= 0 ? "text-rose-400" : "opacity-80"}>{l.itemId ? avail : "—"}</span></td>
+                <td className="px-2 py-1.5 text-sm" title={availTitle}>
+                  {!l.itemId ? "—" : (
+                    <div>
+                      <span className={avail != null && avail <= 0 ? "text-rose-400" : "text-emerald-400 font-medium"}>{avail != null ? avail : "…"}</span>
+                      {stk && stk.reserved > 0 && <div className="text-[10px] opacity-50">Rsv {stk.reserved}</div>}
+                      {stk && stk.mismatch && avail <= 0 && stk.globalStock > 0 && (
+                        <div className="text-[10px] text-amber-400">Check stock</div>
+                      )}
+                    </div>
+                  )}
+                </td>
                 <td className="min-w-[130px] px-2 py-1.5">
                   {canEditLocation ? <MasterSelect collection="locations" value={l.locationId} onChange={(v) => pickStorage(l.key, v)} actorRole={roleKey} can={can("add")} />
                     : <span className="text-sm opacity-80 py-2 inline-block">{locName(l.locationId)}</span>}
@@ -1056,7 +1111,7 @@
           })}
         </TransactionLinesShell>
         <Field label="Header remarks" className="mt-3"><Area value={f.remarks} onChange={(v) => set("remarks", v)} rows={2} /></Field>
-        <p className="text-[11px] opacity-55 mt-2">Unit is read-only from Item Master. Partial issue supported when qty issued &lt; qty requested.</p>
+        <p className="text-[11px] opacity-55 mt-2">Free available = stock ledger balance − reserved qty. Unit is read-only from Item Master. Select store/item location to narrow stock scope; leave item location blank to use store-level pool.</p>
       </InternalScreen>
     );
   }
