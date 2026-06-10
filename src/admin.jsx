@@ -3,11 +3,12 @@
   const { useState, useRef, useEffect, useMemo } = React;
   const ui = VG.ui, fx = VG.fx, store = VG.store;
   const { Icon, Button, Pill, Card } = ui;
-  const { Field, Text, Area, Num, Select, Checkbox, RecordTable, PageHead, StatusTag, Modal, MasterSelect, printDocument } = fx;
+  const { Field, Text, Area, Num, Select, Checkbox, RecordTable, PageHead, ListPage, StatusTag, Modal, MasterSelect, printDocument } = fx;
 
+  const today = VG.fmt.todayISO;
   const clone = (x) => JSON.parse(JSON.stringify(x));
   const fmtBytes = (n) => (n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB");
-  const fmtTime = (ts) => (ts ? new Date(ts).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "Never");
+  const fmtTime = (ts) => (ts ? (VG.fmt.formatDateTime ? VG.fmt.formatDateTime(ts) : new Date(ts).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })) : "Never");
   function download(filename, text) {
     const blob = new Blob([text], { type: "application/json;charset=utf-8" });
     const a = document.createElement("a");
@@ -272,10 +273,126 @@
     const actions = Array.from(new Set(rows.map((r) => r.action)));
     const entities = Array.from(new Set(rows.map((r) => r.entity)));
     return (
-      <div>
-        <PageHead title="Audit Trail" desc="Every change across the ERP, who made it and when" />
-        <RecordTable title="Audit log" columns={cols} rows={rows} can={can} printTitle="Audit Trail" searchKeys={["actor", "action", "entity", "summary", "refId", "ip"]}
+      <ListPage title="Audit Trail" desc="Every change across the ERP, who made it and when" can={can}>
+        <RecordTable embedded suppressNew title="Audit Log List" columns={cols} rows={rows} can={can} printTitle="Audit Trail" searchKeys={["actor", "action", "entity", "summary", "refId", "ip"]}
           filters={[{ key: "action", label: "All actions", options: actions }, { key: "entity", label: "All modules", options: entities }]} />
+      </ListPage>
+    );
+  }
+
+  function BankAccountForm({ initial, isNew, onCancel, onSave, can }) {
+    const [e, setE] = useState(() => ({ ...initial }));
+    const set = (k, v) => setE((p) => ({ ...p, [k]: v }));
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Button variant="soft" icon="chevronLeft" onClick={onCancel}>Back to list</Button>
+          <span className="text-sm font-semibold">{isNew ? "Add bank account" : "Edit bank account"}</span>
+        </div>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <Field label="Label / nickname" required><Text value={e.label} onChange={(v) => set("label", v)} placeholder="HDFC Current · Export" /></Field>
+          <Field label="Bank name" required><Text value={e.bankName} onChange={(v) => set("bankName", v)} /></Field>
+          <Field label="Account holder"><Text value={e.accountName} onChange={(v) => set("accountName", v)} /></Field>
+          <Field label="Account number" required><Text value={e.accountNo} onChange={(v) => set("accountNo", v)} /></Field>
+          <Field label="IFSC"><Text value={e.ifsc} onChange={(v) => set("ifsc", v.toUpperCase())} /></Field>
+          <Field label="SWIFT (export)"><Text value={e.swiftCode} onChange={(v) => set("swiftCode", v.toUpperCase())} /></Field>
+          <Field label="Branch"><Text value={e.branch} onChange={(v) => set("branch", v)} /></Field>
+          <Field label="PDF line (optional)" className="lg:col-span-2"><Text value={e.bankLine} onChange={(v) => set("bankLine", v)} placeholder="Auto-built from fields if blank" /></Field>
+          <div className="flex items-end"><Checkbox checked={!!e.isDefault} onChange={(v) => set("isDefault", v)} label="Default for invoices" /></div>
+        </div>
+        {can("edit") && <Button icon="check" onClick={() => onSave({ ...e, label: e.label || e.bankName })}>Save account</Button>}
+      </div>
+    );
+  }
+
+  function BankAccountsTab({ c, setC, can }) {
+    const accounts = Array.isArray(c.bankAccounts) ? c.bankAccounts : [];
+    const [editId, setEditId] = useState(null);
+    const blank = () => ({
+      id: "ba" + Math.random().toString(36).slice(2, 10),
+      label: "",
+      bankName: "",
+      accountName: c.legalName || c.name || "",
+      accountNo: "",
+      ifsc: "",
+      swiftCode: "",
+      branch: "",
+      bankLine: "",
+      isDefault: !accounts.length,
+      active: true,
+    });
+    const editing = editId === "new" ? blank() : accounts.find((b) => b.id === editId);
+    function syncLegacy(list, defaultId) {
+      const def = list.find((b) => b.id === defaultId) || list.find((b) => b.isDefault) || list[0];
+      const f = store.formatBankAccount ? store.formatBankAccount(def) : def;
+      setC((p) => ({
+        ...p,
+        bankAccounts: list,
+        defaultBankAccountId: defaultId || (def && def.id) || "",
+        bankName: (f && f.bankName) || "",
+        accountNo: (f && f.accountNo) || "",
+        ifsc: (f && f.ifsc) || "",
+        swiftCode: (f && f.swiftCode) || "",
+        bank: (f && f.bankLine) || "",
+      }));
+    }
+    function saveAccount(form) {
+      if (!form.bankName || !form.accountNo) return VG.toast("Bank name and account number are required", "error");
+      const line = form.bankLine || [form.bankName, form.accountNo && "A/c " + form.accountNo, form.ifsc && "IFSC " + form.ifsc].filter(Boolean).join(" · ");
+      const row = { ...form, bankLine: line };
+      let list = accounts.slice();
+      const idx = list.findIndex((b) => b.id === row.id);
+      if (idx >= 0) list[idx] = row; else list.push(row);
+      if (row.isDefault) {
+        list = list.map((b) => ({ ...b, isDefault: b.id === row.id }));
+      }
+      const defaultId = (list.find((b) => b.isDefault) || list[0] || {}).id;
+      syncLegacy(list, defaultId);
+      setEditId(null);
+      VG.toast("Bank account saved");
+    }
+    function removeAccount(id) {
+      const list = accounts.filter((b) => b.id !== id);
+      if (!list.length) return VG.toast("At least one bank account is required", "warn");
+      if (!list.some((b) => b.isDefault)) list[0].isDefault = true;
+      syncLegacy(list, (list.find((b) => b.isDefault) || list[0]).id);
+      VG.toast("Bank account removed");
+    }
+    function setDefault(id) {
+      const list = accounts.map((b) => ({ ...b, isDefault: b.id === id }));
+      syncLegacy(list, id);
+      VG.toast("Default bank updated");
+    }
+    if (editing) {
+      return (
+        <BankAccountForm
+          initial={editing}
+          isNew={editId === "new"}
+          onCancel={() => setEditId(null)}
+          onSave={saveAccount}
+          can={can}
+        />
+      );
+    }
+    return (
+      <div className="space-y-4">
+        <p className="text-xs opacity-60">Manage multiple company bank accounts. The default account auto-fills on proforma &amp; tax invoices; users can pick another account per document.</p>
+        {can("edit") && <Button icon="plus" onClick={() => setEditId("new")}>Add bank account</Button>}
+        <div className="space-y-2">
+          {accounts.length === 0 && <div className="text-sm opacity-50 py-6 text-center">No bank accounts — add your first account.</div>}
+          {accounts.map((ba) => (
+            <div key={ba.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-white/10 p-3 glass">
+              <div className="flex-1 min-w-[200px]">
+                <div className="font-medium text-sm">{ba.label || ba.bankName}</div>
+                <div className="text-xs opacity-60 mt-0.5">{ba.bankName} · A/c {ba.accountNo}{ba.ifsc ? " · IFSC " + ba.ifsc : ""}</div>
+              </div>
+              {ba.isDefault && <Pill color="#34d399">Default</Pill>}
+              {can("edit") && !ba.isDefault && <Button variant="soft" className="!py-1.5 !text-xs" onClick={() => setDefault(ba.id)}>Set default</Button>}
+              {can("edit") && <Button variant="soft" icon="edit" className="!py-1.5" onClick={() => setEditId(ba.id)}>Edit</Button>}
+              {can("delete") && accounts.length > 1 && <Button variant="soft" icon="trash" className="!py-1.5 hover:text-rose-400" onClick={() => removeAccount(ba.id)}>Remove</Button>}
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -412,12 +529,7 @@
             </div>
           )}
           {tab === "bank" && (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              <Field label="Bank name"><Text value={c.bankName} onChange={(v) => set("bankName", v)} /></Field>
-              <Field label="Account number"><Text value={c.accountNo} onChange={(v) => set("accountNo", v)} /></Field>
-              <Field label="IFSC"><Text value={c.ifsc} onChange={(v) => set("ifsc", v)} /></Field>
-              <Field label="Bank line (PDF footer)" className="lg:col-span-3"><Text value={c.bank} onChange={(v) => set("bank", v)} /></Field>
-            </div>
+            <BankAccountsTab c={c} setC={setC} can={can} />
           )}
           {tab === "sign" && (
             <div className="grid sm:grid-cols-2 gap-4">
@@ -465,7 +577,7 @@
     }
     return (
       <Modal open={open} onClose={onClose} dirty={dirty} title={isEdit ? "Edit Location" : "New Location"} subtitle="Plants, warehouses, racks and bins"
-        footer={<><Button variant="soft" onClick={onClose}>Close</Button><Button icon="check" onClick={save}>Save</Button></>}>
+        actions={<Button icon="check" onClick={save}>Save</Button>}>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <Field label="Code"><Text value={f.code} onChange={(v) => set("code", v)} /></Field>
           <Field label="Name" required><Text value={f.name} onChange={(v) => set("name", v)} /></Field>
@@ -499,14 +611,15 @@
       { key: "defaultWarehouse", label: "Default WH", render: (r) => r.defaultWarehouse ? <Pill color="#34d399">Yes</Pill> : "—" },
       { key: "status", label: "Status", render: (r) => <StatusTag value={r.status} map={{ Active: "#34d399", Inactive: "#94a3b8" }} /> },
     ];
+    if (edit) {
+      return <LocationForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} can={can} />;
+    }
     return (
-      <div>
-        <PageHead title="Locations" desc="Plants, branches, warehouses, stores and rack/bin locations" />
-        <RecordTable title="Locations" columns={cols} rows={rows} can={can} printTitle="Locations" searchKeys={["name", "code", "city", "contact"]}
-          onNew={can("add") ? () => setEdit({}) : null} newLabel="New Location" onEdit={can("edit") ? (r) => setEdit(r) : null}
+      <ListPage title="Locations" desc="Plants, branches, warehouses, stores and rack/bin locations" onNew={can("add") ? () => setEdit({}) : null} newLabel="Add Location" can={can}>
+        <RecordTable embedded suppressNew title="Location List" columns={cols} rows={rows} can={can} printTitle="Locations" searchKeys={["name", "code", "city", "contact"]}
+          onNew={can("add") ? () => setEdit({}) : null} onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete " + r.name + "?", danger: true, confirmLabel: "Delete" })) { store.remove("locations", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-        {edit && <LocationForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} can={can} />}
-      </div>
+      </ListPage>
     );
   }
 
@@ -576,7 +689,8 @@
     const loginRows = (f.email ? store.list("loginLog").filter((l) => l.email === f.email || l.roleKey === f.roleKey) : []).slice().reverse();
     return (
       <Modal open={open} onClose={onClose} size="lg" dirty={dirty} title={isEdit ? "Edit User · " + f.userId : "New User"} subtitle="ERP login accounts linked to roles"
-        footer={<><Button variant="soft" onClick={onClose}>Close</Button>{isEdit && <Button variant="soft" icon="activity" onClick={() => setHistory((h) => !h)}>{history ? "Hide history" : "Login history"}</Button>}{isEdit && <Button variant="soft" icon="users" onClick={() => setSessionsOpen((s) => !s)}>{sessionsOpen ? "Hide sessions" : "Active sessions"}</Button>}{isEdit && can("edit") && <Button variant="soft" onClick={() => { store.update("erpUsers", f.id, { failedLogins: 0, status: f.status === "Locked" ? "Active" : f.status }, roleKey); set("failedLogins", 0); VG.toast("Failed login count reset"); }}>Reset failed logins</Button>}{isEdit && can("edit") && <Button variant="soft" onClick={resetPassword} disabled={busy}>Reset password</Button>}<Button icon="check" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</Button></>}>
+        actions={<Button icon="check" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</Button>}
+        footer={<>{isEdit && <Button variant="soft" icon="activity" onClick={() => setHistory((h) => !h)}>{history ? "Hide history" : "Login history"}</Button>}{isEdit && <Button variant="soft" icon="users" onClick={() => setSessionsOpen((s) => !s)}>{sessionsOpen ? "Hide sessions" : "Active sessions"}</Button>}{isEdit && can("edit") && <Button variant="soft" onClick={() => { store.update("erpUsers", f.id, { failedLogins: 0, status: f.status === "Locked" ? "Active" : f.status }, roleKey); set("failedLogins", 0); VG.toast("Failed login count reset"); }}>Reset failed logins</Button>}{isEdit && can("edit") && <Button variant="soft" onClick={resetPassword} disabled={busy}>Reset password</Button>}</>}>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {isEdit && <Field label="User ID"><Text value={f.userId} disabled /></Field>}
           <Field label="Full name" required><Text value={f.name} onChange={(v) => set("name", v)} /></Field>
@@ -654,15 +768,17 @@
         </div>
       ) : null },
     ];
+    if (edit) {
+      return <UserForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} can={can} />;
+    }
     return (
-      <div>
-        <PageHead title="Users" desc="ERP user accounts — login requires active user, role and password in this database" />
+      <ListPage title="Users" desc="ERP user accounts — login requires active user, role and password in this database" onNew={can("add") ? () => setEdit({}) : null} newLabel="Add User" can={can}>
         <div className="mb-3 flex flex-wrap items-center gap-3">
           <Checkbox checked={showDeleted} onChange={setShowDeleted} label="Show deleted users" />
         </div>
-        <RecordTable title="Users" columns={cols} rows={rows} can={can} printTitle="ERP Users" searchKeys={["userId", "name", "email", "department"]}
+        <RecordTable embedded suppressNew title="User List" columns={cols} rows={rows} can={can} printTitle="ERP Users" searchKeys={["userId", "name", "email", "department"]}
           filters={[{ key: "status", label: "All status", options: ["Active", "Inactive", "Locked", "Deleted"] }]}
-          onNew={can("add") ? () => setEdit({}) : null} newLabel="New User" onEdit={can("edit") ? (r) => setEdit(r) : null}
+          onNew={can("add") ? () => setEdit({}) : null} onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => {
             if (r.isDeleted) return;
             if (await VG.confirm({ title: "Delete user " + r.userId + "?", message: "Login will be blocked immediately and all sessions ended.", danger: true, confirmLabel: "Delete" })) {
@@ -670,8 +786,7 @@
               VG.toast("User deleted — login disabled");
             }
           } : null} />
-        {edit && <UserForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} can={can} />}
-      </div>
+      </ListPage>
     );
   }
 
@@ -701,7 +816,8 @@
     const AccessPanel = VG.RoleAccessPanel;
     return (
       <Modal open={open} onClose={onClose} size="xl" dirty={dirty} title={duplicate ? "Duplicate Role" : isEdit ? "Edit Role · " + f.label : "New Role"} subtitle="Module access, actions, tabs and permission matrix"
-        footer={<><Button variant="soft" onClick={onClose}>Close</Button><Button variant="soft" onClick={() => setShowMatrix((s) => !s)}>{showMatrix ? "Hide matrix" : "Fine-grained matrix"}</Button><Button icon="check" onClick={save}>Save role</Button></>}>
+        actions={<Button icon="check" onClick={save}>Save role</Button>}
+        footer={<Button variant="soft" onClick={() => setShowMatrix((s) => !s)}>{showMatrix ? "Hide matrix" : "Fine-grained matrix"}</Button>}>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
           <Field label="Role key" required><Text value={f.key} onChange={(v) => set("key", v)} disabled={isEdit && f.builtIn} /></Field>
           <Field label="Display label" required><Text value={f.label} onChange={(v) => set("label", v)} /></Field>
@@ -735,13 +851,14 @@
         </div>
       ) },
     ];
+    if (edit) {
+      return <RoleForm open onClose={() => { setEdit(null); setDup(false); }} record={edit} roleKey={roleKey} duplicate={dup} />;
+    }
     return (
-      <div>
-        <PageHead title="Roles" desc="Custom roles with module access, actions and hierarchy" />
-        <RecordTable title="Roles" columns={cols} rows={rows} can={can} printTitle="Roles" searchKeys={["label", "key", "tag"]} search={false}
-          onNew={can("add") ? () => { setDup(false); setEdit({ key: "custom_" + Date.now().toString(36).slice(-4), label: "New Role", avatar: "NR", color: "#6366f1" }); } : null} newLabel="New Role" />
-        {edit && <RoleForm open onClose={() => { setEdit(null); setDup(false); }} record={edit} roleKey={roleKey} duplicate={dup} />}
-      </div>
+      <ListPage title="Roles" desc="Custom roles with module access, actions and hierarchy" onNew={can("add") ? () => { setDup(false); setEdit({ key: "custom_" + Date.now().toString(36).slice(-4), label: "New Role", avatar: "NR", color: "#6366f1" }); } : null} newLabel="Add Role" can={can}>
+        <RecordTable embedded suppressNew title="Role List" columns={cols} rows={rows} can={can} printTitle="Roles" searchKeys={["label", "key", "tag"]} search={false}
+          onNew={can("add") ? () => { setDup(false); setEdit({ key: "custom_" + Date.now().toString(36).slice(-4), label: "New Role", avatar: "NR", color: "#6366f1" }); } : null} />
+      </ListPage>
     );
   }
 
@@ -804,7 +921,7 @@
     const modOpts = (VG.ADMIN_MODULES || []).map((m) => ({ value: m.id, label: m.label }));
     return (
       <Modal open={open} onClose={onClose} title={isEdit ? "Edit Field Rule" : "New Field Rule"}
-        footer={<><Button variant="soft" onClick={onClose}>Close</Button><Button icon="check" onClick={save}>Save</Button></>}>
+        actions={<Button icon="check" onClick={save}>Save</Button>}>
         <div className="grid sm:grid-cols-2 gap-3">
           <Field label="Module" required><Select value={f.module} onChange={(v) => set("module", v)} options={modOpts} /></Field>
           <Field label="Field name" required hint="e.g. discount, rate, creditLimit"><Text value={f.field} onChange={(v) => set("field", v)} /></Field>
@@ -838,14 +955,15 @@
       { key: "mandatory", label: "Mandatory", render: (r) => r.mandatory ? "✓" : "—" },
       { key: "approvalRequired", label: "Approval", render: (r) => r.approvalRequired ? "✓" : "—" },
     ];
+    if (edit) {
+      return <FieldPermForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} />;
+    }
     return (
-      <div>
-        <PageHead title="Field Permissions" desc="Control visibility, editability and mandatory rules per module field" />
-        <RecordTable title="Field rules" columns={cols} rows={rows} can={can} printTitle="Field Permissions" searchKeys={["module", "field"]}
-          onNew={can("add") ? () => setEdit({}) : null} newLabel="Add rule" onEdit={can("edit") ? (r) => setEdit(r) : null}
+      <ListPage title="Field Permissions" desc="Control visibility, editability and mandatory rules per module field" onNew={can("add") ? () => setEdit({}) : null} newLabel="Add Rule" can={can}>
+        <RecordTable embedded suppressNew title="Field Rule List" columns={cols} rows={rows} can={can} printTitle="Field Permissions" searchKeys={["module", "field"]}
+          onNew={can("add") ? () => setEdit({}) : null} onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete this rule?", danger: true, confirmLabel: "Delete" })) { store.remove("fieldPermissions", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-        {edit && <FieldPermForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} />}
-      </div>
+      </ListPage>
     );
   }
 
@@ -867,7 +985,7 @@
     const roleOpts = store.listRoles().map((r) => ({ value: r.key, label: r.label }));
     return (
       <Modal open={open} onClose={onClose} title={isEdit ? "Edit Workflow" : "New Approval Workflow"}
-        footer={<><Button variant="soft" onClick={onClose}>Close</Button><Button icon="check" onClick={save}>Save</Button></>}>
+        actions={<Button icon="check" onClick={save}>Save</Button>}>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <Field label="Process" required className="lg:col-span-2"><Select value={f.process} onChange={(v) => set("process", v)} options={types.map((t) => ({ value: t, label: t }))} /></Field>
           <Field label="Approval levels"><Num value={f.levels} onChange={(v) => set("levels", v)} /></Field>
@@ -897,14 +1015,15 @@
       { key: "escalationHours", label: "Escalation (h)" },
       { key: "active", label: "Status", render: (r) => <StatusTag value={r.active !== false ? "Active" : "Inactive"} map={{ Active: "#34d399", Inactive: "#94a3b8" }} /> },
     ];
+    if (edit) {
+      return <ApprovalForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} />;
+    }
     return (
-      <div>
-        <PageHead title="Approval Workflows" desc="Multi-level approval rules by process type and amount" />
-        <RecordTable title="Workflows" columns={cols} rows={rows} can={can} printTitle="Approval Workflows" searchKeys={["process"]}
-          onNew={can("add") ? () => setEdit({}) : null} newLabel="New Workflow" onEdit={can("edit") ? (r) => setEdit(r) : null}
+      <ListPage title="Approval Workflows" desc="Multi-level approval rules by process type and amount" onNew={can("add") ? () => setEdit({}) : null} newLabel="Add Workflow" can={can}>
+        <RecordTable embedded suppressNew title="Workflow List" columns={cols} rows={rows} can={can} printTitle="Approval Workflows" searchKeys={["process"]}
+          onNew={can("add") ? () => setEdit({}) : null} onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete workflow?", danger: true, confirmLabel: "Delete" })) { store.remove("approvalWorkflows", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-        {edit && <ApprovalForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} />}
-      </div>
+      </ListPage>
     );
   }
 
@@ -938,35 +1057,191 @@
     );
   };
 
-  /* ================= Numbering Series ================= */
+  /* ================= Numbering Settings ================= */
+  function defaultNumberingSelections(targets, rows) {
+    const map = {};
+    (targets || []).forEach((t) => {
+      let prefix = t.defaultPrefix || "";
+      if (t.type === "doc") {
+        const ser = (rows || []).find((r) => r.docType === t.docType && r.active !== false);
+        if (ser && ser.prefix) prefix = ser.prefix;
+      }
+      map[t.key] = { selected: false, prefix };
+    });
+    return map;
+  }
+
+  function GlobalNumberingPanel({ roleKey, can, rows, onApplied }) {
+    const ne = VG.numberingEngine || {};
+    const targets = VG.NUMBERING_APPLY_TARGETS || [];
+    const [rule, setRule] = useState(() => {
+      const n = store.settings().numbering || {};
+      return {
+        padding: n.defaultPadding || 5,
+        startSequence: 1,
+        reset: n.defaultReset || "Yearly",
+        yearMode: n.defaultYearMode || "calendar",
+        previewSeq: 125,
+        branchWise: false,
+        manualOverride: false,
+      };
+    });
+    const [selections, setSelections] = useState(() => defaultNumberingSelections(targets, rows));
+    const [previewKey, setPreviewKey] = useState("quotation");
+    const setRuleField = (k, v) => setRule((p) => ({ ...p, [k]: v }));
+    const allSelected = targets.length > 0 && targets.every((t) => selections[t.key] && selections[t.key].selected);
+    const someSelected = targets.some((t) => selections[t.key] && selections[t.key].selected);
+
+    useEffect(() => {
+      setSelections(defaultNumberingSelections(targets, rows));
+    }, [rows.length]);
+
+    function toggleAll(v) {
+      setSelections((p) => {
+        const next = { ...p };
+        targets.forEach((t) => { next[t.key] = { ...(next[t.key] || {}), selected: v }; });
+        return next;
+      });
+    }
+
+    function toggleOne(key, v) {
+      setSelections((p) => ({ ...p, [key]: { ...(p[key] || {}), selected: v } }));
+    }
+
+    function setPrefix(key, v) {
+      const clean = ne.sanitizeAlphaNum ? ne.sanitizeAlphaNum(v) : String(v || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+      setSelections((p) => ({ ...p, [key]: { ...(p[key] || {}), prefix: clean } }));
+    }
+
+    const previewTarget = targets.find((t) => t.key === previewKey) || targets[0];
+    const previewPrefix = previewTarget && selections[previewTarget.key] ? selections[previewTarget.key].prefix : "";
+    const livePreview = ne.previewFromRule
+      ? ne.previewFromRule(previewPrefix || previewTarget?.defaultPrefix || "QT", rule, today())
+      : "";
+
+    const selectedPreviews = targets
+      .filter((t) => selections[t.key] && selections[t.key].selected)
+      .slice(0, 6)
+      .map((t) => {
+        const pfx = (selections[t.key] && selections[t.key].prefix) || t.defaultPrefix;
+        const sample = ne.previewFromRule ? ne.previewFromRule(pfx, rule, today()) : pfx;
+        return { label: t.label, sample };
+      });
+
+    async function applySelected() {
+      if (!someSelected) return VG.toast("Select at least one module or category", "error");
+      if (!can("edit")) return VG.toast("No permission to edit numbering", "error");
+      const ok = await VG.confirm({
+        title: "Apply numbering changes?",
+        message: "New settings apply to selected modules only. Existing document numbers are preserved.",
+        confirmLabel: "Apply",
+      });
+      if (!ok) return;
+      if (ne.applyBulkNumbering && store.db) ne.applyBulkNumbering(store.db(), selections, rule);
+      store.audit(roleKey, "settings", "numbering", "bulk_apply", "Applied numbering to " + Object.keys(selections).filter((k) => selections[k].selected).length + " modules");
+      await store.flushPersist();
+      VG.toast("Numbering applied to selected modules");
+      if (onApplied) onApplied();
+    }
+
+    return (
+      <Card className="p-4 mb-4">
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+          <div>
+            <h3 className="font-semibold text-sm">Global Numbering Control</h3>
+            <p className="text-xs opacity-60 mt-1">Configure format once, then apply to all or selected modules using checkboxes below.</p>
+          </div>
+          {can("edit") && <Button icon="check" onClick={applySelected} disabled={!someSelected}>Apply to selected</Button>}
+        </div>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+          <Field label="Sequence length (padding)"><Num value={rule.padding} onChange={(v) => setRuleField("padding", v)} /></Field>
+          <Field label="Starting sequence"><Num value={rule.startSequence} onChange={(v) => setRuleField("startSequence", v)} /></Field>
+          <Field label="Reset cycle"><Select value={rule.reset} onChange={(v) => setRuleField("reset", v)} options={["Never", "Yearly", "Monthly"].map((x) => ({ value: x, label: x }))} /></Field>
+          <Field label="Year in number"><Select value={rule.yearMode} onChange={(v) => setRuleField("yearMode", v)} options={[
+            { value: "calendar", label: "Calendar year (2026)" },
+            { value: "fy", label: "Financial year (2627)" },
+            { value: "none", label: "No year segment" },
+          ]} /></Field>
+          <Field label="Preview module"><Select value={previewKey} onChange={setPreviewKey} options={targets.map((t) => ({ value: t.key, label: t.label }))} /></Field>
+          <Field label="Live preview"><Text value={livePreview || "—"} onChange={() => {}} disabled /></Field>
+          <div className="lg:col-span-2 flex flex-wrap items-end gap-4 pb-1">
+            <Checkbox checked={!!rule.branchWise} onChange={(v) => setRuleField("branchWise", v)} label="Branch-wise series" />
+            <Checkbox checked={!!rule.manualOverride} onChange={(v) => setRuleField("manualOverride", v)} label="Allow manual override" />
+          </div>
+        </div>
+        {selectedPreviews.length > 0 && (
+          <div className="mb-4 p-3 rounded-xl glass text-xs">
+            <div className="font-medium mb-2 opacity-80">Selected module previews</div>
+            <div className="flex flex-wrap gap-3">
+              {selectedPreviews.map((p) => (
+                <span key={p.label}><span className="opacity-60">{p.label}:</span> <span className="font-mono">{p.sample}</span></span>
+              ))}
+            </div>
+          </div>
+        )}
+        <div className="border-t border-white/10 pt-4">
+          <div className="flex flex-wrap items-center gap-4 mb-3">
+            <Checkbox checked={allSelected} onChange={toggleAll} label="Select All" />
+            <span className="text-xs opacity-50">{someSelected ? targets.filter((t) => selections[t.key]?.selected).length + " selected" : "No modules selected"}</span>
+            <Button variant="ghost" onClick={() => toggleAll(false)}>Clear selection</Button>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
+            {targets.map((t) => (
+              <div key={t.key} className="flex items-center gap-2 glass rounded-lg px-3 py-2">
+                <Checkbox checked={!!(selections[t.key] && selections[t.key].selected)} onChange={(v) => toggleOne(t.key, v)} label="" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-medium truncate">{t.label}</div>
+                  <div className="font-mono text-[11px]"><Text value={(selections[t.key] && selections[t.key].prefix) || t.defaultPrefix} onChange={(v) => setPrefix(t.key, v)} placeholder="Prefix" /></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
   function SeriesForm({ open, onClose, record, roleKey }) {
     const isEdit = !!(record && record.id);
-    const [f, setF] = useState(() => ({ useFy: true, padding: 4, reset: "Yearly", branchWise: false, manualOverride: false, active: true, ...record }));
+    const ne = VG.numberingEngine || {};
+    const [f, setF] = useState(() => ({ useCalendarYear: true, useFy: false, padding: 5, startSequence: 1, reset: "Yearly", branchWise: false, manualOverride: false, active: true, ...record }));
     const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
-    useEffect(() => { if (open) setF({ useFy: true, padding: 4, reset: "Yearly", branchWise: false, manualOverride: false, active: true, ...record }); }, [open, record && record.id]);
+    useEffect(() => { if (open) setF({ useCalendarYear: true, useFy: false, padding: 5, startSequence: 1, reset: "Yearly", branchWise: false, manualOverride: false, active: true, ...record }); }, [open, record && record.id]);
+    const preview = ne.previewSeries ? ne.previewSeries(f, today()) : "";
     function save() {
       if (!f.prefix || !f.docType) return VG.toast("Prefix and document type required", "error");
-      const payload = { ...f, useFy: !!f.useFy, branchWise: !!f.branchWise, manualOverride: !!f.manualOverride, active: !!f.active };
+      const prefix = ne.sanitizeAlphaNum ? ne.sanitizeAlphaNum(f.prefix) : String(f.prefix).replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+      if (!prefix) return VG.toast("Prefix must contain letters or numbers only", "error");
+      const payload = {
+        ...f, prefix, useFy: !!f.useFy, useCalendarYear: f.useFy ? false : f.useCalendarYear !== false,
+        branchWise: !!f.branchWise, manualOverride: !!f.manualOverride, active: !!f.active,
+        padding: Number(f.padding) || 5, startSequence: Number(f.startSequence) || 1,
+      };
       if (isEdit) store.update("numberSeries", f.id, payload, roleKey);
       else store.create("numberSeries", payload, roleKey);
-      VG.toast("Series saved");
+      if (ne.syncCountersFromData && store.db) ne.syncCountersFromData(store.db());
+      VG.toast("Numbering series saved");
       onClose();
     }
     const types = VG.ADMIN_DOC_TYPES || [];
     return (
-      <Modal open={open} onClose={onClose} title={isEdit ? "Edit Number Series" : "New Number Series"}
-        footer={<><Button variant="soft" onClick={onClose}>Close</Button><Button icon="check" onClick={save}>Save</Button></>}>
+      <Modal open={open} onClose={onClose} title={isEdit ? "Edit Numbering Series" : "New Numbering Series"}
+        actions={<Button icon="check" onClick={save}>Save</Button>}>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <Field label="Document type" required><Select value={f.docType} onChange={(v) => set("docType", v)} options={types.map((t) => ({ value: t, label: t }))} /></Field>
-          <Field label="Prefix" required hint="e.g. GLS/QTN"><Text value={f.prefix} onChange={(v) => set("prefix", v)} /></Field>
-          <Field label="Padding digits"><Num value={f.padding} onChange={(v) => set("padding", v)} /></Field>
+          <Field label="Prefix" required hint="Letters & numbers only · e.g. QT, SO, INV"><Text value={f.prefix} onChange={(v) => set("prefix", (ne.sanitizeAlphaNum ? ne.sanitizeAlphaNum(v) : v.replace(/[^A-Za-z0-9]/g, "").toUpperCase()))} /></Field>
+          <Field label="Sequence padding"><Num value={f.padding} onChange={(v) => set("padding", v)} /></Field>
+          <Field label="Starting sequence"><Num value={f.startSequence} onChange={(v) => set("startSequence", v)} /></Field>
           <Field label="Reset cycle"><Select value={f.reset} onChange={(v) => set("reset", v)} options={["Never", "Yearly", "Monthly"].map((x) => ({ value: x, label: x }))} /></Field>
+          <Field label="Format preview"><Text value={preview || "—"} onChange={() => {}} disabled /></Field>
           <div className="lg:col-span-3 flex flex-wrap gap-4">
-            <Checkbox checked={!!f.useFy} onChange={(v) => set("useFy", v)} label="Include financial year" />
+            <Checkbox checked={f.useCalendarYear !== false && !f.useFy} onChange={(v) => { set("useCalendarYear", v); if (v) set("useFy", false); }} label="Include calendar year (e.g. 2026)" />
+            <Checkbox checked={!!f.useFy} onChange={(v) => { set("useFy", v); if (v) set("useCalendarYear", false); }} label="Include financial year (e.g. 2627)" />
             <Checkbox checked={!!f.branchWise} onChange={(v) => set("branchWise", v)} label="Branch-wise series" />
             <Checkbox checked={!!f.manualOverride} onChange={(v) => set("manualOverride", v)} label="Allow manual override" />
             <Checkbox checked={f.active !== false} onChange={(v) => set("active", v)} label="Active" />
           </div>
+          <p className="lg:col-span-3 text-[11px] opacity-55">Alphanumeric only — no slash, dash, dot or special characters. Example: QT202600001</p>
         </div>
       </Modal>
     );
@@ -974,39 +1249,129 @@
 
   function NumberSeriesPage({ roleKey, can }) {
     VG.useDB();
+    const ne = VG.numberingEngine || {};
     const [edit, setEdit] = useState(null);
+    const [tick, setTick] = useState(0);
+    if (ne.ensureDefaultSeries && store.db) ne.ensureDefaultSeries(store.db());
     const rows = store.list("numberSeries");
     const cols = [
       { key: "docType", label: "Document" },
       { key: "prefix", label: "Prefix", render: (r) => <span className="font-mono text-xs">{r.prefix}</span> },
-      { key: "useFy", label: "FY", render: (r) => r.useFy ? "✓" : "—" },
-      { key: "padding", label: "Padding" },
+      { key: "preview", label: "Preview", render: (r) => <span className="font-mono text-[10px] opacity-70">{ne.previewSeries ? ne.previewSeries(r, today()) : "—"}</span> },
+      { key: "year", label: "Year", render: (r) => r.useFy ? "FY" : r.useCalendarYear !== false ? "Cal" : "—" },
+      { key: "padding", label: "Pad" },
       { key: "reset", label: "Reset" },
       { key: "active", label: "Status", render: (r) => <StatusTag value={r.active !== false ? "Active" : "Inactive"} map={{ Active: "#34d399", Inactive: "#94a3b8" }} /> },
     ];
+    if (edit) {
+      return <SeriesForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} />;
+    }
+    return (
+      <ListPage title="Numbering Settings" desc="Centrally control prefixes, sequence length, year logic, and numbering patterns — apply globally or per module" onNew={can("add") ? () => setEdit({}) : null} newLabel="Add Series" can={can}>
+        <GlobalNumberingPanel roleKey={roleKey} can={can} rows={rows} onApplied={() => setTick((t) => t + 1)} key={tick} />
+        <Card className="p-4 mb-4 text-sm opacity-75">
+          Alphanumeric only — no slash, dash or special characters. Examples: <span className="font-mono">QT202600125</span>, <span className="font-mono">GLSFG202600001</span> (SKU), <span className="font-mono">PO202600001</span>.
+          Historical numbers are preserved; only new transactions use updated rules.
+        </Card>
+        <RecordTable embedded suppressNew title="Document Numbering Series (per module)" columns={cols} rows={rows} can={can} printTitle="Numbering Settings" searchKeys={["prefix", "docType"]}
+          onNew={can("add") ? () => setEdit({}) : null} onEdit={can("edit") ? (r) => setEdit(r) : null}
+          onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete series?", danger: true, confirmLabel: "Delete" })) { store.remove("numberSeries", r.id, roleKey); VG.toast("Deleted"); } } : null} />
+      </ListPage>
+    );
+  }
+
+  /* ================= Date Format Settings ================= */
+  function DateFormatSettingsPage({ roleKey, can }) {
+    VG.useDB();
+    const df = VG.dateFormat || {};
+    const presets = VG.DATE_FORMAT_PRESETS || [];
+    const live = store.settings().dateFormat || (df.defaultDateFormatSettings ? df.defaultDateFormatSettings() : {});
+    const [s, setS] = useState(() => clone(live));
+    const set = (k, v) => setS((p) => ({ ...p, [k]: v }));
+    const sampleDate = today();
+    const datePreview = df.previewDate ? df.previewDate(s.formatId, sampleDate) : "—";
+    const timePreview = df.formatTime ? df.formatTime(new Date(), s) : "—";
+
+    function save() {
+      store.saveAdminSettings({ dateFormat: s }, roleKey);
+      VG.toast("Date & time format applied globally");
+    }
+
     return (
       <div>
-        <PageHead title="Numbering Series" desc="Auto-number prefixes for quotations, orders, challans and invoices" />
-        <RecordTable title="Series" columns={cols} rows={rows} can={can} printTitle="Number Series" searchKeys={["prefix", "docType"]}
-          onNew={can("add") ? () => setEdit({}) : null} newLabel="New Series" onEdit={can("edit") ? (r) => setEdit(r) : null}
-          onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete series?", danger: true, confirmLabel: "Delete" })) { store.remove("numberSeries", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-        {edit && <SeriesForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} />}
+        <PageHead title="Date Format Settings" desc="Control how dates and times appear across dashboards, forms, reports, PDFs, timelines, logs, and all modules.">
+          {can("edit") && <Button icon="check" onClick={save}>Save & apply globally</Button>}
+        </PageHead>
+        <Card className="p-4 mb-4">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <Field label="Date format" className="lg:col-span-2">
+              <Select value={s.formatId} onChange={(v) => set("formatId", v)} options={presets.map((p) => ({ value: p.id, label: p.label + " · e.g. " + p.example }))} />
+            </Field>
+            <Field label="Locale"><Select value={s.locale || "en-IN"} onChange={(v) => set("locale", v)} options={[
+              { value: "en-IN", label: "English (India)" },
+              { value: "en-GB", label: "English (UK)" },
+              { value: "en-US", label: "English (US)" },
+            ]} /></Field>
+            <Field label="Time format"><Select value={s.timeFormat || "12"} onChange={(v) => set("timeFormat", v)} options={[
+              { value: "12", label: "12-hour (e.g. 3:45 PM)" },
+              { value: "24", label: "24-hour (e.g. 15:45)" },
+            ]} /></Field>
+            <div className="flex items-end pb-1"><Checkbox checked={!!s.includeWeekday} onChange={(v) => set("includeWeekday", v)} label="Include weekday in dates" /></div>
+          </div>
+          <div className="mt-4 p-4 rounded-xl glass grid sm:grid-cols-2 gap-4">
+            <div>
+              <div className="text-xs opacity-60 mb-1">Today (date preview)</div>
+              <div className="text-lg font-semibold">{datePreview}</div>
+              <div className="text-[11px] opacity-50 mt-1">Sample ISO: {sampleDate}</div>
+            </div>
+            <div>
+              <div className="text-xs opacity-60 mb-1">Time preview</div>
+              <div className="text-lg font-semibold">{timePreview}</div>
+              <div className="text-[11px] opacity-50 mt-1">Applies to timelines, logs, audit trail, notifications</div>
+            </div>
+          </div>
+          <p className="text-[11px] opacity-55 mt-3">Internal storage remains ISO (YYYY-MM-DD). Display format applies to UI, print, and PDF output.</p>
+        </Card>
       </div>
     );
   }
 
   /* ================= Security ================= */
-  function SecurityPage({ roleKey, can }) {
+  function SecurityPage({ roleKey, can, go }) {
     VG.useDB();
     const live = store.settings().security;
+    const resetLogs = (store.db().passwordResetLog || []).slice().reverse().slice(0, 50);
     const [s, setS] = useState(() => clone(live));
     const set = (k, v) => setS((p) => ({ ...p, [k]: v }));
     function save() { store.saveAdminSettings({ security: s }, roleKey); VG.toast("Security settings saved"); }
     return (
-      <div>
-        <PageHead title="Security Settings" desc="Password policy, session timeout, login lockout and audit retention">
+      <div className="space-y-4">
+        <PageHead title="Security Settings" desc="Password policy, session timeout, login lockout, forgot password and audit retention">
           {can("edit") && <Button icon="check" onClick={save}>Save settings</Button>}
         </PageHead>
+        <Card className="p-4">
+          <h3 className="text-sm font-semibold mb-3">Forgot password (self-service)</h3>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+            <div className="lg:col-span-3">
+              <Checkbox checked={s.forgotPasswordEnabled !== false} onChange={(v) => set("forgotPasswordEnabled", v)} label="Enable forgot password on login screen" />
+            </div>
+            <Field label="OTP expiry (minutes)"><Num value={s.forgotPasswordOtpExpiryMins || 10} onChange={(v) => set("forgotPasswordOtpExpiryMins", v)} min={5} max={60} /></Field>
+            <Field label="Reset link expiry (minutes)"><Num value={s.forgotPasswordLinkExpiryMins || 60} onChange={(v) => set("forgotPasswordLinkExpiryMins", v)} min={15} max={1440} /></Field>
+            <Field label="Max attempts per hour"><Num value={s.forgotPasswordMaxAttemptsPerHour || 5} onChange={(v) => set("forgotPasswordMaxAttemptsPerHour", v)} min={3} max={20} /></Field>
+            <Field label="Delivery method" className="lg:col-span-2">
+              <Select
+                value={s.forgotPasswordDelivery || "both"}
+                onChange={(v) => set("forgotPasswordDelivery", v)}
+                options={[
+                  { value: "email", label: "Email only" },
+                  { value: "sms", label: "SMS only" },
+                  { value: "both", label: "Email and SMS" },
+                ]}
+              />
+            </Field>
+          </div>
+          <p className="text-xs opacity-55">Configure SMTP and SMS under Notifications. Set VERAGLO_DEBUG_RESET=1 on the server to log OTP/link to console during development.</p>
+        </Card>
         <Card className="p-4">
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
             <Field label="Min password length"><Num value={s.minPasswordLength} onChange={(v) => set("minPasswordLength", v)} /></Field>
@@ -1024,6 +1389,25 @@
               <Checkbox checked={!!s.forceLogoutAll} onChange={(v) => set("forceLogoutAll", v)} label="Force logout all sessions on save" />
             </div>
           </div>
+        </Card>
+        <RecordTable
+          title="Password reset activity log"
+          columns={[
+            { key: "ts", label: "When", render: (r) => fmtTime(r.ts) },
+            { key: "action", label: "Action", render: (r) => r.action || "—" },
+            { key: "email", label: "User", render: (r) => r.email || "—" },
+            { key: "ip", label: "IP", render: (r) => (r.ip || "—").slice(0, 24) },
+            { key: "detail", label: "Detail", render: (r) => (r.detail || "").slice(0, 60) },
+          ]}
+          rows={resetLogs}
+          can={can}
+          empty="No password reset activity yet"
+          searchKeys={["email", "action", "detail"]}
+        />
+        <Card className="p-4 flex flex-wrap items-center gap-3">
+          <Icon name="users" size={20} style={{ color: "var(--accent)" }} />
+          <span className="text-sm flex-1">Manual password reset: open Admin → Users, edit a user, and set a new password.</span>
+          {go && <Button variant="soft" onClick={() => go("users")}>Open Users</Button>}
         </Card>
       </div>
     );
@@ -1052,6 +1436,16 @@
             <div className="flex items-end pb-1"><Checkbox checked={n.smtpTls !== false} onChange={(v) => set("smtpTls", v)} label="Use TLS" /></div>
           </div>
         </Card>
+        <Card className="p-4 mb-4">
+          <h3 className="text-sm font-semibold mb-3">SMS (password reset & alerts)</h3>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="lg:col-span-3"><Checkbox checked={!!n.smsEnabled} onChange={(v) => set("smsEnabled", v)} label="Enable SMS delivery" /></div>
+            <Field label="Provider"><Select value={n.smsProvider || "Twilio"} onChange={(v) => set("smsProvider", v)} options={["Twilio", "MSG91", "AWS SNS", "Other"].map((x) => ({ value: x, label: x }))} /></Field>
+            <Field label="API key"><Text type="password" value={n.smsApiKey || ""} onChange={(v) => set("smsApiKey", v)} /></Field>
+            <Field label="Sender ID"><Text value={n.smsFrom || ""} onChange={(v) => set("smsFrom", v)} placeholder="VERAGLO" /></Field>
+          </div>
+          <p className="text-xs opacity-55 mt-2">SMS requires provider configuration. Without it, reset codes are sent by email when SMTP is configured.</p>
+        </Card>
         <Card className="p-4">
           <h3 className="text-sm font-semibold mb-3">Alert toggles</h3>
           <div className="flex flex-wrap gap-4">
@@ -1073,15 +1467,16 @@
     const [t, setT] = useState(() => clone(live));
     const set = (k, v) => setT((p) => ({ ...p, [k]: v }));
     const fontOpts = VG.typographyFontOptions ? VG.typographyFontOptions() : [];
-    const sizeOpts = ["small", "medium", "large"].map((x) => ({ value: x, label: x.charAt(0).toUpperCase() + x.slice(1) }));
+    const sizeOpts = VG.typographySizeOptions ? VG.typographySizeOptions() : ["small", "medium", "large"].map((x) => ({ value: x, label: x.charAt(0).toUpperCase() + x.slice(1) }));
     const preset = (VG.FONT_PRESETS && VG.FONT_PRESETS[t.fontFamily]) || (VG.FONT_PRESETS && VG.FONT_PRESETS.inter) || { label: "Inter" };
+    const colorDefaults = VG.TYPOGRAPHY_COLOR_DEFAULTS || {};
 
     useEffect(() => {
       if (VG.applyTypography) VG.applyTypography(t, liveTheme);
     }, [t]);
 
     function save() {
-      const themePatch = { ...liveTheme, fontSize: t.headingSize || liveTheme.fontSize || "medium" };
+      const themePatch = { ...liveTheme, fontSize: t.bodySize || t.headingSize || liveTheme.fontSize || "medium" };
       store.saveAdminSettings({ typography: t, theme: themePatch }, roleKey);
       VG.toast("Typography applied across the ERP");
     }
@@ -1089,36 +1484,65 @@
     function resetDefaults() {
       const d = VG.defaultTypography ? VG.defaultTypography(liveTheme) : live;
       setT(d);
+      if (VG.applyTypography) VG.applyTypography(d, liveTheme);
       VG.toast("Reset to Inter defaults — save to persist");
     }
 
     return (
       <div>
-        <PageHead title="UI Settings" desc="Global typography and font standards for screens, tables, forms, and PDF documents">
+        <PageHead
+          title="Typography"
+          desc="Centrally control font family, sizes, weight, line height, and text colors for dashboards, menus, sidebar, forms, tables, buttons, reports, popups, PDFs, and every module screen."
+        >
           <div className="flex gap-2 flex-wrap">
             {can("edit") && <Button variant="soft" onClick={resetDefaults}>Reset defaults</Button>}
             {can("edit") && <Button icon="check" onClick={save}>Save & apply globally</Button>}
           </div>
         </PageHead>
+
         <Card className="p-4 mb-4">
-          <h3 className="text-sm font-semibold mb-1">Global font family</h3>
-          <p className="text-xs opacity-60 mb-3">Inter is recommended for enterprise readability, numeric tables, and long working sessions.</p>
+          <h3 className="text-sm font-semibold mb-1">Font family</h3>
+          <p className="text-xs opacity-60 mb-3">Inter is recommended — clean, balanced, and comfortable for long office sessions.</p>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
             <Field label="Screen font"><Select value={t.fontFamily || "inter"} onChange={(v) => set("fontFamily", v)} options={fontOpts} /></Field>
             <Field label="PDF / print font"><Select value={t.pdfFontFamily || "inter"} onChange={(v) => set("pdfFontFamily", v)} options={fontOpts} /></Field>
             <Field label="Font weight"><Select value={t.fontWeight || "medium"} onChange={(v) => set("fontWeight", v)} options={[{ value: "normal", label: "Normal" }, { value: "medium", label: "Medium (recommended)" }]} /></Field>
           </div>
         </Card>
+
         <Card className="p-4 mb-4">
-          <h3 className="text-sm font-semibold mb-3">Typography scale</h3>
+          <h3 className="text-sm font-semibold mb-3">Font sizes</h3>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <Field label="Body / general text" hint="Dashboards, menus, default screen text"><Select value={t.bodySize || "medium"} onChange={(v) => set("bodySize", v)} options={sizeOpts} /></Field>
             <Field label="Heading size"><Select value={t.headingSize || "medium"} onChange={(v) => set("headingSize", v)} options={sizeOpts} /></Field>
             <Field label="Table size"><Select value={t.tableSize || "medium"} onChange={(v) => set("tableSize", v)} options={sizeOpts} /></Field>
-            <Field label="Form size"><Select value={t.formSize || "medium"} onChange={(v) => set("formSize", v)} options={sizeOpts} /></Field>
-            <Field label="Line spacing"><Select value={t.lineSpacing || "comfortable"} onChange={(v) => set("lineSpacing", v)} options={[{ value: "compact", label: "Compact" }, { value: "comfortable", label: "Comfortable" }, { value: "relaxed", label: "Relaxed" }]} /></Field>
+            <Field label="Button size"><Select value={t.buttonSize || "medium"} onChange={(v) => set("buttonSize", v)} options={sizeOpts} /></Field>
+            <Field label="Form input size"><Select value={t.formSize || "medium"} onChange={(v) => set("formSize", v)} options={sizeOpts} /></Field>
+            <Field label="Form label size"><Select value={t.labelSize || "medium"} onChange={(v) => set("labelSize", v)} options={sizeOpts} /></Field>
+          </div>
+        </Card>
+
+        <Card className="p-4 mb-4">
+          <h3 className="text-sm font-semibold mb-3">Spacing & density</h3>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <Field label="Line height"><Select value={t.lineSpacing || "comfortable"} onChange={(v) => set("lineSpacing", v)} options={[{ value: "compact", label: "Compact" }, { value: "comfortable", label: "Comfortable" }, { value: "relaxed", label: "Relaxed" }]} /></Field>
             <Field label="Density"><Select value={t.density || "comfortable"} onChange={(v) => set("density", v)} options={[{ value: "comfortable", label: "Comfortable" }, { value: "compact", label: "Compact mode" }]} /></Field>
           </div>
         </Card>
+
+        <Card className="p-4 mb-4">
+          <h3 className="text-sm font-semibold mb-1">Text colors</h3>
+          <p className="text-xs opacity-60 mb-3">Body, heading, and muted tones for light and dark workspace modes.</p>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <Field label="Light mode — body text"><Text type="color" value={t.lightTextColor || colorDefaults.lightTextColor || "#334155"} onChange={(v) => set("lightTextColor", v)} /></Field>
+            <Field label="Light mode — headings"><Text type="color" value={t.lightHeadingColor || colorDefaults.lightHeadingColor || "#0f172a"} onChange={(v) => set("lightHeadingColor", v)} /></Field>
+            <Field label="Light mode — muted text"><Text type="color" value={t.lightMutedColor || colorDefaults.lightMutedColor || "#64748b"} onChange={(v) => set("lightMutedColor", v)} /></Field>
+            <Field label="Dark mode — body text"><Text type="color" value={t.darkTextColor || colorDefaults.darkTextColor || "#e2e8f0"} onChange={(v) => set("darkTextColor", v)} /></Field>
+            <Field label="Dark mode — headings"><Text type="color" value={t.darkHeadingColor || colorDefaults.darkHeadingColor || "#f8fafc"} onChange={(v) => set("darkHeadingColor", v)} /></Field>
+            <Field label="Dark mode — muted text"><Text type="color" value={t.darkMutedColor || colorDefaults.darkMutedColor || "#94a3b8"} onChange={(v) => set("darkMutedColor", v)} /></Field>
+          </div>
+        </Card>
+
         <Card className="p-4">
           <div className="text-[11px] uppercase opacity-55 mb-3">Live preview · {preset.label}</div>
           <div className="space-y-4">
@@ -1127,21 +1551,173 @@
               <div className="text-sm opacity-70 mt-1">Quotation pipeline, orders, and tax invoices</div>
             </div>
             <div className="rounded-xl border border-white/10 overflow-hidden">
-              <table className="w-full text-left">
+              <table className="w-full text-left vg-tbl">
                 <thead><tr className="border-b border-white/10"><th className="px-3 py-2">Quotation #</th><th className="px-3 py-2">Customer</th><th className="px-3 py-2 text-right">Amount</th></tr></thead>
                 <tbody>
-                  <tr className="border-b border-white/5"><td className="px-3 py-2 font-mono text-xs">QTN-2026-0142</td><td className="px-3 py-2">Acme Industries Pvt Ltd</td><td className="px-3 py-2 text-right font-mono">₹ 12,45,680.00</td></tr>
-                  <tr><td className="px-3 py-2 font-mono text-xs">QTN-2026-0143</td><td className="px-3 py-2">Bharat Engineering Works</td><td className="px-3 py-2 text-right font-mono">₹ 8,92,150.00</td></tr>
+                  <tr className="border-b border-white/5"><td className="px-3 py-2 vg-doc-no">QTN-2026-0142</td><td className="px-3 py-2">Acme Industries Pvt Ltd</td><td className="px-3 py-2 text-right vg-doc-no">₹ 12,45,680.00</td></tr>
+                  <tr><td className="px-3 py-2 vg-doc-no">QTN-2026-0143</td><td className="px-3 py-2">Bharat Engineering Works</td><td className="px-3 py-2 text-right vg-doc-no">₹ 8,92,150.00</td></tr>
                 </tbody>
               </table>
             </div>
             <div className="grid sm:grid-cols-2 gap-3">
               <div><label className="vg-label block mb-1">Customer name</label><input className="vg-input w-full rounded-xl px-3 py-2" readOnly value="Sample customer" /></div>
-              <div><label className="vg-label block mb-1">Document number</label><input className="vg-input w-full rounded-xl px-3 py-2 font-mono" readOnly value="INV-2026-0088" /></div>
+              <div><label className="vg-label block mb-1">Document number</label><input className="vg-input w-full rounded-xl px-3 py-2 vg-doc-no" readOnly value="INV-2026-0088" /></div>
             </div>
-            <p className="text-xs opacity-50">Document numbers and financial values use tabular numerals for aligned, premium readability — same family as body text.</p>
+            <div className="flex flex-wrap gap-2">
+              <Button icon="check">Primary action</Button>
+              <Button variant="soft">Secondary</Button>
+            </div>
+            <p className="text-xs opacity-50">Changes apply instantly while you edit. Save to persist across all users and modules. Quotation numbers use tabular numerals in the same font family.</p>
           </div>
         </Card>
+      </div>
+    );
+  }
+
+  const WEATHER_CONDITIONS = [
+    { id: "clear", label: "Clear / sunny" },
+    { id: "cloudy", label: "Cloudy" },
+    { id: "rain", label: "Rain" },
+    { id: "fog", label: "Fog / haze" },
+    { id: "storm", label: "Storm / thunder" },
+    { id: "night", label: "Night" },
+    { id: "snow", label: "Snow" },
+  ];
+
+  /* ================= Login weather theme ================= */
+  function WeatherLoginPage({ roleKey, can }) {
+    VG.useDB();
+    const live = store.settings().weatherLogin || {};
+    const companyCity = (store.company() || {}).city
+      || ((store.company() || {}).registeredAddress || {}).city
+      || ((store.company() || {}).officeAddress || {}).city
+      || "";
+    const [w, setW] = useState(() => clone({ ...store.settings().weatherLogin }));
+    const [preview, setPreview] = useState(null);
+    const [previewBusy, setPreviewBusy] = useState(false);
+    const set = (k, v) => setW((p) => ({ ...p, [k]: v }));
+    const setWall = (cond, v) => setW((p) => ({ ...p, wallpapers: { ...(p.wallpapers || {}), [cond]: v } }));
+
+    async function fetchPreview() {
+      if (previewBusy) return;
+      setPreviewBusy(true);
+      try {
+        const params = new URLSearchParams({ source: w.locationSource || "company" });
+        if (w.locationSource === "manual" && w.manualCity) params.set("city", w.manualCity);
+        const res = await fetch((VG.apiBase || "") + "/api/weather/current?" + params.toString());
+        const data = await res.json();
+        setPreview(data);
+        if (data.ok) VG.toast("Weather preview loaded");
+        else VG.toast(data.error || "Weather unavailable", "warn");
+      } catch (e) {
+        VG.toast("Could not reach weather service", "error");
+      } finally {
+        setPreviewBusy(false);
+      }
+    }
+
+    function save() {
+      store.saveAdminSettings({ weatherLogin: w }, roleKey);
+      try { localStorage.removeItem("veraglo-weather-login-cache"); } catch (e) {}
+      VG.toast("Login weather settings saved");
+    }
+
+    const stock = (VG.WEATHER_LOGIN_WALLPAPERS || {});
+
+    return (
+      <div className="space-y-4">
+        <PageHead
+          title="Login Weather Theme"
+          desc="Dynamic login wallpaper and colours from live weather. Loads asynchronously — never blocks sign-in."
+        >
+          {can("edit") && (
+            <div className="flex flex-wrap gap-2">
+              <Button variant="soft" icon="refresh" onClick={fetchPreview} disabled={previewBusy || !w.enabled}>
+                {previewBusy ? "Loading…" : "Preview weather"}
+              </Button>
+              <Button icon="check" onClick={save}>Save settings</Button>
+            </div>
+          )}
+        </PageHead>
+
+        <Card className="p-4">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="sm:col-span-2 lg:col-span-3">
+              <Checkbox checked={w.enabled !== false} onChange={(v) => set("enabled", v)} label="Enable weather-based login theme" />
+            </div>
+            <Field label="Location source" hint="Where to fetch weather for the login page">
+              <Select
+                value={w.locationSource || "company"}
+                onChange={(v) => set("locationSource", v)}
+                options={[
+                  { value: "company", label: "Company city (Admin → Company Profile)" },
+                  { value: "browser", label: "Visitor current location (browser permission)" },
+                  { value: "manual", label: "Manual city" },
+                ]}
+              />
+            </Field>
+            {w.locationSource === "manual" ? (
+              <Field label="Manual city" hint="City name for geocoding, e.g. Mumbai, India">
+                <Text value={w.manualCity || ""} onChange={(v) => set("manualCity", v)} placeholder="Mumbai" />
+              </Field>
+            ) : (
+              <Field label="Company city (reference)" hint={companyCity ? "Using: " + companyCity : "Set city in Company Profile → Addresses"}>
+                <Text value={companyCity || "— not set —"} readOnly />
+              </Field>
+            )}
+            <Field label="Refresh interval (minutes)" hint="Client cache + background refresh">
+              <Num value={w.refreshIntervalMins || 30} onChange={(v) => set("refreshIntervalMins", Math.max(5, Number(v) || 30))} min={5} max={180} />
+            </Field>
+            <Field label="OpenWeather API key (optional)" hint="Open-Meteo is used by default (no key). Reserve for future fallback." className="lg:col-span-2">
+              <Text type="password" value={w.openWeatherApiKey || ""} onChange={(v) => set("openWeatherApiKey", v)} placeholder="Leave blank to use Open-Meteo" />
+            </Field>
+          </div>
+        </Card>
+
+        <Card className="p-4">
+          <h3 className="font-semibold text-sm mb-1">Wallpapers</h3>
+          <p className="text-xs opacity-60 mb-4">Upload an image or paste a URL/path. Empty fields use curated stock photos per condition.</p>
+          <Field label="Default fallback wallpaper" className="mb-4">
+            <div className="grid sm:grid-cols-2 gap-3 items-start">
+              <Text value={w.defaultWallpaper || "assets/happy-employees.png"} onChange={(v) => set("defaultWallpaper", v)} />
+              <ImageUploadField label="Upload default" value={w.defaultWallpaper} onChange={(v) => set("defaultWallpaper", v)} />
+            </div>
+          </Field>
+          <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
+            {WEATHER_CONDITIONS.map((c) => (
+              <div key={c.id} className="rounded-xl border border-white/10 p-3 space-y-2">
+                <div className="text-xs font-medium">{c.label}</div>
+                <div className="vg-weather-preview">
+                  <img src={(w.wallpapers || {})[c.id] || stock[c.id] || w.defaultWallpaper} alt="" />
+                </div>
+                <Text
+                  value={((w.wallpapers || {})[c.id]) || ""}
+                  onChange={(v) => setWall(c.id, v)}
+                  placeholder={stock[c.id] ? "Stock photo (leave empty)" : "URL or assets/…"}
+                />
+                <ImageUploadField label={"Upload " + c.label} value={(w.wallpapers || {})[c.id]} onChange={(v) => setWall(c.id, v)} />
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        {preview && (
+          <Card className="p-4">
+            <div className="text-[11px] uppercase tracking-wider opacity-55 mb-2">Live preview</div>
+            {preview.ok ? (
+              <div className="flex flex-wrap items-center gap-4 text-sm">
+                <span className="text-2xl font-display font-bold">{preview.temperature}°C</span>
+                <div>
+                  <div className="font-medium">{preview.location}</div>
+                  <div className="text-xs opacity-70">{preview.conditionLabel} · Theme: {preview.condition}</div>
+                  {preview.forecastSummary && <div className="text-xs opacity-55 mt-1">{preview.forecastSummary}</div>}
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm opacity-60">{preview.error || preview.reason || "Weather unavailable"}</p>
+            )}
+          </Card>
+        )}
       </div>
     );
   }
@@ -1155,13 +1731,20 @@
     function save() {
       store.saveAdminSettings({ theme: t }, roleKey);
       if (t.accent && typeof document !== "undefined") document.documentElement.style.setProperty("--accent", t.accent);
-      if (t.defaultMode === "dark") document.documentElement.classList.add("dark");
-      else if (t.defaultMode === "light") document.documentElement.classList.remove("dark");
+      const root = document.documentElement;
+      if (t.defaultMode === "dark") {
+        root.classList.add("dark");
+        root.classList.remove("light");
+      } else if (t.defaultMode === "light") {
+        root.classList.remove("dark");
+        root.classList.add("light");
+      }
+      if (VG.applyTypography) VG.applyTypography(store.settings().typography, t);
       VG.toast("Theme applied");
     }
     return (
       <div>
-        <PageHead title="Theme & Appearance" desc="Accent colour and default light/dark mode. Font family and sizes are managed in UI Settings.">
+        <PageHead title="Theme & Appearance" desc="Accent colour and default light/dark mode. Font family, sizes, and text colors are managed in Typography (UI Settings).">
           {can("edit") && <Button icon="check" onClick={save}>Save & apply</Button>}
         </PageHead>
         <Card className="p-4">
@@ -1332,13 +1915,15 @@
     { id: "approvals", label: "Approvals", icon: "check", group: "Workflow" },
     { id: "masterData", label: "Master Data", icon: "database", group: "Masters" },
     { id: "importExport", label: "Import / Export", icon: "download", group: "Masters" },
-    { id: "templates", label: "Document Template Designer", icon: "folder", group: "Documents" },
-    { id: "numberSeries", label: "Numbering Series", icon: "grid", group: "Documents" },
+    { id: "templates", label: "Document Templates", icon: "folder", group: "Documents" },
+    { id: "numberSeries", label: "Numbering Settings", icon: "grid", group: "Documents" },
     { id: "skuNumbering", label: "SKU Numbering", icon: "box", group: "Masters" },
     { id: "security", label: "Security", icon: "shield", group: "System" },
+    { id: "dateFormat", label: "Date Format", icon: "calendar", group: "System" },
     { id: "notifications", label: "Notifications", icon: "bell", group: "System" },
-    { id: "uiSettings", label: "UI Settings", icon: "settings", group: "System" },
+    { id: "uiSettings", label: "Typography", icon: "settings", group: "System" },
     { id: "theme", label: "Theme", icon: "sparkle", group: "System" },
+    { id: "weatherLogin", label: "Login Weather", icon: "cloud", group: "System" },
     { id: "backup", label: "Backup & Restore", icon: "cloud", group: "System" },
     { id: "audit", label: "Audit Trail", icon: "activity", group: "System" },
     { id: "licDashboard", label: "License Dashboard", icon: "shield", group: "Licensing & Data" },
@@ -1360,8 +1945,8 @@
     permissions: PermissionsPage, fieldPermissions: FieldPermissionsPage, approvals: ApprovalsPage,
     masterData: MasterDataPage, importExport: ImportExportPage, templates: DocumentTemplatesPage,
     numberSeries: NumberSeriesPage, skuNumbering: (p) => VG.SkuNumberingPage ? React.createElement(VG.SkuNumberingPage, p) : null,
-    security: SecurityPage, notifications: NotificationsPage,
-    uiSettings: UiSettingsPage, theme: ThemePage, backup: BackupRestore, audit: AuditTrail,
+    security: SecurityPage, dateFormat: DateFormatSettingsPage, notifications: NotificationsPage,
+    uiSettings: UiSettingsPage, theme: ThemePage, weatherLogin: WeatherLoginPage, backup: BackupRestore, audit: AuditTrail,
     licDashboard: licensePages.licDashboard, licGenerate: licensePages.licGenerate,
     licActivate: licensePages.licActivate, licRenew: licensePages.licRenew,
     licTransfer: licensePages.licTransfer, licDeactivate: licensePages.licDeactivate,

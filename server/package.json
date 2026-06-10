@@ -8,12 +8,14 @@
     "start": "node index.js",
     "dev": "node --watch index.js",
     "db:init": "node scripts/init-db.js",
-    "db:import": "node scripts/import-state.js"
+    "db:import": "node scripts/import-state.js",
+    "db:reset-admin": "node scripts/reset-admin.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.0",
+    "nodemailer": "^6.10.1",
     "pg": "^8.13.0"
   }
 }

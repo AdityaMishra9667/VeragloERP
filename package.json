@@ -8,6 +8,8 @@
     "server:install": "npm install --prefix server",
     "server:start": "npm start --prefix server",
     "server:dev": "npm run dev --prefix server",
+    "java:build": "mvn -f java-backend package -DskipTests",
+    "java:start": "bash scripts/start-java.sh",
     "db:init": "npm run db:init --prefix server",
     "dev": "npm run docker:up && npm run server:install && npm run server:start",
     "desktop:install": "npm install --prefix desktop",

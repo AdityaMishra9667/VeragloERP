@@ -3,7 +3,7 @@
   const { useState, useEffect, useRef, useMemo } = React;
   const ui = VG.ui, fx = VG.fx, store = VG.store, today = VG.fmt.todayISO, inr = VG.fmt.inr;
   const { Icon, Button, Pill, Card } = ui;
-  const { Field, Text, Area, Num, DateF, Select, Checkbox, Modal, RecordTable, PageHead, StatusTag, printDocument, DocActions } = fx;
+  const { Field, Text, Area, Num, DateF, Select, Checkbox, Modal, RecordTable, PageHead, ListPage, StatusTag, printDocument, DocActions } = fx;
 
   /* ---------- reference data ---------- */
   const CUST_TYPES = ["Individual", "Company", "Government", "Dealer", "Export", "Other"];
@@ -317,7 +317,7 @@
         saved = { ...payload, id: c.id };
         VG.toast("Customer updated");
       } else {
-        payload.code = store.nextNo("CUST").replace(/\//g, "-");
+        payload.code = store.nextCustomerCode ? store.nextCustomerCode() : store.nextMasterCode("CUST");
         payload.createdBy = roleKey;
         payload.approvalStatus = can("approve") ? "Approved" : "Pending";
         payload.approvedBy = can("approve") ? roleKey : "";
@@ -343,9 +343,9 @@
       });
     }
     return (
-      <Modal open={open} onClose={onClose} size="full" dirty={dirty && !disabled} title={isEdit ? "Edit Customer " + (c.code || "") : "New Customer"}
+      <Modal open={open} onClose={onClose} size="full" dirty={dirty && !disabled} title={isEdit ? "Edit Customer " + (c.code || "") : "Add New Customer"}
         subtitle="GSTIN is optional · all linked addresses & contacts supported"
-        footer={<><Button variant="soft" onClick={onClose}>Close</Button>{!disabled && <Button icon="check" onClick={save}>{isEdit ? "Save changes" : "Create customer"}</Button>}</>}>
+        actions={!disabled ? <Button icon="check" onClick={save}>{isEdit ? "Save changes" : "Create customer"}</Button> : null}>
         {disabled && <div className="mb-3 text-xs rounded-lg p-2" style={{ background: "#f59e0b22", color: "#f59e0b" }}><Icon name="lock" size={12} className="inline mr-1" />You have view-only access — editing requires permission.</div>}
         <div className="flex flex-wrap gap-1.5 mb-4">
           {TABS.map(([id, label]) => (
@@ -902,7 +902,7 @@
           <Card className="p-4">
             {(c.documents || []).length === 0 ? <div className="text-sm opacity-50 text-center py-6">No documents uploaded — attach files in customer edit form.</div> : (
               <ul className="space-y-2 text-sm">{(c.documents || []).map((d, i) => (
-                <li key={i} className="flex items-center gap-2 glass rounded-lg px-3 py-2"><Icon name="folder" size={14} /><span>{d.name || d.type || "Document"}</span>{d.uploadedAt && <span className="text-xs opacity-50 ml-auto">{new Date(d.uploadedAt).toLocaleDateString()}</span>}</li>
+                <li key={i} className="flex items-center gap-2 glass rounded-lg px-3 py-2"><Icon name="folder" size={14} /><span>{d.name || d.type || "Document"}</span>{d.uploadedAt && <span className="text-xs opacity-50 ml-auto">{VG.fmt.formatDate ? VG.fmt.formatDate(d.uploadedAt) : new Date(d.uploadedAt).toLocaleDateString()}</span>}</li>
               ))}</ul>
             )}
           </Card>
@@ -960,26 +960,28 @@
         <Customer360Page id={view} roleKey={roleKey} can={can} onBack={() => setView(null)} onEdit={(c) => { setView(null); setForm(c); }} />
       );
     }
+    if (form) {
+      return <CustomerForm open record={form.id ? form : null} roleKey={roleKey} can={can} onClose={() => setForm(null)} onSaved={() => {}} />;
+    }
     return (
-      <div>
-        <PageHead title="Customer Master" desc="Click any customer name for the full Customer 360° dashboard" />
-        <RecordTable title="Customers" columns={cols} rows={rows} can={can} printTitle="Customer Master"
+      <ListPage title="Customer Master" desc="Manage customer profiles, contacts, addresses and commercial terms. Click a name for the 360° dashboard."
+        icon="users" onNew={() => setForm({})} newLabel="Add New Customer" can={can}
+        headerExtra={can("approve") && rows.some((r) => r.approvalStatus === "Pending") ? <Pill color="#f59e0b">{rows.filter((r) => r.approvalStatus === "Pending").length} pending</Pill> : null}>
+        <RecordTable embedded suppressNew tableId="customers" title="Customer List" columns={cols} rows={rows} can={can} printTitle="Customer Master"
           searchKeys={["code", "legalName", "tradeName", "gstin", "pan"]}
           filters={[{ key: "type", label: "All types", options: CUST_TYPES }, { key: "status", label: "All status", options: STATUSES }, { key: "approvalStatus", label: "All approval", options: ["Approved", "Pending", "Rejected"] }]}
-          onNew={() => setForm({})} newLabel="New Customer" onView={(r) => setView(r.id)}
+          onNew={() => setForm({})} onView={(r) => setView(r.id)}
           onEdit={can("edit") ? (r) => setForm(r) : null}
-          onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete " + r.legalName + "?", danger: true, confirmLabel: "Delete" })) { store.remove("customers", r.id, roleKey); VG.toast("Deleted"); } } : null}
-          extra={can("approve") && rows.some((r) => r.approvalStatus === "Pending") ? <Pill color="#f59e0b">{rows.filter((r) => r.approvalStatus === "Pending").length} pending approval</Pill> : null} />
+          onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete " + r.legalName + "?", danger: true, confirmLabel: "Delete" })) { store.remove("customers", r.id, roleKey); VG.toast("Deleted"); } } : null} />
         {can("approve") && rows.some((r) => r.approvalStatus === "Pending") && (
-          <Card className="p-4 mt-3">
-            <div className="text-sm font-semibold mb-2">Pending customer approvals</div>
+          <div className="vg-list-page-aux px-4 pb-4">
+            <div className="text-sm font-semibold mb-2 pt-1">Pending customer approvals</div>
             <div className="space-y-2">{rows.filter((r) => r.approvalStatus === "Pending").map((r) => (
               <div key={r.id} className="flex items-center gap-3 text-sm glass rounded-lg p-2.5"><span className="flex-1">{r.code} · {r.legalName}</span><Button variant="soft" onClick={() => setView(r.id)}>360° View</Button><Button icon="check" onClick={() => approve(r)}>Approve</Button></div>
             ))}</div>
-          </Card>
+          </div>
         )}
-        {form && <CustomerForm open record={form.id ? form : null} roleKey={roleKey} can={can} onClose={() => setForm(null)} onSaved={() => {}} />}
-      </div>
+      </ListPage>
     );
   }
 
@@ -993,15 +995,16 @@
       { key: "symbol", label: "Symbol" }, { key: "rate", label: "Rate (→ INR)", render: (r) => r.rate }, { key: "base", label: "Base", render: (r) => r.base ? <Pill color="#34d399">base</Pill> : "" },
     ];
     function save(form) { if (!form.code) return VG.toast("Code required", "error"); if (form.id) store.update("currencies", form.id, form, roleKey); else store.create("currencies", form, roleKey); VG.toast("Saved"); setEdit(null); }
+    const currencyFields = [{ k: "code", l: "Code (INR, USD…)", req: true }, { k: "name", l: "Name", req: true }, { k: "symbol", l: "Symbol" }, { k: "rate", l: "Rate to INR", num: true, req: true }];
+    if (edit) {
+      return <VG.MasterForm title="Currency" open onClose={() => setEdit(null)} record={edit} roleKey={roleKey} can={can} fields={currencyFields} onSave={save} />;
+    }
     return (
-      <div>
-        <PageHead title="Currency Master" desc="Multi-currency support for customer transactions" />
-        <RecordTable title="Currencies" columns={cols} rows={rows} can={can} printTitle="Currency Master" searchKeys={["code", "name"]}
-          onNew={() => setEdit({})} newLabel="New Currency" onEdit={can("edit") ? (r) => setEdit(r) : null}
+      <ListPage title="Currency Master" desc="Multi-currency support for customer transactions" onNew={() => setEdit({})} newLabel="Add Currency" can={can}>
+        <RecordTable embedded suppressNew title="Currency List" columns={cols} rows={rows} can={can} printTitle="Currency Master" searchKeys={["code", "name"]}
+          onNew={() => setEdit({})} onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete currency?", danger: true, confirmLabel: "Delete" })) { store.remove("currencies", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-        {edit && <VG.MasterForm title="Currency" open onClose={() => setEdit(null)} record={edit} roleKey={roleKey} can={can}
-          fields={[{ k: "code", l: "Code (INR, USD…)", req: true }, { k: "name", l: "Name", req: true }, { k: "symbol", l: "Symbol" }, { k: "rate", l: "Rate to INR", num: true, req: true }]} onSave={save} />}
-      </div>
+      </ListPage>
     );
   }
   function PincodesPage({ roleKey, can }) {
@@ -1013,15 +1016,16 @@
       { key: "district", label: "District" }, { key: "state", label: "State" }, { key: "stateCode", label: "State code" }, { key: "country", label: "Country" },
     ];
     function save(form) { if (!form.pin) return VG.toast("PIN required", "error"); if (form.id) store.update("pincodes", form.id, form, roleKey); else store.create("pincodes", { country: "India", ...form, stateCode: form.stateCode || STATE_CODE[form.state] || "" }, roleKey); VG.toast("Saved"); setEdit(null); }
+    const pinFields = [{ k: "pin", l: "PIN / ZIP", req: true }, { k: "city", l: "City", req: true }, { k: "district", l: "District" }, { k: "state", l: "State", req: true }, { k: "stateCode", l: "State code" }, { k: "country", l: "Country" }];
+    if (edit) {
+      return <VG.MasterForm title="PIN code" open onClose={() => setEdit(null)} record={edit} roleKey={roleKey} can={can} fields={pinFields} onSave={save} />;
+    }
     return (
-      <div>
-        <PageHead title="PIN Code Master" desc="Auto-populated from lookups; used to auto-fill city/state/code" />
-        <RecordTable title="PIN codes" columns={cols} rows={rows} can={can} printTitle="PIN Code Master" searchKeys={["pin", "city", "state"]}
-          onNew={() => setEdit({ country: "India" })} newLabel="New PIN" onEdit={can("edit") ? (r) => setEdit(r) : null}
+      <ListPage title="PIN Code Master" desc="Auto-populated from lookups; used to auto-fill city/state/code" onNew={() => setEdit({ country: "India" })} newLabel="Add PIN" can={can}>
+        <RecordTable embedded suppressNew title="PIN Code List" columns={cols} rows={rows} can={can} printTitle="PIN Code Master" searchKeys={["pin", "city", "state"]}
+          onNew={() => setEdit({ country: "India" })} onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete PIN?", danger: true, confirmLabel: "Delete" })) { store.remove("pincodes", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-        {edit && <VG.MasterForm title="PIN code" open onClose={() => setEdit(null)} record={edit} roleKey={roleKey} can={can}
-          fields={[{ k: "pin", l: "PIN / ZIP", req: true }, { k: "city", l: "City", req: true }, { k: "district", l: "District" }, { k: "state", l: "State", req: true }, { k: "stateCode", l: "State code" }, { k: "country", l: "Country" }]} onSave={save} />}
-      </div>
+      </ListPage>
     );
   }
 
@@ -1033,11 +1037,12 @@
   VG.useFilteredCustomerRows = useFilteredCustomerRows;
   VG.CustomerPages = { currencies: CurrenciesPage, pincodes: PincodesPage };
   /* ================= Transaction address & currency (quotation / SO / PI) ================= */
-  function TransactionAddressCurrency({ customerId, values, onChange, roleKey, canEditCurrency, showAddresses = true }) {
+  function TransactionAddressCurrency({ customerId, values, onChange, roleKey, canEditCurrency, showAddresses = true, showExchangeMeta = false }) {
     const c = customerId ? normalize(store.get("customers", customerId)) : null;
     const opts = c ? customerAddressOptions(c) : [];
     const currencies = store.list("currencies");
     const cur = values.currency || "INR";
+    const custCur = (c && c.currency) || values.customerDefaultCurrency || "INR";
     const isForeign = cur !== "INR";
     function pickBill(id) {
       const bill = customerAddr(c, "billing", id);
@@ -1049,7 +1054,20 @@
     }
     function pickCurrency(code) {
       const row = currencies.find((x) => x.code === code);
-      onChange({ currency: code, exchangeRate: row ? row.rate : 1 });
+      onChange({
+        currency: code,
+        exchangeRate: row ? row.rate : 1,
+        exchangeRateDate: today(),
+        exchangeRateSource: "currency_master",
+        customerDefaultCurrency: custCur,
+      });
+    }
+    function setExchangeRate(v) {
+      onChange({
+        exchangeRate: v,
+        exchangeRateDate: values.exchangeRateDate || today(),
+        exchangeRateSource: "manual",
+      });
     }
     async function updateCustomerDefault() {
       if (!c || !customerId) return;
@@ -1072,12 +1090,23 @@
           </Field>
         </>}
         <div className={"grid grid-cols-2 gap-3 content-start" + (showAddresses ? "" : " lg:col-span-3")}>
-          <Field label="Transaction currency">
+          {showExchangeMeta && (
+            <Field label="Customer default currency">
+              <Text value={custCur} onChange={() => {}} disabled />
+            </Field>
+          )}
+          <Field label={showExchangeMeta ? "Invoice currency" : "Transaction currency"}>
             <Select value={cur} onChange={pickCurrency} disabled={!canEditCurrency}
               options={currencies.map((x) => ({ value: x.code, label: x.code + " — " + x.name }))} />
           </Field>
-          {isForeign && (
-            <Field label="Exchange rate (→ INR)"><Num value={values.exchangeRate} onChange={(v) => onChange({ exchangeRate: v })} /></Field>
+          {(isForeign || showExchangeMeta) && (
+            <Field label="Exchange rate (→ INR)"><Num value={values.exchangeRate} onChange={setExchangeRate} disabled={!canEditCurrency} /></Field>
+          )}
+          {showExchangeMeta && (
+            <>
+              <Field label="Exchange rate date"><DateF value={values.exchangeRateDate || today()} onChange={(v) => onChange({ exchangeRateDate: v })} /></Field>
+              <Field label="Rate source"><Text value={values.exchangeRateSource === "manual" ? "Manual entry" : "Currency master"} onChange={() => {}} disabled /></Field>
+            </>
           )}
           {canEditCurrency && isForeign && c.currency !== cur && (
             <div className="col-span-2"><Button variant="soft" className="!text-xs !py-1.5" onClick={updateCustomerDefault}>Update customer default to {cur}</Button></div>

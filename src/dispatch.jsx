@@ -3,7 +3,7 @@
   const { useState } = React;
   const ui = VG.ui, fx = VG.fx, store = VG.store, inr = VG.fmt.inr, today = VG.fmt.todayISO;
   const { Icon, Button, Pill, Card } = ui;
-  const { Field, Text, Area, DateF, Modal, RecordTable, PageHead, StatusTag, printDocument, DocActions } = fx;
+  const { Field, Text, Area, DateF, Modal, InternalScreen, RecordTable, PageHead, ListPage, StatusTag, printDocument, DocActions } = fx;
 
   const custName = (id) => (store.get("customers", id) || {}).name || "—";
   const SH_STATUS = { Pending: "#f59e0b", Packing: "#a78bfa", "In-transit": "#22d3ee", Delivered: "#34d399", Cancelled: "#ef4444" };
@@ -22,15 +22,22 @@
 
   function ShipmentForm({ open, onClose, so, roleKey }) {
     const [f, setF] = useState({ destination: (so && so.shipping) || "", vehicle: "", driver: "", ewayBill: "" });
-    function submit() {
+    async function submit() {
       if (!so) return;
-      const sh = store.createShipmentFromSO(so.id, f, roleKey);
-      VG.toast("Shipment " + sh.no + " created", "success");
-      onClose(true);
+      const existing = store.list("shipments").find((s) => s.salesOrderId === so.id && s.status !== "Cancelled");
+      await VG.forwardDocument({
+        action: "sales_order:dispatch",
+        fromType: "Sales Order", fromNo: so.no, fromId: so.id,
+        toType: "Shipment", actor: roleKey,
+        duplicate: existing ? { exists: true, no: existing.no, label: "Shipment" } : null,
+        run: () => store.createShipmentFromSO(so.id, f, roleKey),
+        statusChange: "Dispatch Planned",
+        onDone: () => onClose(true),
+      });
     }
     return (
       <Modal open={open} onClose={() => onClose(false)} size="lg" title="Create shipment" subtitle={so ? so.no + " · " + custName(so.customerId) : ""}
-        footer={<><Button variant="soft" onClick={() => onClose(false)}>Cancel</Button><Button icon="truck" onClick={submit}>Create shipment</Button></>}>
+        actions={<Button icon="truck" onClick={submit}>Create shipment</Button>}>
         <div className="grid sm:grid-cols-2 gap-3">
           <Field label="Destination" className="sm:col-span-2"><Text value={f.destination} onChange={(v) => setF((p) => ({ ...p, destination: v }))} /></Field>
           <Field label="Vehicle"><Text value={f.vehicle} onChange={(v) => setF((p) => ({ ...p, vehicle: v }))} /></Field>
@@ -62,15 +69,37 @@
       { key: "status", label: "Status", render: (r) => <StatusTag value={r.status} map={SH_STATUS} /> },
       { key: "act", label: "Action", render: (r) => (
         <div className="flex gap-1 flex-wrap">
-          {(r.status === "Pending" || r.status === "Packing") && can("edit") && <Button variant="soft" className="!py-1" onClick={() => { store.dispatchShipment(r.id, roleKey); VG.toast("Dispatched " + r.no); }}>Dispatch</Button>}
-          {r.status === "In-transit" && can("edit") && <Button variant="soft" className="!py-1" onClick={() => { store.deliverShipment(r.id, roleKey); VG.toast("Delivered " + r.no); }}>POD OK</Button>}
+          {(r.status === "Pending" || r.status === "Packing") && can("edit") && <Button variant="soft" className="!py-1" onClick={async () => {
+            await VG.forwardStatus({
+              fromType: "Shipment", fromNo: r.no, fromId: r.id, actor: roleKey,
+              action: "shipment:dispatch",
+              confirmMessage: "Are you sure you want to mark Shipment " + r.no + " as dispatched?",
+              successMessage: "Shipment " + r.no + " dispatched successfully.",
+              statusChange: "In-transit",
+              run: () => store.dispatchShipment(r.id, roleKey),
+            });
+          }}>Dispatch</Button>}
+          {r.status === "In-transit" && can("edit") && <Button variant="soft" className="!py-1" onClick={async () => {
+            await VG.forwardStatus({
+              fromType: "Shipment", fromNo: r.no, fromId: r.id, actor: roleKey,
+              confirmMessage: "Are you sure you want to confirm delivery for Shipment " + r.no + "?",
+              successMessage: "Shipment " + r.no + " marked as delivered.",
+              statusChange: "Delivered",
+              run: () => store.deliverShipment(r.id, roleKey),
+            });
+          }}>POD OK</Button>}
           {r.status === "Delivered" && <Button variant="soft" className="!py-1" onClick={() => VG.goTo("accounts", "receivables")}>Invoice</Button>}
         </div>
       ) },
     ];
+    if (view) {
+      return <ShipmentDetailPage view={view} onBack={() => setView(null)} roleKey={roleKey} can={can} />;
+    }
+    if (createSO) {
+      return <ShipmentForm open so={createSO} roleKey={roleKey} onClose={() => setCreateSO(null)} />;
+    }
     return (
-      <div>
-        <PageHead title="Shipments" desc="Create from ready sales orders · dispatch · confirm delivery" />
+      <ListPage title="Shipments" desc="Create from ready sales orders · dispatch · confirm delivery" can={can}>
         {VG.CustomerFilterBanner ? <VG.CustomerFilterBanner /> : null}
         {(readySOs.length > 0 || qcReady.length > 0) && can("add") && (
           <Card className="p-3 mb-4 flex flex-wrap items-center gap-2 text-sm">
@@ -82,25 +111,45 @@
             }}>{q.workOrderNo} · QC</Button>)}
           </Card>
         )}
-        <RecordTable title="Shipments" columns={cols} rows={rows} can={can} printTitle="Shipments" searchKeys={["no", "salesOrderNo", "destination"]}
+        <RecordTable embedded suppressNew tableId="dispatch-shipments" title="Shipment List" columns={cols} rows={rows} can={can} printTitle="Shipments" searchKeys={["no", "salesOrderNo", "destination"]}
           filters={[{ key: "status", label: "All status", options: ["Pending", "Packing", "In-transit", "Delivered"] }]}
           onView={(r) => setView(r)} empty="No shipments — create from a sales order ready to dispatch" />
-        {view && (
-          <Modal open onClose={() => setView(null)} size="xl" title={"Shipment " + view.no} subtitle={custName(view.customerId)}
-            footer={<><DocActions build={() => shDoc(view)} />
-              {(view.status === "Pending" || view.status === "Packing") && can("edit") && <Button icon="truck" onClick={() => { store.dispatchShipment(view.id, roleKey); setView(store.get("shipments", view.id)); VG.toast("Dispatched"); }}>Mark dispatched</Button>}
-              {view.status === "In-transit" && can("edit") && <Button icon="check" onClick={() => { store.deliverShipment(view.id, roleKey); setView(store.get("shipments", view.id)); }}>Confirm delivery</Button>}
-            </>}>
-            <StatusTag value={view.status} map={SH_STATUS} />
-            <div className="grid sm:grid-cols-3 gap-3 mt-4 text-sm">
-              <Card className="p-3"><div className="text-[11px] uppercase opacity-55">SO</div>{view.salesOrderNo}</Card>
-              <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Vehicle</div>{view.vehicle || "—"}</Card>
-              <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Destination</div>{view.destination || "—"}</Card>
-            </div>
-          </Modal>
-        )}
-        {createSO && <ShipmentForm open={true} so={createSO} roleKey={roleKey} onClose={() => setCreateSO(null)} />}
-      </div>
+      </ListPage>
+    );
+  }
+
+  function ShipmentDetailPage({ view, onBack, roleKey, can }) {
+    VG.useDB();
+    const sh = store.get("shipments", view.id) || view;
+    return (
+      <InternalScreen onBack={onBack} backLabel="Back to shipments" title={"Shipment " + sh.no} subtitle={custName(sh.customerId)}
+        footer={<><DocActions build={() => shDoc(sh)} />
+          {(sh.status === "Pending" || sh.status === "Packing") && can("edit") && <Button icon="truck" onClick={async () => {
+            await VG.forwardStatus({
+              fromType: "Shipment", fromNo: sh.no, fromId: sh.id, actor: roleKey,
+              confirmMessage: "Are you sure you want to mark Shipment " + sh.no + " as dispatched?",
+              successMessage: "Shipment " + sh.no + " dispatched successfully.",
+              statusChange: "In-transit",
+              run: () => store.dispatchShipment(sh.id, roleKey),
+            });
+          }}>Mark dispatched</Button>}
+          {sh.status === "In-transit" && can("edit") && <Button icon="check" onClick={async () => {
+            await VG.forwardStatus({
+              fromType: "Shipment", fromNo: sh.no, fromId: sh.id, actor: roleKey,
+              confirmMessage: "Are you sure you want to confirm delivery for Shipment " + sh.no + "?",
+              successMessage: "Shipment " + sh.no + " marked as delivered.",
+              statusChange: "Delivered",
+              run: () => store.deliverShipment(sh.id, roleKey),
+            });
+          }}>Confirm delivery</Button>}
+        </>}>
+        <StatusTag value={sh.status} map={SH_STATUS} />
+        <div className="grid sm:grid-cols-3 gap-3 mt-4 text-sm">
+          <Card className="p-3"><div className="text-[11px] uppercase opacity-55">SO</div>{sh.salesOrderNo}</Card>
+          <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Vehicle</div>{sh.vehicle || "—"}</Card>
+          <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Destination</div>{sh.destination || "—"}</Card>
+        </div>
+      </InternalScreen>
     );
   }
 
@@ -109,10 +158,9 @@
     const rowsAll = store.list("shipments").filter((s) => s.status === "In-transit" || s.status === "Delivered").slice().reverse();
     const rows = VG.useFilteredCustomerRows ? VG.useFilteredCustomerRows(rowsAll) : rowsAll;
     return (
-      <div>
-        <PageHead title="Delivery tracking" desc="In-transit and completed deliveries with POD status" />
+      <ListPage title="Delivery tracking" desc="In-transit and completed deliveries with POD status" can={() => true}>
         {VG.CustomerFilterBanner ? <VG.CustomerFilterBanner /> : null}
-        <RecordTable title="Deliveries" columns={[
+        <RecordTable embedded suppressNew title="Delivery List" columns={[
           { key: "no", label: "#", render: (r) => <span className="font-mono text-xs">{r.no}</span> },
           { key: "salesOrderNo", label: "SO" },
           { key: "customerId", label: "Customer", render: (r) => custName(r.customerId) },
@@ -121,7 +169,7 @@
           { key: "status", label: "Status", render: (r) => <StatusTag value={r.status} map={SH_STATUS} /> },
           { key: "podStatus", label: "POD" },
         ]} rows={rows} can={() => true} printTitle="Deliveries" />
-      </div>
+      </ListPage>
     );
   }
 

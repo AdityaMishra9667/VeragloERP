@@ -3,7 +3,7 @@
   const { useState, useMemo, useEffect } = React;
   const ui = VG.ui, fx = VG.fx, store = VG.store, inr = VG.fmt.inr, today = VG.fmt.todayISO;
   const { Icon, Button, Pill, Card } = ui;
-  const { Field, Text, Area, Num, DateF, Select, Checkbox, MasterSelect, Modal, RecordTable, PageHead, StatusTag, printDocument, DocActions, TransactionLinesShell } = fx;
+  const { Field, Text, Area, Num, DateF, Select, Checkbox, MasterSelect, Modal, InternalScreen, RecordTable, PageHead, ListPage, StatusTag, printDocument, DocActions, CollapsibleSection, TransactionLinesShell } = fx;
 
   const QUO_STATUS = { Draft: "#94a3b8", "Pending Approval": "#f59e0b", Approved: "#34d399", Sent: "#60a5fa", Won: "#22c55e", Lost: "#ef4444", Revised: "#a78bfa" };
   const QUO_LIFECYCLE = {
@@ -27,6 +27,9 @@
   const INVOICE_SO_STAGES = ["Ready to Dispatch", "Ready for Dispatch", "Dispatch Planned", "Partially Dispatched", "Fully Dispatched", "Dispatched", "Invoiced"];
 
   const custName = (id) => (store.get("customers", id) || {}).name || "—";
+  function invMoney(inv, n) {
+    return VG.fmtInvoiceMoney ? VG.fmtInvoiceMoney(n, inv && inv.currency) : inr(n);
+  }
 
   /* ---------- quotation math ---------- */
   function computeLine(l) {
@@ -52,6 +55,26 @@
     if (Math.abs(roundOff) < 0.001) roundOff = 0;
     return { sub, discount, taxable, tax, charges, grand, roundOff, final: grand + roundOff };
   }
+  function lineMargin(l) {
+    const qty = Number(l.qty) || 0;
+    const cost = store.itemUnitCost ? store.itemUnitCost(l.itemId) : 0;
+    const c = computeLine(l);
+    const costTotal = cost * qty;
+    const margin = c.taxable - costTotal;
+    const marginPct = c.taxable > 0 ? Math.round((margin / c.taxable) * 1000) / 10 : 0;
+    return { cost, costTotal, margin, marginPct };
+  }
+  function computeQuoteMargins(q) {
+    let revenue = 0, cost = 0;
+    (q.lines || []).forEach((l) => {
+      if (!l.itemId) return;
+      revenue += computeLine(l).taxable;
+      cost += lineMargin(l).costTotal;
+    });
+    const margin = revenue - cost;
+    const marginPct = revenue > 0 ? Math.round((margin / revenue) * 1000) / 10 : 0;
+    return { revenue, cost, margin, marginPct };
+  }
   function needsApproval(q) {
     const t = computeQuote(q);
     const overall = t.sub ? (t.discount / t.sub) * 100 : 0;
@@ -59,7 +82,99 @@
   }
 
   /* ================= Quotation builder ================= */
-  function blankLine() { return { key: Math.random().toString(36).slice(2), itemId: "", sku: "", desc: "", hsn: "", qty: 1, unit: "Nos", rate: 0, discountPct: 0, taxPct: 18 }; }
+  function blankLine() { return { key: Math.random().toString(36).slice(2), itemId: "", sku: "", name: "", desc: "", hsn: "", qty: 1, unit: "Nos", rate: 0, discountPct: 0, taxPct: 18 }; }
+  const idsp = () => VG.itemDisplay;
+  function pickItemLine(itemId, extras) {
+    const it = store.get("items", itemId);
+    if (!it) return { itemId, ...(extras || {}) };
+    const pl = store.list("priceList").find((x) => x.itemId === itemId);
+    const tax = store.get("taxes", it.taxId);
+    const base = { rate: pl ? pl.listRate : it.rate, taxPct: tax ? tax.rate : 18, ...(extras || {}) };
+    const d = idsp();
+    return d ? d.pickLineFields(it, base) : { itemId, sku: it.sku, name: it.name, desc: it.description || it.manufacturerDesc || "", hsn: it.hsn, unit: it.unit, ...base };
+  }
+  function lineDescUi(l) {
+    if (l && l.desc) return l.desc;
+    const d = idsp();
+    return d ? d.lineDescription(l, l.itemId) : (l.desc || "");
+  }
+  function LineDescriptionEditor({ line, onChange, compact }) {
+    const d = idsp();
+    const max = (d && d.DESC_MAX_CHARS) || 5000;
+    const placeholder = compact
+      ? "Optional — auto-filled from item master; shorten for invoice if needed"
+      : "Auto-filled from item master — edit before sending to customer";
+    return (
+      <Area
+        value={line.desc || ""}
+        onChange={(v) => {
+          if (v.length > max) return VG.toast("Description exceeds " + max + " characters", "warn");
+          onChange(v);
+        }}
+        rows={compact ? 2 : 3}
+        placeholder={placeholder}
+        className="!text-sm !py-1.5 min-h-[2.75rem]"
+      />
+    );
+  }
+  function BankAccountSection({ doc, onChange }) {
+    const accounts = store.listBankAccounts ? store.listBankAccounts() : [];
+    if (!accounts.length) return null;
+    function apply(patch) { onChange(patch); }
+    function pickAccount(id) {
+      const ba = store.getBankAccount(id);
+      if (!ba) return;
+      const f = store.formatBankAccount(ba);
+      apply({
+        bankAccountId: id,
+        remittanceBank: f.bankName,
+        remittanceAccount: f.accountNo,
+        swiftCode: f.swiftCode || "",
+        ifsc: f.ifsc || "",
+      });
+    }
+    const curId = doc.bankAccountId || (store.defaultBankAccount() || {}).id || "";
+    return (
+      <Card className="p-4 mb-4">
+        <div className="text-sm font-semibold mb-1">Bank details</div>
+        <p className="text-xs opacity-55 mb-3">Shown on proforma &amp; tax invoice PDFs. Default account from Admin — change per document if needed.</p>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <Field label="Bank account">
+            <Select value={curId} onChange={pickAccount} options={accounts.map((ba) => ({
+              value: ba.id,
+              label: (ba.label || ba.bankName || "Account") + (ba.isDefault ? " · default" : "") + (ba.accountNo ? " ····" + String(ba.accountNo).slice(-4) : ""),
+            }))} />
+          </Field>
+          <Field label="Bank name"><Text value={doc.remittanceBank || ""} onChange={(v) => apply({ remittanceBank: v })} /></Field>
+          <Field label="Account number"><Text value={doc.remittanceAccount || ""} onChange={(v) => apply({ remittanceAccount: v })} /></Field>
+          <Field label="IFSC / SWIFT"><Text value={doc.ifsc || doc.swiftCode || ""} onChange={(v) => apply({ ifsc: v, swiftCode: v })} /></Field>
+        </div>
+      </Card>
+    );
+  }
+  function mapIndustrialDocLines(lines, fmt) {
+    const d = idsp();
+    if (d) return d.mapIndustrialLines(lines, fmt ? (r) => fmt(r) : null, fmt ? (l) => fmt(computeLine(l).total) : null);
+    return (lines || []).map((l, i) => {
+      const cc = computeLine(l);
+      return { no: i + 1, sku: l.sku, name: l.name || l.desc, desc: l.desc, itemNameSku: `<b>${l.name || l.desc || ""}</b><br><span class="vg-muted" style="font-size:8pt">SKU: ${l.sku || ""}</span>`, hsn: l.hsn, qty: String(l.qty), unit: l.unit, rate: fmt ? fmt(l.rate) : l.rate, disc: (l.discountPct || 0) + "%", tax: (l.taxPct || 0) + "%", amount: fmt ? fmt(cc.total) : inr(cc.total) };
+    });
+  }
+  const LINE_TABLE_HEAD = (
+    <tr className="text-left border-b border-white/10">
+      <th className="min-w-[340px]">Item Name / SKU</th>
+      <th className="min-w-[220px]">Item Description</th>
+      <th className="w-20">HSN/SAC</th>
+      <th className="w-24">Qty</th>
+      <th className="w-16">Unit</th>
+      <th className="w-28">Rate</th>
+      <th className="w-20">Disc%</th>
+      <th className="w-20">Tax%</th>
+      <th className="w-24 text-right">Margin%</th>
+      <th className="w-28 text-right">Amount</th>
+      <th className="w-10" />
+    </tr>
+  );
   function QuotationBuilder({ open, onClose, roleKey, can, initial, onSaved }) {
     const isEdit = !!(initial && initial.id);
     const [q, setQ] = useState(() => init());
@@ -77,15 +192,21 @@
     function patchCustomerFields(patch) { setDirty(true); setQ((p) => ({ ...p, ...patch })); }
     function setLine(key, patch) { setDirty(true); setQ((p) => ({ ...p, lines: p.lines.map((l) => (l.key === key ? { ...l, ...patch } : l)) })); }
     function pickItem(key, itemId) {
-      const it = store.get("items", itemId);
-      if (!it) return setLine(key, { itemId });
-      const pl = store.list("priceList").find((x) => x.itemId === itemId);
-      const tax = store.get("taxes", it.taxId);
-      setLine(key, { itemId, sku: it.sku, desc: it.name, hsn: it.hsn, unit: it.unit, rate: pl ? pl.listRate : it.rate, taxPct: tax ? tax.rate : 18 });
+      setLine(key, pickItemLine(itemId));
     }
     const addLine = () => { setDirty(true); setQ((p) => ({ ...p, lines: p.lines.concat(blankLine()) })); };
     const delLine = (key) => { setDirty(true); setQ((p) => ({ ...p, lines: p.lines.filter((l) => l.key !== key) })); };
     const totals = computeQuote(q);
+    const margins = computeQuoteMargins(q);
+    const clauseLibrary = store.listQuotationClauses ? store.listQuotationClauses() : [];
+
+    function insertClause(clauseId) {
+      const cl = clauseLibrary.find((c) => c.id === clauseId);
+      if (!cl) return;
+      setDirty(true);
+      setQ((p) => ({ ...p, terms: (p.terms ? p.terms.trim() + "\n\n" : "") + cl.text }));
+      VG.toast("Clause inserted: " + cl.name, "info");
+    }
 
     function save(submit) {
       if (!q.customerId) return VG.toast("Select a customer from master", "error");
@@ -111,63 +232,61 @@
         VG.toast("Quotation " + payload.no + " created");
       }
       if (saved && saved.enquiryId && VG.enquiryOnQuotationSaved) VG.enquiryOnQuotationSaved(saved, roleKey);
+      if (submit && willNeed && VG.approvalEngine) VG.approvalEngine.onQuotationSubmitted(saved, roleKey, totals.grand);
       onSaved && onSaved();
       onClose();
     }
 
-    return (
-      <Modal open={open} onClose={onClose} size="full" dirty={dirty} title={isEdit ? "Edit Quotation " + q.no : "New Quotation"} subtitle="All parties & items are selected from master data only"
-        footer={<>
-          <Button variant="soft" onClick={onClose}>Close</Button>
-          <Button variant="soft" icon="eye" onClick={() => quotationPDF({ ...q, no: q.no || "DRAFT", rev: q.rev || 0, status: q.status || "Draft", totals }, "preview")}>Preview PDF</Button>
-          <Button variant="soft" icon="check" onClick={() => save(false)}>Save as Draft</Button>
-          <Button icon="shield" onClick={() => save(true)}>Submit{needsApproval(q) ? " for approval" : ""}</Button>
-        </>}>
-        <div className="grid lg:grid-cols-3 gap-3 mb-4">
-          <Field label="Customer (from master)" required className="lg:col-span-1">
-            <MasterSelect collection="customers" value={q.customerId} onChange={pickCustomer} actorRole={roleKey} can={can("add")} />
-          </Field>
-          <Field label="Contact person"><Text value={q.contact} onChange={(v) => set("contact", v)} placeholder="Auto from master" /></Field>
-          <Field label="GSTIN"><Text value={q.gstin} onChange={(v) => set("gstin", v)} placeholder="Auto from master" /></Field>
-          <Field label="Date" required><DateF value={q.date} onChange={(v) => set("date", v)} /></Field>
-          <Field label="Validity (days)"><Num value={q.validity} onChange={(v) => set("validity", v)} /></Field>
-          <Field label="Warranty" hint="Shown on PDF commercial offer"><Text value={q.warranty} onChange={(v) => set("warranty", v)} placeholder={DEFAULT_WARRANTY} /></Field>
-          <Field label="Subject"><Text value={q.subject} onChange={(v) => set("subject", v)} placeholder="Offer subject / scope headline" /></Field>
-          <Field label="Project name"><Text value={q.projectName} onChange={(v) => set("projectName", v)} /></Field>
-          <Field label="Project reference"><Text value={q.projectRef} onChange={(v) => set("projectRef", v)} /></Field>
-          <Field label="RFQ / Inquiry ref."><Text value={q.rfqRef} onChange={(v) => set("rfqRef", v)} /></Field>
-          <Field label="Project location"><Text value={q.projectLocation} onChange={(v) => set("projectLocation", v)} placeholder="City, state, country" /></Field>
-          {VG.TransactionAddressCurrency ? (
-            <VG.TransactionAddressCurrency customerId={q.customerId} values={q} onChange={patchCustomerFields} roleKey={roleKey} canEditCurrency={can("edit")} showAddresses={false} />
-          ) : (
-            <>
-              <Field label="Billing address" className="lg:col-span-1"><Area value={q.billing} onChange={(v) => set("billing", v)} rows={2} /></Field>
-              <Field label="Shipping address" className="lg:col-span-1"><Area value={q.shipping} onChange={(v) => set("shipping", v)} rows={2} /></Field>
-            </>
-          )}
-          <div className="grid grid-cols-2 gap-3 content-start lg:col-span-3">
-            <Field label="Payment terms"><Select value={q.paymentTermsId} onChange={(v) => set("paymentTermsId", v)} options={store.list("paymentTerms").map((t) => ({ value: t.id, label: t.name }))} /></Field>
-            <Field label="Delivery terms"><Select value={q.deliveryTermsId} onChange={(v) => set("deliveryTermsId", v)} options={store.list("deliveryTerms").map((t) => ({ value: t.id, label: t.name }))} /></Field>
-          </div>
-        </div>
+    const formActions = <>
+      <Button variant="soft" icon="eye" onClick={() => quotationPDF({ ...q, no: q.no || "DRAFT", rev: q.rev || 0, status: q.status || "Draft", totals }, "preview")}>Preview PDF</Button>
+      <Button variant="soft" icon="check" onClick={() => save(false)}>Save as Draft</Button>
+      <Button icon="shield" onClick={() => save(true)}>Submit{needsApproval(q) ? " for approval" : ""}</Button>
+    </>;
 
-        <TransactionLinesShell title="Line items" onAddLine={addLine} addLabel="Add line" minWidth={1180}
-          headerRow={
-            <tr className="text-left border-b border-white/10">
-              <th className="min-w-[340px]">Item / SKU</th>
-              <th className="min-w-[220px]">Description</th>
-              <th className="w-20">HSN</th>
-              <th className="w-24">Qty</th>
-              <th className="w-16">Unit</th>
-              <th className="w-28">Rate</th>
-              <th className="w-20">Disc%</th>
-              <th className="w-20">Tax%</th>
-              <th className="w-28 text-right">Amount</th>
-              <th className="w-10" />
-            </tr>
-          }>
+    return (
+      <InternalScreen onBack={onClose} backLabel="Back to list" dirty={dirty} title={isEdit ? "Edit Quotation " + q.no : "New Quotation"} subtitle="All parties & items are selected from master data only"
+        footer={formActions}>
+        <CollapsibleSection title="Customer & commercial" subtitle="Party, dates, terms" defaultOpen>
+          <div className="grid lg:grid-cols-3 gap-3">
+            <Field label="Customer (from master)" required className="lg:col-span-1">
+              <MasterSelect collection="customers" value={q.customerId} onChange={pickCustomer} actorRole={roleKey} can={can("add")} />
+            </Field>
+            <Field label="Contact person"><Text value={q.contact} onChange={(v) => set("contact", v)} placeholder="Auto from master" /></Field>
+            <Field label="GSTIN"><Text value={q.gstin} onChange={(v) => set("gstin", v)} placeholder="Auto from master" /></Field>
+            <Field label="Date" required><DateF value={q.date} onChange={(v) => set("date", v)} /></Field>
+            <Field label="Validity (days)"><Num value={q.validity} onChange={(v) => set("validity", v)} /></Field>
+            <Field label="Warranty" hint="Shown on PDF commercial offer"><Text value={q.warranty} onChange={(v) => set("warranty", v)} placeholder={DEFAULT_WARRANTY} /></Field>
+            <div className="grid grid-cols-2 gap-3 content-start lg:col-span-3">
+              <Field label="Payment terms"><Select value={q.paymentTermsId} onChange={(v) => set("paymentTermsId", v)} options={store.list("paymentTerms").map((t) => ({ value: t.id, label: t.name }))} /></Field>
+              <Field label="Delivery terms"><Select value={q.deliveryTermsId} onChange={(v) => set("deliveryTermsId", v)} options={store.list("deliveryTerms").map((t) => ({ value: t.id, label: t.name }))} /></Field>
+            </div>
+          </div>
+        </CollapsibleSection>
+
+        <CollapsibleSection title="Project & references" subtitle="Subject, RFQ, location" defaultOpen={!!(q.subject || q.projectName || q.rfqRef)}>
+          <div className="grid lg:grid-cols-3 gap-3">
+            <Field label="Subject"><Text value={q.subject} onChange={(v) => set("subject", v)} placeholder="Offer subject / scope headline" /></Field>
+            <Field label="Project name"><Text value={q.projectName} onChange={(v) => set("projectName", v)} /></Field>
+            <Field label="Project reference"><Text value={q.projectRef} onChange={(v) => set("projectRef", v)} /></Field>
+            <Field label="RFQ / Inquiry ref."><Text value={q.rfqRef} onChange={(v) => set("rfqRef", v)} /></Field>
+            <Field label="Project location"><Text value={q.projectLocation} onChange={(v) => set("projectLocation", v)} placeholder="City, state, country" /></Field>
+            {VG.TransactionAddressCurrency ? (
+              <VG.TransactionAddressCurrency customerId={q.customerId} values={q} onChange={patchCustomerFields} roleKey={roleKey} canEditCurrency={can("edit")} showAddresses={false} className="lg:col-span-3" />
+            ) : (
+              <>
+                <Field label="Billing address" className="lg:col-span-1"><Area value={q.billing} onChange={(v) => set("billing", v)} rows={2} /></Field>
+                <Field label="Shipping address" className="lg:col-span-1"><Area value={q.shipping} onChange={(v) => set("shipping", v)} rows={2} /></Field>
+              </>
+            )}
+          </div>
+        </CollapsibleSection>
+
+        <CollapsibleSection title="Line items" subtitle="Items, rates, margin visibility" defaultOpen>
+        <TransactionLinesShell title="" onAddLine={addLine} addLabel="Add line" minWidth={1280}
+          headerRow={LINE_TABLE_HEAD}>
           {q.lines.map((l) => {
             const c = computeLine(l);
+            const m = lineMargin(l);
             const pl = store.list("priceList").find((x) => x.itemId === l.itemId);
             const below = pl && Number(l.rate) < pl.minRate;
             const rateRule = VG.fieldRule(roleKey, "quotation", "rate");
@@ -177,20 +296,23 @@
                 <td className="min-w-[340px]">
                   <MasterSelect variant="line" collection="items" value={l.itemId} onChange={(id) => pickItem(l.key, id)} actorRole={roleKey} can={can("add")} />
                 </td>
-                <td className="min-w-[220px]"><div className="text-sm leading-snug py-1 pr-2">{l.desc || <span className="opacity-40">—</span>}</div></td>
+                <td className="min-w-[220px]"><LineDescriptionEditor line={l} onChange={(v) => setLine(l.key, { desc: v })} /></td>
                 <td className="font-mono text-xs">{l.hsn || "—"}</td>
                 <td><Num data-line-qty value={l.qty} onChange={(v) => setLine(l.key, { qty: v })} /></td>
                 <td className="text-sm opacity-80">{l.unit}</td>
                 <td>{rateRule.editable ? <Num value={l.rate} onChange={(v) => setLine(l.key, { rate: v })} /> : <span className="opacity-70">{inr(l.rate)}</span>}{below && <div className="text-[9px] text-rose-400 mt-0.5">below floor</div>}</td>
                 <td>{discRule.editable ? <Num value={l.discountPct} onChange={(v) => setLine(l.key, { discountPct: v })} /> : <span className="opacity-70">{l.discountPct || 0}%</span>}{discRule.approvalRequired && <div className="text-[9px] text-amber-400">needs approval</div>}</td>
                 <td><Num value={l.taxPct} onChange={(v) => setLine(l.key, { taxPct: v })} /></td>
+                <td className={"text-right text-xs font-medium " + (m.marginPct < 15 ? "text-amber-400" : "text-emerald-400")}>{l.itemId ? m.marginPct + "%" : "—"}</td>
                 <td className="text-right font-medium">{inr(c.total)}</td>
                 <td><button type="button" onClick={() => delLine(l.key)} className="p-1 rounded chrome-hover hover:text-rose-400"><Icon name="trash" size={14} /></button></td>
               </tr>
             );
           })}
         </TransactionLinesShell>
+        </CollapsibleSection>
 
+        <CollapsibleSection title="Charges, terms & summary" subtitle="Freight, clauses, totals" defaultOpen>
         <div className="grid lg:grid-cols-3 gap-3">
           <div className="grid grid-cols-3 gap-3 lg:col-span-2 content-start">
             <Field label="Freight (₹)"><Num value={q.freight} onChange={(v) => set("freight", v)} /></Field>
@@ -200,7 +322,12 @@
             <Field label="Round-off (±)" hint="Manual adjustment"><Num value={q.roundOff != null ? q.roundOff : totals.roundOff} onChange={(v) => set("roundOff", v)} disabled={q.roundOffMode !== "manual"} /></Field>
             <Checkbox checked={q.roundOffEnabled !== false} onChange={(v) => set("roundOffEnabled", v)} label="Apply round-off on total" />
             <Field label="Remarks" className="col-span-3"><Area value={q.remarks} onChange={(v) => set("remarks", v)} rows={2} /></Field>
-            <Field label="Terms & conditions" className="col-span-3"><Area value={q.terms} onChange={(v) => set("terms", v)} rows={3} /></Field>
+            {clauseLibrary.length > 0 && (
+              <Field label="Insert reusable clause" className="col-span-3">
+                <Select value="" onChange={insertClause} options={[{ value: "", label: "— Select clause to insert —" }].concat(clauseLibrary.map((c) => ({ value: c.id, label: c.name })))} />
+              </Field>
+            )}
+            <Field label="Terms & conditions" className="col-span-3"><Area value={q.terms} onChange={(v) => set("terms", v)} rows={4} /></Field>
           </div>
           <Card className="p-4 h-max">
             <div className="text-sm font-semibold mb-2">Summary</div>
@@ -210,10 +337,15 @@
             <div className="flex justify-between text-sm font-semibold border-t border-white/10 mt-2 pt-2"><span>Grand total</span><span>{inr(totals.grand)}</span></div>
             {totals.roundOff ? <div className="flex justify-between text-sm py-0.5"><span className="opacity-60">Round off</span><span>{totals.roundOff > 0 ? "+" : ""}{inr(totals.roundOff)}</span></div> : null}
             {totals.roundOff ? <div className="flex justify-between text-base font-semibold border-t border-white/10 mt-1 pt-1"><span>Final amount</span><span>{inr(totals.final)}</span></div> : null}
+            <div className="mt-3 pt-3 border-t border-white/10 space-y-1 text-sm">
+              <div className="flex justify-between"><span className="opacity-60">Est. cost</span><span>{inr(margins.cost)}</span></div>
+              <div className="flex justify-between font-medium"><span className="opacity-60">Gross margin</span><span className={margins.marginPct < 15 ? "text-amber-400" : "text-emerald-400"}>{inr(margins.margin)} ({margins.marginPct}%)</span></div>
+            </div>
             {needsApproval(q) && <div className="mt-3 text-[11px] rounded-lg p-2" style={{ background: "#f59e0b22", color: "#f59e0b" }}><Icon name="alert" size={12} className="inline mr-1" />Discount &gt; {DISCOUNT_LIMIT}% — needs approval</div>}
           </Card>
         </div>
-      </Modal>
+        </CollapsibleSection>
+      </InternalScreen>
     );
   }
 
@@ -258,11 +390,7 @@
     }
     function setLine(key, patch) { setDirty(true); setO((p) => ({ ...p, lines: p.lines.map((l) => (l.key === key ? { ...l, ...patch } : l)) })); }
     function pickItem(key, itemId) {
-      const it = store.get("items", itemId);
-      if (!it) return setLine(key, { itemId });
-      const pl = store.list("priceList").find((x) => x.itemId === itemId);
-      const tax = store.get("taxes", it.taxId);
-      setLine(key, { itemId, sku: it.sku, desc: it.name, hsn: it.hsn, unit: it.unit, rate: pl ? pl.listRate : it.rate, taxPct: tax ? tax.rate : 18 });
+      setLine(key, pickItemLine(itemId));
     }
     const addLine = () => { setDirty(true); setO((p) => ({ ...p, lines: p.lines.concat(blankLine()) })); };
     const delLine = (key) => { setDirty(true); setO((p) => ({ ...p, lines: p.lines.filter((l) => l.key !== key) })); };
@@ -318,9 +446,8 @@
     }
 
     return (
-      <Modal open={open} onClose={onClose} size="full" dirty={dirty} title={isEdit ? "Edit Sales Order " + o.no : "New Sales Order"} subtitle="Create a confirmed order — items from item master"
+      <InternalScreen onBack={onClose} backLabel="Back to list" dirty={dirty} title={isEdit ? "Edit Sales Order " + o.no : "New Sales Order"} subtitle="Create a confirmed order — items from item master"
         footer={<>
-          <Button variant="soft" onClick={onClose}>Close</Button>
           <Button variant="soft" icon="eye" onClick={() => orderPDF({ ...o, no: o.no || "DRAFT", status: "Confirmed", totals }, "preview")}>Preview PDF</Button>
           <Button icon="check" onClick={save}>{isEdit ? "Save order" : "Create sales order"}</Button>
         </>}>
@@ -359,20 +486,7 @@
         {lockedAfterSend && <div className="text-xs rounded-lg p-2.5 mb-3" style={{ background: "#f59e0b22", color: "#f59e0b" }}>Production-critical fields are locked after send-to-production. Edits create revision history and require approval.</div>}
 
         <TransactionLinesShell title="Line items" onAddLine={addLine} addLabel="Add line" minWidth={1180}
-          headerRow={
-            <tr className="text-left border-b border-white/10">
-              <th className="min-w-[340px]">Item / SKU</th>
-              <th className="min-w-[220px]">Description</th>
-              <th className="w-20">HSN</th>
-              <th className="w-24">Qty</th>
-              <th className="w-16">Unit</th>
-              <th className="w-28">Rate</th>
-              <th className="w-20">Disc%</th>
-              <th className="w-20">Tax%</th>
-              <th className="w-28 text-right">Amount</th>
-              <th className="w-10" />
-            </tr>
-          }>
+          headerRow={LINE_TABLE_HEAD}>
           {o.lines.map((l) => {
             const c = computeLine(l);
             return (
@@ -380,7 +494,7 @@
                 <td className="min-w-[340px]">
                   <MasterSelect variant="line" collection="items" value={l.itemId} onChange={(id) => pickItem(l.key, id)} actorRole={roleKey} can={can("add")} />
                 </td>
-                <td className="min-w-[220px]"><div className="text-sm leading-snug py-1 pr-2">{l.desc || <span className="opacity-40">—</span>}</div></td>
+                <td className="min-w-[220px]"><div className="text-sm leading-snug py-1 pr-2 whitespace-pre-wrap">{lineDescUi(l) || <span className="opacity-40">—</span>}</div></td>
                 <td className="font-mono text-xs">{l.hsn || "—"}</td>
                 <td><Num data-line-qty value={l.qty} onChange={(v) => setLine(l.key, { qty: v })} /></td>
                 <td className="text-sm opacity-80">{l.unit}</td>
@@ -409,7 +523,7 @@
             <div className="flex justify-between text-base font-semibold border-t border-white/10 mt-2 pt-2"><span>Grand total</span><span>{inr(totals.grand)}</span></div>
           </Card>
         </div>
-      </Modal>
+      </InternalScreen>
     );
   }
 
@@ -512,7 +626,11 @@
   }
 
   /* ---------- quotation PDF ---------- */
-  function quotationPDF(q, mode) { printDocument(quotationDoc(q), mode); }
+  function quotationPDF(q, mode) {
+    const doc = quotationDoc(q);
+    const tid = q.templateId || (store.getSelectedTemplateId && store.getSelectedTemplateId("Quotation"));
+    printDocument({ ...doc, docType: "Quotation", templateId: tid }, mode);
+  }
   function quotationDoc(q) {
     const c = VG.normalizeCustomer ? VG.normalizeCustomer(store.get("customers", q.customerId) || {}) : (store.get("customers", q.customerId) || {});
     const t = computeQuote(q);
@@ -531,29 +649,7 @@
           paymentTerms: pt,
           deliveryTerms: dt,
           templateId: q.templateId,
-          lines: (q.lines || []).map((l, i) => {
-            const cc = computeLine(l);
-            const it = store.get("items", l.itemId);
-            const mfr = VG.itemMfr && it ? VG.itemMfr.manufacturerName(it) : "";
-            const mfrPart = VG.itemMfr && it ? VG.itemMfr.partNumber(it) : "";
-            let spec = "";
-            if (mfr || mfrPart) spec = "<ul><li>Mfr: " + (mfr || "—") + "</li><li>Part: " + (mfrPart || "—") + "</li></ul>";
-            const tech = l.technicalSpec || (it && it.technicalSpec) || "";
-            if (tech) spec += (spec ? "" : "") + String(tech).replace(/\n/g, "<br>");
-            return {
-              no: i + 1,
-              sku: l.sku || "",
-              desc: l.desc || (it && it.name) || "",
-              spec: spec || (l.technicalSpec ? String(l.technicalSpec).replace(/\n/g, "<br>") : ""),
-              hsn: l.hsn || "",
-              qty: String(l.qty),
-              unit: l.unit || "",
-              rate: fmt(l.rate),
-              disc: (l.discountPct || 0) + "%",
-              tax: (l.taxPct || 0) + "%",
-              amount: fmt(cc.total),
-            };
-          }),
+          lines: mapIndustrialDocLines(q.lines, fmt),
         });
       }
     }
@@ -574,24 +670,12 @@
           shipTo: `${c.legalName || c.name || ""}<br>${(q.shipping || "").replace(/\n/g, "<br>")}`,
         },
         columns: [
-          { key: "no", label: "#" }, { key: "desc", label: "Item / SKU" }, { key: "hsn", label: "HSN/SAC" },
-          { key: "qty", label: "Qty", align: "right" }, { key: "rate", label: "Rate", align: "right" },
+          { key: "no", label: "Sr. No." }, { key: "itemNameSku", label: "Item Name / SKU" }, { key: "desc", label: "Item Description" }, { key: "hsn", label: "HSN/SAC" },
+          { key: "qty", label: "Qty", align: "right" }, { key: "unit", label: "Unit" }, { key: "rate", label: "Rate", align: "right" },
           { key: "disc", label: "Disc %", align: "right" }, { key: "tax", label: "Tax %", align: "right" },
           { key: "amount", label: "Amount", align: "right" },
         ],
-        lines: (q.lines || []).map((l, i) => {
-          const cc = computeLine(l);
-          return {
-            no: i + 1,
-            desc: `${l.sku || ""}<br><span class="vg-muted">${l.desc || ""}</span>`,
-            hsn: l.hsn || "",
-            qty: `${l.qty} ${l.unit || ""}`,
-            disc: (l.discountPct || 0) + "%",
-            tax: (l.taxPct || 0) + "%",
-            amount: fmt(cc.total),
-            rate: fmt(l.rate),
-          };
-        }),
+        lines: mapIndustrialDocLines(q.lines, fmt),
         totals: { sub: t.sub, discount: t.discount, taxable: t.taxable, tax: t.tax, charges: t.charges, grand: t.grand },
         taxBreakdown: t.tax ? [{ label: "GST", amount: t.tax }] : [],
         termsBlock: `<b>Payment:</b> ${pt} &nbsp;|&nbsp; <b>Delivery:</b> ${dt} &nbsp;|&nbsp; <b>Warranty:</b> ${q.warranty || "—"}<br>${q.remarks ? "<b>Remarks:</b> " + q.remarks + "<br>" : ""}<b>Terms &amp; Conditions:</b><br>${(q.terms || "").replace(/\n/g, "<br>")}`,
@@ -601,7 +685,9 @@
     }
     const rows = (q.lines || []).map((l, i) => {
       const cc = computeLine(l);
-      return `<tr><td>${i + 1}</td><td>${l.sku}<br><span style="color:#6b7280">${l.desc || ""}</span></td><td>${l.hsn || ""}</td><td class="vg-right">${l.qty} ${l.unit}</td><td class="vg-right">${inr(l.rate)}</td><td class="vg-right">${l.discountPct || 0}%</td><td class="vg-right">${l.taxPct}%</td><td class="vg-right">${inr(cc.total)}</td></tr>`;
+      const name = l.name || l.desc || "";
+      const sku = l.sku || "";
+      return `<tr><td>${i + 1}</td><td><b>${name}</b><br><span style="color:#6b7280;font-size:8pt">SKU: ${sku}</span></td><td>${(lineDescUi(l) || "").replace(/\n/g, "<br>")}</td><td>${l.hsn || ""}</td><td class="vg-right">${l.qty} ${l.unit}</td><td class="vg-right">${inr(l.rate)}</td><td class="vg-right">${l.discountPct || 0}%</td><td class="vg-right">${l.taxPct}%</td><td class="vg-right">${inr(cc.total)}</td></tr>`;
     }).join("");
     const inner = `<div class="vg-cols"><div class="vg-card"><b>Bill To</b>${c.name || ""}<br>${q.billing || ""}</div></div><table class="vg-tbl"><thead><tr><th>#</th><th>Item</th><th class="vg-right">Amount</th></tr></thead><tbody>${rows}</tbody></table><div class="vg-totals"><div class="grand"><span>Grand Total</span><span>${inr(t.grand)}</span></div></div>`;
     return { title: "Quotation", subtitle: q.no + " · Rev " + (q.rev || 0), inner, docType: "Quotation" };
@@ -614,41 +700,99 @@
     const act = (patch, msg) => { store.update("quotations", q.id, patch, roleKey); VG.toast(msg); onChange(); };
     function approve() {
       if (!can("approve")) return VG.toast("You don't have approval rights", "error");
-      act({ status: "Approved", approvedBy: roleKey, discountApproved: true }, "Quotation approved");
+      const remarks = window.prompt("Approval remarks (optional):", "") || "";
+      if (VG.approvalEngine) {
+        const r = VG.approvalEngine.approveQuotation(q.id, roleKey, remarks);
+        if (r.reason === "remarks_required") return VG.toast("Remarks are mandatory for this workflow", "warn");
+        if (!r.ok && r.reason === "no_rights") return VG.toast("You don't have approval rights", "error");
+      } else {
+        act({ status: "Approved", approvedBy: roleKey, discountApproved: true }, "Quotation approved");
+        return;
+      }
+      VG.toast("Quotation approved");
+      onChange();
     }
-    function convertSO() {
-      if (findSOFromQuotation(q)) return VG.toast("Sales order already exists for this quotation", "warn");
-      const order = ensureSOFromQuotation(q, roleKey);
-      if (q.enquiryId) store.update("salesOrders", order.id, { enquiryId: q.enquiryId }, roleKey);
-      if (VG.enquiryOnConverted && q.enquiryId) VG.enquiryOnConverted(q, order, roleKey);
-      act({ status: "Won" }, "Sales Order " + order.no + " created");
+    const linkedPI = findProformaFromQuotation(q);
+    const linkedShip = findShipmentFromQuotation(q);
+    async function convertSO() {
+      const existing = findSOFromQuotation(q);
+      await VG.forwardDocument({
+        action: "quotation:sales_order",
+        fromType: "Quotation", fromNo: q.no, fromId: q.id,
+        toType: "Sales Order", actor: roleKey,
+        duplicate: existing ? { exists: true, no: existing.no, label: "Sales Order", linked: existing } : null,
+        run: () => {
+          const order = ensureSOFromQuotation(q, roleKey);
+          if (!order) return null;
+          if (q.enquiryId) store.update("salesOrders", order.id, { enquiryId: q.enquiryId }, roleKey);
+          if (VG.enquiryOnConverted && q.enquiryId) VG.enquiryOnConverted(q, order, roleKey);
+          store.update("quotations", q.id, { status: "Won" }, roleKey);
+          return order;
+        },
+        statusChange: "Won",
+        onDone: () => onChange(),
+      });
     }
-    function convertProforma() {
-      const payload = quotationConvertPayload(q, roleKey);
-      const pi = store.create("proformas", {
-        no: store.nextNo("PI", today()), date: today(), quotationId: q.id, ...payload, status: "Issued", by: roleKey,
-      }, roleKey);
-      VG.toast("Proforma " + pi.no + " created");
+    async function convertProforma() {
+      await VG.forwardDocument({
+        action: "quotation:proforma",
+        fromType: "Quotation", fromNo: q.no, fromId: q.id,
+        toType: "Proforma Invoice", actor: roleKey,
+        duplicate: linkedPI ? { exists: true, no: linkedPI.no, label: "Proforma Invoice", linked: linkedPI } : null,
+        run: () => {
+          const payload = quotationConvertPayload(q, roleKey);
+          return store.create("proformas", {
+            no: store.nextNo("PI", today()), date: today(), quotationId: q.id, ...payload, status: "Issued", by: roleKey,
+          }, roleKey);
+        },
+        onDone: () => onChange(),
+      });
     }
-    function convertInvoice() {
+    async function convertInvoice() {
       if (!can("add")) return VG.toast("You don't have permission to create invoices", "error");
       const existing = findInvoiceFromQuotation(q);
       if (existing) {
-        VG.toast("Invoice " + existing.no + " already exists — opening", "success");
+        VG.toast("Invoice " + existing.no + " already exists — opening", "warn");
         openInvoiceFromQuotation(existing, onClose, go);
         return;
       }
-      const inv = store.createInvoiceFromQuotation ? store.createInvoiceFromQuotation(q.id, roleKey) : null;
-      if (!inv) return VG.toast("Could not create invoice — add customer billing address in Customer master", "error");
-      VG.toast("Tax invoice " + inv.no + " created", "success");
-      onChange();
-      openInvoiceFromQuotation(inv, onClose, go);
+      await VG.forwardDocument({
+        action: "quotation:invoice",
+        fromType: "Quotation", fromNo: q.no, fromId: q.id,
+        toType: "Tax Invoice", actor: roleKey,
+        run: async () => {
+          const so = store.ensureQuotationSO ? store.ensureQuotationSO(q, roleKey) : ensureSOFromQuotation(q, roleKey);
+          if (!so) return null;
+          if (VG.openInvoiceBuilder) {
+            const draft = store.buildInvoiceDraftFromSO(so.id);
+            if (draft) { VG.openInvoiceBuilder(draft); onClose && onClose(); }
+            return draft ? { id: so.id, no: "(draft opened)" } : null;
+          }
+          const inv = store.createInvoiceFromSO(so.id, roleKey);
+          if (inv) { onChange(); openInvoiceFromQuotation(inv, onClose, go); }
+          return inv;
+        },
+        failMessage: "Could not create invoice — add customer billing address in Customer master",
+        onDone: () => onChange(),
+      });
     }
-    function convertDispatch() {
-      const so = ensureSOFromQuotation(q, roleKey);
-      if (!so.shipping) return VG.toast("Set customer shipping address before dispatch", "error");
-      const sh = store.createShipmentFromSO(so.id, { destination: so.shipping }, roleKey);
-      if (sh) VG.toast("Shipment " + sh.no + " created");
+    async function convertDispatch() {
+      const soForShip = findSOFromQuotation(q);
+      const existingShip = linkedShip || (soForShip ? store.list("shipments").find((s) => s.salesOrderId === soForShip.id && s.status !== "Cancelled") : null);
+      await VG.forwardDocument({
+        action: "quotation:dispatch",
+        fromType: "Quotation", fromNo: q.no, fromId: q.id,
+        toType: "Dispatch", actor: roleKey,
+        duplicate: existingShip ? { exists: true, no: existingShip.no, label: "Shipment", linked: existingShip } : null,
+        run: () => {
+          const so = ensureSOFromQuotation(q, roleKey);
+          if (!so) return null;
+          if (!so.shipping) { VG.toast("Set customer shipping address before dispatch", "error"); return null; }
+          return store.createShipmentFromSO(so.id, { destination: so.shipping }, roleKey);
+        },
+        statusChange: "Dispatch Planned",
+        onDone: () => onChange(),
+      });
     }
     const cust = VG.normalizeCustomer ? VG.normalizeCustomer(store.get("customers", q.customerId) || {}) : (store.get("customers", q.customerId) || {});
     const billAddr = VG.customerAddr ? VG.customerAddr(cust, "billing") : {};
@@ -660,18 +804,26 @@
     const lifecycle = quotationLifecycleStatus(q);
     const canConvert = q.status === "Approved" || q.status === "Sent" || q.status === "Won";
     return (
-      <Modal open={!!q} onClose={onClose} size="xl" title={"Quotation " + q.no} subtitle={"Rev " + (q.rev || 0) + " · " + custName(q.customerId)}
+      <InternalScreen onBack={onClose} backLabel="Back to quotations" title={"Quotation " + q.no} subtitle={"Rev " + (q.rev || 0) + " · " + custName(q.customerId)}
         footer={<>
           <DocActions docType="Quotation" build={() => quotationDoc(q)}
             onDocument={(mode) => { markQuotationOfferSent(q, roleKey, mode === "print" ? "Print" : mode === "download" ? "Download" : mode, q.contact || ""); onChange(); }}
             onEmail={() => quotationEmailOffer(q, roleKey, onChange)} />
           {can("edit") && <Button variant="soft" icon="edit" onClick={() => onEdit(q)}>Edit / Revise</Button>}
           {q.status === "Pending Approval" && can("approve") && <Button icon="check" onClick={approve}>Approve</Button>}
+          {can("edit") && VG.customerPortal && (
+            <Button variant="soft" icon="link" onClick={async () => {
+              const link = VG.customerPortal.createQuotationPortalLink(q.id, roleKey);
+              if (!link) return VG.toast("Could not create portal link", "error");
+              await VG.customerPortal.copyPortalUrl(link.url);
+              onChange();
+            }} title="Customer portal link">Share portal</Button>
+          )}
           {canConvert && can("add") && <>
-            <Button variant="soft" icon="rupee" onClick={convertProforma}>Proforma Invoice</Button>
-            <Button icon="cart" onClick={convertSO}>Sales Order</Button>
-            <Button variant="soft" icon="rupee" onClick={convertInvoice}>Tax Invoice</Button>
-            <Button variant="soft" icon="truck" onClick={convertDispatch}>Dispatch</Button>
+            <Button variant="soft" icon="rupee" onClick={convertProforma} disabled={!!linkedPI} title={linkedPI ? "Proforma " + linkedPI.no + " already exists" : ""}>Proforma Invoice</Button>
+            <Button icon="cart" onClick={convertSO} disabled={!!linkedSO} title={linkedSO ? "SO " + linkedSO.no + " already exists" : ""}>Sales Order</Button>
+            <Button variant="soft" icon="rupee" onClick={convertInvoice} disabled={!!linkedInv} title={linkedInv ? "Invoice " + linkedInv.no + " already exists" : ""}>Tax Invoice</Button>
+            <Button variant="soft" icon="truck" onClick={convertDispatch} disabled={!!linkedShip} title={linkedShip ? "Shipment " + linkedShip.no + " already exists" : ""}>Dispatch</Button>
           </>}
           {q.status !== "Won" && q.status !== "Lost" && <><Button variant="ghost" onClick={() => act({ status: "Lost" }, "Marked Lost")}>Lost</Button><Button variant="ghost" onClick={() => act({ status: "Won" }, "Marked Won")}>Won</Button></>}
         </>}>
@@ -680,6 +832,7 @@
           {lifecycle.detail && <span className="text-xs opacity-60 font-mono">{lifecycle.detail}</span>}
           {q.needsDiscountApproval && <Pill color="#f59e0b">discount approval</Pill>}
           {q.lastOfferMode && <span className="text-xs opacity-50">via {q.lastOfferMode}</span>}
+          {q.portalViews > 0 && <Pill color="#60a5fa">Client viewed ×{q.portalViews}</Pill>}
           <span className="text-sm opacity-60 ml-auto">{q.date} · valid {q.validity} days</span>
         </div>
         {canConvert && (
@@ -711,8 +864,8 @@
         </Card>
         <div className="overflow-x-auto rounded-xl glass mb-3">
           <table className="w-full text-xs">
-            <thead className="text-[10px] uppercase opacity-55"><tr className="text-left border-b border-white/10"><th className="px-3 py-2">Item</th><th className="px-3 py-2 text-right">Qty</th><th className="px-3 py-2 text-right">Rate</th><th className="px-3 py-2 text-right">Disc</th><th className="px-3 py-2 text-right">Tax</th><th className="px-3 py-2 text-right">Total</th></tr></thead>
-            <tbody>{(q.lines || []).map((l, i) => { const c = computeLine(l); return <tr key={i} className="border-b border-white/5"><td className="px-3 py-2">{l.sku}<div className="opacity-50">{l.desc}</div></td><td className="px-3 py-2 text-right">{l.qty} {l.unit}</td><td className="px-3 py-2 text-right">{inr(l.rate)}</td><td className="px-3 py-2 text-right">{l.discountPct || 0}%</td><td className="px-3 py-2 text-right">{l.taxPct}%</td><td className="px-3 py-2 text-right font-medium">{inr(c.total)}</td></tr>; })}</tbody>
+            <thead className="text-[10px] uppercase opacity-55"><tr className="text-left border-b border-white/10"><th className="px-3 py-2">Item Name / SKU</th><th className="px-3 py-2">Item Description</th><th className="px-3 py-2 text-right">Qty</th><th className="px-3 py-2 text-right">Rate</th><th className="px-3 py-2 text-right">Disc</th><th className="px-3 py-2 text-right">Tax</th><th className="px-3 py-2 text-right">Total</th></tr></thead>
+            <tbody>{(q.lines || []).map((l, i) => { const c = computeLine(l); return <tr key={i} className="border-b border-white/5"><td className="px-3 py-2"><div className="font-medium">{l.name || l.desc || "—"}</div><div className="font-mono text-[10px] opacity-50">SKU: {l.sku || "—"}</div></td><td className="px-3 py-2 text-sm whitespace-pre-wrap opacity-80">{lineDescUi(l) || "—"}</td><td className="px-3 py-2 text-right">{l.qty} {l.unit}</td><td className="px-3 py-2 text-right">{inr(l.rate)}</td><td className="px-3 py-2 text-right">{l.discountPct || 0}%</td><td className="px-3 py-2 text-right">{l.taxPct}%</td><td className="px-3 py-2 text-right font-medium">{inr(c.total)}</td></tr>; })}</tbody>
           </table>
         </div>
         <div className="flex justify-end"><div className="w-64 text-sm space-y-1">
@@ -731,7 +884,7 @@
               return <li key={i} className="flex gap-2"><Pill color="#a78bfa">{label}</Pill><span className="opacity-70">{h.date}{note ? " — " + note : ""}</span></li>;
             })}</ul></div>
         )}
-      </Modal>
+      </InternalScreen>
     );
   }
 
@@ -788,17 +941,25 @@
         csv: () => "",
       },
     ];
+    if (builder) {
+      return <QuotationBuilder open onClose={() => setBuilder(null)} roleKey={roleKey} can={can} initial={builder.id ? builder : null} onSaved={() => {}} />;
+    }
+    if (view) {
+      const qLive = store.get("quotations", view.id) || view;
+      return (
+        <QuotationView q={qLive} onClose={() => setView(null)} roleKey={roleKey} can={can} go={go}
+          onChange={() => setView(store.get("quotations", view.id) || view)}
+          onEdit={(q) => { setView(null); setBuilder(q); }} />
+      );
+    }
     return (
-      <div>
-        <PageHead title="Quotations" desc="Click quotation number to open · download PDF or email from the list" />
+      <ListPage title="Quotations" desc="Click quotation number to open · download PDF or email from the list" onNew={() => setBuilder({})} newLabel="Add Quotation" can={can}>
         {VG.CustomerFilterBanner ? <VG.CustomerFilterBanner /> : null}
-        <RecordTable title="All quotations" columns={cols} rows={rows} can={can} printTitle="Quotations"
+        <RecordTable embedded suppressNew tableId="sales-quotations" title="Quotation List" columns={cols} rows={rows} can={can} printTitle="Quotations"
           searchKeys={["no", "status"]} filters={[{ key: "status", label: "All status", get: (r) => quotationLifecycleStatus(r).label, options: QUO_LIFECYCLE_FILTER }]}
-          onNew={() => setBuilder({})} newLabel="New Quotation" onView={(r) => setView(r)}
+          onNew={() => setBuilder({})} onView={(r) => setView(r)}
           onEdit={can("edit") ? (r) => setBuilder(r) : null} onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete quotation " + r.no + "?", danger: true, confirmLabel: "Delete" })) { store.remove("quotations", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-        {builder && <QuotationBuilder open onClose={() => setBuilder(null)} roleKey={roleKey} can={can} initial={builder.id ? builder : null} onSaved={() => {}} />}
-        {view && <QuotationView q={store.get("quotations", view.id)} onClose={() => setView(null)} roleKey={roleKey} can={can} go={go} onChange={() => setView((v) => ({ ...v }))} onEdit={(q) => { setView(null); setBuilder(q); }} />}
-      </div>
+      </ListPage>
     );
   }
 
@@ -819,17 +980,17 @@
       else { store.create("leads", { ...form, no: store.nextNo("LEAD", form.date || today()), owner: roleKey }, roleKey); VG.toast("Lead created"); }
       setEdit(null);
     }
+    const leadFields = [{ k: "customerId", l: "Customer", master: "customers", req: true }, { k: "title", l: "Title", req: true }, { k: "value", l: "Est. value (₹)", num: true }, { k: "date", l: "Date", date: true }, { k: "source", l: "Source", select: ["Website", "Referral", "Exhibition", "Cold call"] }, { k: "stage", l: "Stage", select: ["New", "Qualified", "Proposal", "Negotiation"] }, { k: "status", l: "Status", select: ["Open", "Won", "Lost"] }, { k: "remarks", l: "Remarks", area: true, full: true }];
+    if (edit) {
+      return <MasterForm title="Lead" open onClose={() => setEdit(null)} record={edit} onSave={save} fields={leadFields} roleKey={roleKey} can={can} />;
+    }
     return (
-      <div>
-        <PageHead title="Lead Management" desc="Capture, qualify, and progress leads to orders" />
-        <RecordTable title="Leads" columns={cols} rows={rows} can={can} printTitle="Leads" searchKeys={["no", "title", "stage"]}
+      <ListPage title="Lead Management" desc="Capture, qualify, and progress leads to orders" onNew={() => setEdit({ date: today(), stage: "New", status: "Open" })} newLabel="Add Lead" can={can}>
+        <RecordTable embedded suppressNew title="Lead List" columns={cols} rows={rows} can={can} printTitle="Leads" searchKeys={["no", "title", "stage"]}
           filters={[{ key: "status", label: "All status", options: ["Open", "Won", "Lost"] }, { key: "stage", label: "All stages", options: ["New", "Qualified", "Proposal", "Negotiation"] }]}
-          onNew={() => setEdit({ date: today(), stage: "New", status: "Open" })} newLabel="New Lead" onView={(r) => setEdit(r)} onEdit={can("edit") ? (r) => setEdit(r) : null}
+          onNew={() => setEdit({ date: today(), stage: "New", status: "Open" })} onView={(r) => setEdit(r)} onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete lead?", danger: true, confirmLabel: "Delete" })) { store.remove("leads", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-        {edit && <MasterForm title="Lead" open onClose={() => setEdit(null)} record={edit} onSave={save}
-          fields={[{ k: "customerId", l: "Customer", master: "customers", req: true }, { k: "title", l: "Title", req: true }, { k: "value", l: "Est. value (₹)", num: true }, { k: "date", l: "Date", date: true }, { k: "source", l: "Source", select: ["Website", "Referral", "Exhibition", "Cold call"] }, { k: "stage", l: "Stage", select: ["New", "Qualified", "Proposal", "Negotiation"] }, { k: "status", l: "Status", select: ["Open", "Won", "Lost"] }, { k: "remarks", l: "Remarks", area: true, full: true }]}
-          roleKey={roleKey} can={can} />}
-      </div>
+      </ListPage>
     );
   }
 
@@ -863,22 +1024,22 @@
       }
       setEdit(null);
     }
+    const followFields = [{ k: "customerId", l: "Customer", master: "customers", req: true }, { k: "date", l: "Follow-up date", date: true, req: true }, { k: "time", l: "Time" }, { k: "mode", l: "Mode", select: ["Call", "Email", "WhatsApp", "Meeting", "Visit"] }, { k: "nextDate", l: "Next follow-up date", date: true }, { k: "status", l: "Status", select: ["Pending", "Done"] }, { k: "note", l: "Remarks", area: true, full: true, req: true }];
+    if (edit) {
+      return <MasterForm title="Follow-up" open onClose={() => setEdit(null)} record={edit} onSave={save} fields={followFields} roleKey={roleKey} can={can} />;
+    }
     return (
-      <div>
-        <PageHead title="Follow-up System" desc="Schedule calls, emails and meetings — linked to enquiries where applicable" />
+      <ListPage title="Follow-up System" desc="Schedule calls, emails and meetings — linked to enquiries where applicable" onNew={() => setEdit({ date: today(), time: "10:00", mode: "Call", status: "Pending" })} newLabel="Add Follow-up" can={can}>
         {VG.CustomerFilterBanner ? <VG.CustomerFilterBanner /> : null}
         <div className="flex flex-wrap gap-2 mb-3">
           <Pill color="#f59e0b">{rows.filter(overdue).length} overdue</Pill>
           <Pill color="#60a5fa">{dueToday.length} due today</Pill>
         </div>
-        <RecordTable title="Follow-ups" columns={cols} rows={rows} can={can} printTitle="Follow-ups" searchKeys={["note", "mode"]}
+        <RecordTable embedded suppressNew title="Follow-up List" columns={cols} rows={rows} can={can} printTitle="Follow-ups" searchKeys={["note", "mode"]}
           filters={[{ key: "status", label: "All status", options: ["Pending", "Done"] }, { key: "refType", label: "All types", options: ["Enquiry", ""] }]}
-          onNew={() => setEdit({ date: today(), time: "10:00", mode: "Call", status: "Pending" })} newLabel="New Follow-up" onView={(r) => setEdit(r)} onEdit={can("edit") ? (r) => setEdit(r) : null}
+          onNew={() => setEdit({ date: today(), time: "10:00", mode: "Call", status: "Pending" })} onView={(r) => setEdit(r)} onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete follow-up?", danger: true, confirmLabel: "Delete" })) { store.remove("followups", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-        {edit && <MasterForm title="Follow-up" open onClose={() => setEdit(null)} record={edit} onSave={save}
-          fields={[{ k: "customerId", l: "Customer", master: "customers", req: true }, { k: "date", l: "Follow-up date", date: true, req: true }, { k: "time", l: "Time" }, { k: "mode", l: "Mode", select: ["Call", "Email", "WhatsApp", "Meeting", "Visit"] }, { k: "nextDate", l: "Next follow-up date", date: true }, { k: "status", l: "Status", select: ["Pending", "Done"] }, { k: "note", l: "Remarks", area: true, full: true, req: true }]}
-          roleKey={roleKey} can={can} />}
-      </div>
+      </ListPage>
     );
   }
 
@@ -901,50 +1062,124 @@
       { key: "grand", label: "Value", render: (r) => inr((r.totals || {}).grand || 0), csv: (r) => (r.totals || {}).grand || 0 },
       { key: "status", label: "Status", render: (r) => <StatusTag value={r.status} map={ORD_STATUS} /> },
     ];
-    function advance(r) {
+    async function advance(r) {
       const i = ORDER_FLOW.indexOf(r.stage || r.status);
       if (i < 0 || i >= ORDER_FLOW.length - 1) return;
       const next = ORDER_FLOW[i + 1];
-      store.update("salesOrders", r.id, { status: next, stage: next }, roleKey);
-      store._soTimeline && store._soTimeline(r.id, "stage", roleKey, "Manual stage advance to " + next);
-      VG.toast("Order " + r.no + " → " + next);
-      setView((v) => v && ({ ...store.get("salesOrders", r.id) }));
+      await VG.forwardStatus({
+        action: "sales_order:stage",
+        fromType: "Sales Order", fromNo: r.no, fromId: r.id,
+        toType: "Sales Order", statusChange: next, actor: roleKey,
+        confirmMessage: "Are you sure you want to advance Sales Order " + r.no + " to \"" + next + "\"?",
+        run: () => {
+          if (next === "Sent to Production") {
+            const wo = store.sendSalesOrderToProduction(r.id, roleKey);
+            return wo ? store.get("salesOrders", r.id) : null;
+          }
+          if (next === "Accepted by Production") {
+            const wo = store.ensureWorkOrderForSalesOrder(r.id, roleKey);
+            if (!wo) return null;
+            store.acceptWorkOrder(wo.id, roleKey);
+            return store.get("salesOrders", r.id);
+          }
+          store._setSOStage(r.id, next, roleKey, "Manual stage advance to " + next);
+          return store.get("salesOrders", r.id);
+        },
+        onDone: () => setView((v) => v && ({ ...store.get("salesOrders", r.id) })),
+      });
     }
-    function makeProforma(r) {
-      const pi = store.create("proformas", {
-        no: store.nextNo("PI", today()), date: today(), orderId: r.id, customerId: r.customerId,
-        billing: r.billing, shipping: r.shipping, billingAddressId: r.billingAddressId || "", shippingAddressId: r.shippingAddressId || "",
-        gstin: r.gstin, currency: r.currency || "INR", exchangeRate: r.exchangeRate != null ? r.exchangeRate : 1,
-        lines: r.lines, totals: r.totals, status: "Issued", by: roleKey,
-      }, roleKey);
-      VG.toast("Proforma " + pi.no + " generated");
+    function findProformaFromSO(so) {
+      return store.list("proformas").find((p) => p.orderId === so.id || (p.quotationId && so.quotationId && p.quotationId === so.quotationId));
     }
-    return (
-      <div>
-        <PageHead title="Sales Orders" desc="Create and review in Sales. Send to Production only when ready." />
-        {VG.CustomerFilterBanner ? <VG.CustomerFilterBanner /> : null}
-        <RecordTable title="Sales orders" columns={cols} rows={rows} can={can} printTitle="Sales Orders" searchKeys={["no"]}
-          filters={[{ key: "status", label: "All status", options: ORDER_FLOW }]}
-          onNew={can("add") ? () => setBuilder({}) : null} newLabel="New Sales Order"
-          onView={(r) => setView(r)} onEdit={can("edit") ? (r) => setBuilder(r) : null}
-          empty="No sales orders yet — click New Sales Order or convert a quotation" />
-        {builder && (
-          <SalesOrderBuilder open onClose={() => setBuilder(null)} roleKey={roleKey} can={can}
-            initial={builder.id ? builder : null} onSaved={() => {}} />
-        )}
-        {view && (
-          <Modal open onClose={() => setView(null)} size="xl" title={"Sales Order " + view.no} subtitle={custName(view.customerId)}
+    function findShipmentFromSO(so) {
+      return store.list("shipments").find((s) => s.salesOrderId === so.id && s.status !== "Cancelled");
+    }
+    function findInvoiceFromSO(so) {
+      return store.list("invoices").find((i) => i.salesOrderId === so.id && i.status !== "Cancelled");
+    }
+    function findWOFromSO(so) {
+      return store.list("workOrders").find((w) => w.salesOrderId === so.id && w.status !== "Cancelled");
+    }
+    async function makeProforma(r) {
+      const existing = findProformaFromSO(r);
+      await VG.forwardDocument({
+        action: "sales_order:proforma",
+        fromType: "Sales Order", fromNo: r.no, fromId: r.id,
+        toType: "Proforma Invoice", actor: roleKey,
+        duplicate: existing ? { exists: true, no: existing.no, label: "Proforma Invoice", linked: existing } : null,
+        run: () => store.create("proformas", {
+          no: store.nextNo("PI", today()), date: today(), orderId: r.id, customerId: r.customerId,
+          billing: r.billing, shipping: r.shipping, billingAddressId: r.billingAddressId || "", shippingAddressId: r.shippingAddressId || "",
+          gstin: r.gstin, currency: r.currency || "INR", exchangeRate: r.exchangeRate != null ? r.exchangeRate : 1,
+          lines: r.lines, totals: r.totals, status: "Issued", by: roleKey,
+        }, roleKey),
+        onDone: () => setView((v) => v && store.get("salesOrders", r.id)),
+      });
+    }
+    const liveOrder = view ? (store.get("salesOrders", view.id) || view) : null;
+    if (builder) {
+      return (
+        <SalesOrderBuilder open onClose={() => setBuilder(null)} roleKey={roleKey} can={can}
+          initial={builder.id ? builder : null} onSaved={() => {}} />
+      );
+    }
+    if (liveOrder) {
+      const view = liveOrder;
+      return (
+          <InternalScreen onBack={() => setView(null)} backLabel="Back to sales orders" title={"Sales Order " + view.no} subtitle={custName(view.customerId)}
             footer={<>
               <DocActions docType="Sales Order" build={() => orderDoc(view)} />
-              {can("add") && <Button variant="soft" icon="rupee" onClick={() => makeProforma(view)}>Generate Proforma</Button>}
+              {can("add") && <Button variant="soft" icon="rupee" onClick={() => makeProforma(view)} disabled={!!findProformaFromSO(view)} title={findProformaFromSO(view) ? "Proforma already exists" : ""}>Generate Proforma</Button>}
               {(view.stage === "Created / Saved" || view.status === "Created / Saved") && can("approve") && (
-                <Button variant="soft" icon="factory" onClick={() => { const wo = store.sendSalesOrderToProduction(view.id, roleKey); if (wo) VG.toast("Sent to Production · WO " + wo.no + " created"); setView(store.get("salesOrders", view.id)); }}>Send to Production</Button>
+                <Button variant="soft" icon="factory" disabled={!!findWOFromSO(view)} title={findWOFromSO(view) ? "Already sent to production" : ""} onClick={async () => {
+                  const existingWo = findWOFromSO(view);
+                  await VG.forwardDocument({
+                    action: "sales_order:production",
+                    fromType: "Sales Order", fromNo: view.no, fromId: view.id,
+                    toType: "Work Order", actor: roleKey,
+                    duplicate: existingWo ? { exists: true, no: existingWo.no, label: "Work Order", linked: existingWo } : null,
+                    run: () => store.sendSalesOrderToProduction(view.id, roleKey),
+                    statusChange: "Sent to Production",
+                    successMessage: (wo) => (wo && wo.no ? "Document sent to Production successfully. Work order " + wo.no + " created." : "Document sent to Production successfully."),
+                    onDone: () => setView(store.get("salesOrders", view.id)),
+                  });
+                }}>Send to Production</Button>
               )}
               {(view.stage === "Ready for Dispatch" || view.stage === "Dispatch Planned") && can("add") && (
-                <Button variant="soft" icon="truck" onClick={() => { const sh = store.createShipmentFromSO(view.id, { destination: view.shipping }, roleKey); VG.toast("Shipment " + sh.no + " created"); setView(store.get("salesOrders", view.id)); }}>Create shipment</Button>
+                <Button variant="soft" icon="truck" disabled={!!findShipmentFromSO(view)} title={findShipmentFromSO(view) ? "Shipment already exists" : ""} onClick={async () => {
+                  await VG.forwardDocument({
+                    action: "sales_order:dispatch",
+                    fromType: "Sales Order", fromNo: view.no, fromId: view.id,
+                    toType: "Shipment", actor: roleKey,
+                    duplicate: findShipmentFromSO(view) ? { exists: true, no: findShipmentFromSO(view).no, label: "Shipment" } : null,
+                    run: () => {
+                      if (!view.shipping) { VG.toast("Set shipping address before dispatch", "error"); return null; }
+                      return store.createShipmentFromSO(view.id, { destination: view.shipping }, roleKey);
+                    },
+                    statusChange: "Dispatch Planned",
+                    onDone: () => setView(store.get("salesOrders", view.id)),
+                  });
+                }}>Create shipment</Button>
               )}
               {(view.stage === "Partially Dispatched" || view.stage === "Ready for Dispatch" || view.stage === "Fully Dispatched") && can("add") && (
-                <Button variant="soft" icon="rupee" onClick={() => { const inv = store.createInvoiceFromSO(view.id, roleKey); VG.toast("Invoice " + inv.no + " posted"); setView(store.get("salesOrders", view.id)); }}>Post invoice</Button>
+                <Button variant="soft" icon="rupee" disabled={!!findInvoiceFromSO(view)} title={findInvoiceFromSO(view) ? "Invoice already exists" : ""} onClick={async () => {
+                  const existingInv = findInvoiceFromSO(view);
+                  if (existingInv) return VG.toast("Invoice " + existingInv.no + " already exists", "warn");
+                  await VG.forwardDocument({
+                    action: "sales_order:invoice",
+                    fromType: "Sales Order", fromNo: view.no, fromId: view.id,
+                    toType: "Tax Invoice", actor: roleKey,
+                    run: () => {
+                      if (VG.openInvoiceBuilder) {
+                        const draft = store.buildInvoiceDraftFromSO(view.id);
+                        if (draft) VG.openInvoiceBuilder(draft);
+                        return draft ? { id: view.id, no: "(draft opened)" } : null;
+                      }
+                      return store.createInvoiceFromSO(view.id, roleKey);
+                    },
+                    onDone: () => setView(store.get("salesOrders", view.id)),
+                  });
+                }}>Post invoice</Button>
               )}
               {view.status !== "Closed" && can("edit") && <Button icon="chevronRight" onClick={() => advance(view)}>Advance stage</Button>}
             </>}>
@@ -974,16 +1209,25 @@
                 {!(view.timeline || []).length && <div className="text-xs opacity-55">No timeline entries yet.</div>}
               </div>
             </div>
-          </Modal>
-        )}
-      </div>
+          </InternalScreen>
+      );
+    }
+    return (
+      <ListPage title="Sales Orders" desc="Create and review in Sales. Send to Production only when ready." onNew={can("add") ? () => setBuilder({}) : null} newLabel="Add Sales Order" can={can}>
+        {VG.CustomerFilterBanner ? <VG.CustomerFilterBanner /> : null}
+        <RecordTable embedded suppressNew tableId="sales-orders" title="Sales Order List" columns={cols} rows={rows} can={can} printTitle="Sales Orders" searchKeys={["no"]}
+          filters={[{ key: "status", label: "All status", options: ORDER_FLOW }]}
+          onNew={can("add") ? () => setBuilder({}) : null}
+          onView={(r) => setView(r)} onEdit={can("edit") ? (r) => setBuilder(r) : null}
+          empty="No sales orders yet — click New Sales Order or convert a quotation" />
+      </ListPage>
     );
   }
   function OrderLineTable({ o }) {
     return (
       <div className="overflow-x-auto rounded-xl glass">
         <table className="w-full text-xs"><thead className="text-[10px] uppercase opacity-55"><tr className="text-left border-b border-white/10"><th className="px-3 py-2">Item</th><th className="px-3 py-2 text-right">Qty</th><th className="px-3 py-2 text-right">Rate</th><th className="px-3 py-2 text-right">Total</th></tr></thead>
-          <tbody>{(o.lines || []).map((l, i) => { const c = computeLine(l); return <tr key={i} className="border-b border-white/5"><td className="px-3 py-2">{l.sku}<div className="opacity-50">{l.desc}</div></td><td className="px-3 py-2 text-right">{l.qty} {l.unit}</td><td className="px-3 py-2 text-right">{inr(l.rate)}</td><td className="px-3 py-2 text-right">{inr(c.total)}</td></tr>; })}</tbody>
+          <tbody>{(o.lines || []).map((l, i) => { const c = computeLine(l); return <tr key={i} className="border-b border-white/5"><td className="px-3 py-2"><div className="font-medium">{l.name || l.desc || "—"}</div><div className="font-mono text-[10px] opacity-50">SKU: {l.sku || "—"}</div></td><td className="px-3 py-2 text-right">{l.qty} {l.unit}</td><td className="px-3 py-2 text-right">{inr(l.rate)}</td><td className="px-3 py-2 text-right">{inr(c.total)}</td></tr>; })}</tbody>
         </table>
       </div>
     );
@@ -1007,14 +1251,15 @@
           totals: t,
           paymentTerms: pt,
           deliveryTerms: dt,
-          lines: (o.lines || []).map((l, i) => {
-            const cc = computeLine(l);
-            return { no: i + 1, sku: l.sku, desc: l.desc, hsn: l.hsn, qty: String(l.qty), unit: l.unit, rate: fmt(l.rate), disc: (l.discountPct || 0) + "%", tax: (l.taxPct || 0) + "%", amount: fmt(cc.total) };
-          }),
+          lines: mapIndustrialDocLines(o.lines, fmt),
         });
       }
     }
-    const rows = (o.lines || []).map((l, i) => { const c2 = computeLine(l); return `<tr><td>${i + 1}</td><td>${l.sku}<br><span style="color:#6b7280">${l.desc}</span></td><td class="vg-right">${l.qty} ${l.unit}</td><td class="vg-right">${inr(l.rate)}</td><td class="vg-right">${inr(c2.total)}</td></tr>`; }).join("");
+    const rows = (o.lines || []).map((l, i) => {
+      const c2 = computeLine(l);
+      const name = l.name || l.desc || "";
+      return `<tr><td>${i + 1}</td><td><b>${name}</b><br><span style="color:#6b7280;font-size:8pt">SKU: ${l.sku || ""}</span></td><td class="vg-right">${l.qty} ${l.unit}</td><td class="vg-right">${inr(l.rate)}</td><td class="vg-right">${inr(c2.total)}</td></tr>`;
+    }).join("");
     const inner = `<div class="vg-cols"><div class="vg-card"><b>Bill To</b>${custName(o.customerId)}<br>${o.billing || ""}<br>GSTIN ${o.gstin || ""}</div><div class="vg-card"><b>Ship To</b>${custName(o.customerId)}<br>${o.shipping || o.billing || ""}</div><div class="vg-card"><b>Order</b>No: ${o.no}<br>Date: ${o.date}<br>Status: ${o.status}</div></div><table class="vg-tbl"><thead><tr><th>#</th><th>Item</th><th class="vg-right">Qty</th><th class="vg-right">Rate</th><th class="vg-right">Total</th></tr></thead><tbody>${rows}</tbody></table><div class="vg-totals"><div><span>Taxable</span><span>${inr(t.taxable || 0)}</span></div><div><span>GST</span><span>${inr(t.tax || 0)}</span></div><div class="grand"><span>Grand Total</span><span>${inr(t.grand || 0)}</span></div></div><div class="vg-sign"><div>Prepared by: <b>${o.preparedBy || "—"}</b></div><div>Checked by: <b>${o.checkedBy || "—"}</b></div><div>Approved by: <b>${o.approvedBy || "—"}</b></div><div>For ${store.company().name}</div></div>`;
     return { title: "Sales Order", subtitle: o.no + " · " + custName(o.customerId), inner };
   }
@@ -1028,6 +1273,7 @@
         date: today(), dueDate: today(), customerId: "", contact: "", gstin: "", salesOrderId: "", customerPoRef: "",
         billing: "", shipping: "", billingAddressId: "", shippingAddressId: "", paymentTermsId: "", deliveryTermsId: "", validityDays: 15, currency: "INR", exchangeRate: 1,
         placeOfSupply: "", freight: 0, packing: 0, insurance: 0, remarks: "", by: roleKey, lines: [blankLine()],
+        ...(store.applyDefaultBankToDoc ? store.applyDefaultBankToDoc({}) : {}),
       };
     });
     const set = (k, v) => { setDirty(true); setP((x) => ({ ...x, [k]: v })); };
@@ -1043,11 +1289,7 @@
     }
     function patchProformaFields(patch) { setDirty(true); setP((x) => ({ ...x, ...patch })); }
     function pickItem(key, itemId) {
-      const it = store.get("items", itemId);
-      if (!it) return setLine(key, { itemId });
-      const pl = store.list("priceList").find((x) => x.itemId === itemId);
-      const tax = store.get("taxes", it.taxId);
-      setLine(key, { itemId, sku: it.sku, desc: it.name, hsn: it.hsn, unit: it.unit, rate: pl ? pl.listRate : it.rate, taxPct: tax ? tax.rate : 18 });
+      setLine(key, pickItemLine(itemId));
     }
     function loadFromSO(id) {
       if (!id) return;
@@ -1081,8 +1323,8 @@
       onClose();
     }
     return (
-      <Modal open={open} onClose={onClose} size="full" dirty={dirty} title={isEdit ? "Edit Proforma " + p.no : "Add Proforma Invoice"} subtitle="Create proforma manually with customer, commercial and tax details"
-        footer={<><Button variant="soft" onClick={onClose}>Close</Button><Button variant="soft" icon="eye" onClick={() => proformaPDF({ ...p, no: p.no || "DRAFT", totals }, "preview")}>Preview PDF</Button><Button icon="check" onClick={save}>{isEdit ? "Save Proforma" : "Create Proforma"}</Button></>}>
+      <InternalScreen onBack={onClose} backLabel="Back to list" dirty={dirty} title={isEdit ? "Edit Proforma " + p.no : "Add Proforma Invoice"} subtitle="Create proforma manually with customer, commercial and tax details"
+        footer={<><Button variant="soft" icon="eye" onClick={() => proformaPDF({ ...p, no: p.no || "DRAFT", totals }, "preview")}>Preview PDF</Button><Button icon="check" onClick={save}>{isEdit ? "Save Proforma" : "Create Proforma"}</Button></>}>
         <div className="grid lg:grid-cols-3 gap-3 mb-4">
           <Field label="Customer" required><MasterSelect collection="customers" value={p.customerId} onChange={pickCustomer} actorRole={roleKey} can={can("add")} /></Field>
           <Field label="Contact person"><Text value={p.contact} onChange={(v) => set("contact", v)} /></Field>
@@ -1105,27 +1347,15 @@
           )}
           <Field label="Remarks / notes" className="lg:col-span-1"><Area value={p.remarks} onChange={(v) => set("remarks", v)} rows={2} /></Field>
         </div>
+        <BankAccountSection doc={p} onChange={(patch) => { setDirty(true); setP((x) => ({ ...x, ...patch })); }} />
         <TransactionLinesShell title="Line items" onAddLine={addLine} addLabel="Add line" minWidth={1180}
-          headerRow={
-            <tr className="text-left border-b border-white/10">
-              <th className="min-w-[340px]">Item / SKU</th>
-              <th className="min-w-[220px]">Description</th>
-              <th className="w-20">HSN</th>
-              <th className="w-24">Qty</th>
-              <th className="w-16">Unit</th>
-              <th className="w-28">Rate</th>
-              <th className="w-20">Disc%</th>
-              <th className="w-20">Tax%</th>
-              <th className="w-28 text-right">Amount</th>
-              <th className="w-10" />
-            </tr>
-          }>
+          headerRow={LINE_TABLE_HEAD}>
           {p.lines.map((l) => {
             const c = computeLine(l);
             return (
               <tr key={l.key} className="border-b border-white/5 align-top">
                 <td className="min-w-[340px]"><MasterSelect variant="line" collection="items" value={l.itemId} onChange={(id) => pickItem(l.key, id)} actorRole={roleKey} can={can("add")} /></td>
-                <td className="min-w-[220px]"><div className="text-sm leading-snug py-1">{l.desc || <span className="opacity-40">—</span>}</div></td>
+                <td className="min-w-[220px]"><LineDescriptionEditor line={l} compact onChange={(v) => setLine(l.key, { desc: v })} /></td>
                 <td className="font-mono text-xs">{l.hsn || "—"}</td>
                 <td><Num data-line-qty value={l.qty} onChange={(v) => setLine(l.key, { qty: v })} /></td>
                 <td className="text-sm opacity-80">{l.unit}</td>
@@ -1152,7 +1382,7 @@
             <div className="flex justify-between text-base font-semibold border-t border-white/10 mt-2 pt-2"><span>Grand total</span><span>{inr(totals.grand)}</span></div>
           </Card>
         </div>
-      </Modal>
+      </InternalScreen>
     );
   }
 
@@ -1184,7 +1414,7 @@
     const t = inv.totals || {};
     const rows = (inv.lines || []).map((l, i) => {
       const amt = (Number(l.qty) || 0) * (Number(l.rate) || 0);
-      return `<tr><td>${i + 1}</td><td>${l.sku || ""}<br>${l.desc || ""}</td><td class="vg-right">${l.qty}</td><td class="vg-right">${inr(l.rate)}</td><td class="vg-right">${inr(amt)}</td></tr>`;
+      return `<tr><td>${i + 1}</td><td><b>${l.name || l.desc || ""}</b><br><span style="color:#6b7280;font-size:8pt">SKU: ${l.sku || ""}</span></td><td class="vg-right">${l.qty}</td><td class="vg-right">${inr(l.rate)}</td><td class="vg-right">${inr(amt)}</td></tr>`;
     }).join("");
     return {
       title: "Tax Invoice", subtitle: inv.no,
@@ -1209,7 +1439,7 @@
     }
     return (
       <Modal open onClose={onClose} title="Print / Download Invoice" subtitle={(inv && inv.no) || ""}
-        footer={<><Button variant="soft" onClick={onClose}>Cancel</Button><Button icon={mode === "preview" ? "eye" : mode === "download" ? "download" : "printer"} onClick={run}>{mode === "preview" ? "Preview" : mode === "download" ? "Download PDF" : "Print"}</Button></>}>
+        actions={<Button icon={mode === "preview" ? "eye" : mode === "download" ? "download" : "printer"} onClick={run}>{mode === "preview" ? "Preview" : mode === "download" ? "Download PDF" : "Print"}</Button>}>
         <p className="text-sm opacity-70 mb-3">Select invoice copies. Each copy is printed on a separate page with the copy type shown at the top right.</p>
         <div className="grid sm:grid-cols-2 gap-2">
           {INVOICE_COPY_OPTIONS.map((opt) => (
@@ -1224,15 +1454,12 @@
     );
   }
 
-  function InvoiceDocActions({ inv }) {
-    const [printModal, setPrintModal] = useState(null);
-    const open = (mode) => setPrintModal({ mode });
+  function InvoiceDocActions({ inv, onPrintPick }) {
     return (
       <>
-        <Button variant="soft" icon="eye" onClick={() => open("preview")}>Preview</Button>
-        <Button variant="soft" icon="printer" onClick={() => open("print")}>Print</Button>
-        <Button variant="soft" icon="download" onClick={() => open("download")}>PDF</Button>
-        {printModal && <InvoicePrintCopiesModal inv={inv} mode={printModal.mode} onClose={() => setPrintModal(null)} />}
+        <Button variant="soft" icon="eye" onClick={() => onPrintPick && onPrintPick({ inv, mode: "preview" })}>Preview</Button>
+        <Button variant="soft" icon="printer" onClick={() => onPrintPick && onPrintPick({ inv, mode: "print" })}>Print</Button>
+        <Button variant="soft" icon="download" onClick={() => onPrintPick && onPrintPick({ inv, mode: "download" })}>PDF</Button>
       </>
     );
   }
@@ -1253,7 +1480,7 @@
     }
     return (
       <Modal open onClose={onClose} title="Generate E-way Bill" subtitle={inv.no + " · " + custName(inv.customerId)}
-        footer={<><Button variant="soft" onClick={onClose}>Cancel</Button><Button icon="truck" onClick={submit}>Generate E-way Bill</Button></>}>
+        actions={<Button icon="truck" onClick={submit}>Generate E-way Bill</Button>}>
         <div className="grid sm:grid-cols-2 gap-3">
           <Field label="Vehicle number"><Text value={f.vehicle} onChange={(v) => setF((p) => ({ ...p, vehicle: v }))} placeholder="e.g. MH12AB1234" /></Field>
           <Field label="Driver name"><Text value={f.driver} onChange={(v) => setF((p) => ({ ...p, driver: v }))} /></Field>
@@ -1265,9 +1492,10 @@
     );
   }
 
-  function InvoiceView({ inv, onClose, roleKey, can, onChange }) {
+  function InvoiceView({ inv, onClose, roleKey, can, onChange, onEdit }) {
     if (!inv) return null;
     const [ewayOpen, setEwayOpen] = useState(false);
+    const [printPick, setPrintPick] = useState(null);
     const st = invoiceDisplayStatus(inv);
     const balance = (Number(inv.amount) || 0) - (Number(inv.amountPaid) || 0);
     function genEinv() {
@@ -1279,11 +1507,17 @@
       VG.toast("E-Invoice IRN generated", "success");
       onChange();
     }
+    if (printPick) {
+      return <InvoicePrintCopiesModal inv={printPick.inv} mode={printPick.mode} onClose={() => setPrintPick(null)} />;
+    }
+    if (ewayOpen) {
+      return <EwayBillModal inv={inv} regenerate={!!(inv.ewayBill && inv.ewayBill.no)} roleKey={roleKey} onClose={() => setEwayOpen(false)} onDone={onChange} />;
+    }
     return (
-      <>
-        <Modal open={!!inv} onClose={onClose} size="xl" title={"Tax Invoice " + inv.no} subtitle={custName(inv.customerId) + (inv.salesOrderNo ? " · SO " + inv.salesOrderNo : "")}
+        <InternalScreen onBack={onClose} backLabel="Back to invoices" title={(VG.invoiceTypeLabel ? VG.invoiceTypeLabel(inv) : "Tax Invoice") + " " + inv.no} subtitle={custName(inv.customerId) + (inv.salesOrderNo ? " · SO " + inv.salesOrderNo : "") + (inv.currency && inv.currency !== "INR" ? " · " + inv.currency : "")}
           footer={<>
-            <InvoiceDocActions inv={inv} />
+            <InvoiceDocActions inv={inv} onPrintPick={setPrintPick} />
+            {onEdit && <Button variant="soft" icon="edit" onClick={onEdit}>Edit invoice</Button>}
             {can("add") && !(inv.eInvoice && inv.eInvoice.irn) && <Button variant="soft" icon="shield" onClick={genEinv}>Generate E-Invoice</Button>}
             {can("add") && <Button variant="soft" icon="truck" onClick={() => setEwayOpen(true)}>{inv.ewayBill && inv.ewayBill.no ? "Regenerate E-way" : "Generate E-way Bill"}</Button>}
             {inv.status !== "Paid" && balance > 0 && can("edit") && <Button icon="rupee" onClick={() => { const amt = balance; store.recordPayment(inv.id, amt, roleKey); VG.toast("Payment recorded"); onChange(); }}>Mark paid</Button>}
@@ -1291,13 +1525,28 @@
           <div className="flex flex-wrap items-center gap-2 mb-4">
             <StatusTag value={st.label} map={INV_DOC_STATUS} />
             <StatusTag value={inv.status} map={INV_STATUS} />
+            {inv.invoiceType && inv.invoiceType !== "domestic" && <Pill color="#f59e0b">{VG.invoiceTypeLabel ? VG.invoiceTypeLabel(inv) : inv.invoiceType}</Pill>}
             <span className="text-sm opacity-60 ml-auto">{inv.date}{inv.dueDate ? " · Due " + inv.dueDate : ""}</span>
           </div>
           <div className="grid sm:grid-cols-3 gap-3 mb-4 text-sm">
-            <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Invoice amount</div><div className="font-semibold">{inr(inv.amount)}</div></Card>
-            <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Paid</div><div className="font-semibold">{inr(inv.amountPaid || 0)}</div></Card>
-            <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Balance</div><div className="font-semibold">{inr(balance)}</div></Card>
+            <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Invoice amount</div><div className="font-semibold">{invMoney(inv, inv.amount)}</div>{inv.currency !== "INR" && inv.fxTotals && <div className="text-xs opacity-55 mt-1">INR {inr(inv.fxTotals.grandTotalInr)} @ {inv.exchangeRate}</div>}</Card>
+            <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Paid</div><div className="font-semibold">{invMoney(inv, inv.amountPaid || 0)}</div></Card>
+            <Card className="p-3"><div className="text-[11px] uppercase opacity-55">Balance</div><div className="font-semibold">{invMoney(inv, balance)}</div></Card>
           </div>
+          {VG.isExportInvoiceType && VG.isExportInvoiceType(inv.invoiceType) && (
+            <Card className="p-3 mb-3 text-xs">
+              <div className="text-[11px] uppercase opacity-55 mb-2">Export details</div>
+              <div className="grid sm:grid-cols-3 gap-2">
+                {inv.iecCode && <div><span className="opacity-50">IEC</span><div>{inv.iecCode}</div></div>}
+                {inv.incoterms && <div><span className="opacity-50">Incoterms</span><div>{inv.incoterms}</div></div>}
+                {inv.buyerCountry && <div><span className="opacity-50">Buyer country</span><div>{inv.buyerCountry}</div></div>}
+                {inv.portOfLoading && <div><span className="opacity-50">Port of loading</span><div>{inv.portOfLoading}</div></div>}
+                {inv.lutNumber && <div><span className="opacity-50">LUT</span><div>{inv.lutNumber}{inv.lutValidity ? " · valid " + inv.lutValidity : ""}</div></div>}
+                {inv.swiftCode && <div><span className="opacity-50">SWIFT</span><div>{inv.swiftCode}</div></div>}
+              </div>
+              {inv.exportDeclaration && <div className="mt-2 opacity-80 italic">{inv.exportDeclaration}</div>}
+            </Card>
+          )}
           {(inv.eInvoice && inv.eInvoice.irn) && (
             <Card className="p-3 mb-3 text-xs">
               <div className="text-[11px] uppercase opacity-55 mb-2">E-Invoice (IRP)</div>
@@ -1327,22 +1576,171 @@
                 <thead className="opacity-55 border-b border-white/10"><tr className="text-left"><th className="py-1 pr-2">SKU</th><th className="py-1 pr-2">Description</th><th className="py-1 text-right">Qty</th><th className="py-1 text-right">Amount</th></tr></thead>
                 <tbody>{(inv.lines || []).map((l, i) => {
                   const amt = computeLine(l).total;
-                  return <tr key={i} className="border-b border-white/5"><td className="py-1.5 font-mono">{l.sku}</td><td className="py-1.5">{l.desc}</td><td className="py-1.5 text-right">{l.qty} {l.unit}</td><td className="py-1.5 text-right">{inr(amt)}</td></tr>;
+                  return <tr key={i} className="border-b border-white/5"><td className="py-1.5"><div className="font-medium">{l.name || l.desc || "—"}</div><div className="font-mono text-[10px] opacity-50">SKU: {l.sku || "—"}</div></td><td className="py-1.5 text-sm whitespace-pre-wrap opacity-80">{lineDescUi(l) || "—"}</td><td className="py-1.5 text-right">{l.qty} {l.unit}</td><td className="py-1.5 text-right">{inr(amt)}</td></tr>;
                 })}</tbody>
               </table>
             </div>
           </Card>
-        </Modal>
-        {ewayOpen && <EwayBillModal inv={inv} regenerate={!!(inv.ewayBill && inv.ewayBill.no)} roleKey={roleKey} onClose={() => setEwayOpen(false)} onDone={onChange} />}
-      </>
+        </InternalScreen>
+    );
+  }
+
+  function InvoiceBuilder({ open, onClose, roleKey, can, initial, onSaved }) {
+    const isEdit = !!(initial && initial.id);
+    const [dirty, setDirty] = useState(false);
+    const [inv, setInv] = useState(() => {
+      if (initial && initial.id) return VG.buildInvoiceDraft ? VG.buildInvoiceDraft(initial) : { ...initial, lines: (initial.lines || []).map((l) => ({ ...l, key: Math.random().toString(36).slice(2) })) };
+      return VG.buildInvoiceDraft ? VG.buildInvoiceDraft(initial || {}) : { date: today(), invoiceType: "domestic", currency: "INR", exchangeRate: 1, lines: [blankLine()] };
+    });
+    const set = (k, v) => { setDirty(true); setInv((x) => ({ ...x, [k]: v })); };
+    const patch = (p) => { setDirty(true); setInv((x) => ({ ...x, ...p })); };
+    const setLine = (key, patchLine) => { setDirty(true); setInv((x) => ({ ...x, lines: x.lines.map((l) => (l.key === key ? { ...l, ...patchLine } : l)) })); };
+    const addLine = () => { setDirty(true); setInv((x) => ({ ...x, lines: x.lines.concat(blankLine()) })); };
+    const delLine = (key) => { setDirty(true); setInv((x) => ({ ...x, lines: x.lines.filter((l) => l.key !== key) })); };
+    const totals = VG.computeInvoiceTotals ? VG.computeInvoiceTotals(inv) : computeQuote(inv);
+    const fxTotals = VG.computeFxTotals ? VG.computeFxTotals(inv, totals) : {};
+    const isExport = VG.isExportInvoiceType && VG.isExportInvoiceType(inv.invoiceType);
+    const soList = store.list("salesOrders");
+    function pickCustomer(id) {
+      const c = store.get("customers", id) || {};
+      const draft = VG.buildInvoiceDraft ? VG.buildInvoiceDraft({ ...inv, customerId: id }) : inv;
+      setDirty(true);
+      setInv((x) => (VG.applyCustomerToTransaction ? { ...VG.applyCustomerToTransaction(c, { ...draft, customerId: id }), customerDefaultCurrency: (VG.normalizeCustomer ? VG.normalizeCustomer(c) : c).currency || "INR" } : { ...x, customerId: id }));
+    }
+    function pickInvoiceType(t) {
+      const gst = VG.defaultGstTreatment ? VG.defaultGstTreatment(t) : "";
+      patch({ invoiceType: t, gstTreatment: gst, exportDeclaration: (VG.EXPORT_DECLARATIONS && VG.EXPORT_DECLARATIONS[gst]) || "", templateId: VG.isExportInvoiceType && VG.isExportInvoiceType(t) ? "tpl2exp" : inv.templateId, lines: VG.applyGstTreatmentToLines ? VG.applyGstTreatmentToLines(inv.lines, gst) : inv.lines });
+    }
+    function pickGstTreatment(gst) {
+      patch({ gstTreatment: gst, exportDeclaration: (VG.EXPORT_DECLARATIONS && VG.EXPORT_DECLARATIONS[gst]) || "", exportSupplyType: gst === "with_igst" ? "with_igst" : "lut_without_igst", lines: VG.applyGstTreatmentToLines ? VG.applyGstTreatmentToLines(inv.lines, gst) : inv.lines });
+    }
+    function pickItem(key, itemId) {
+      const it = store.get("items", itemId);
+      if (!it) return setLine(key, { itemId });
+      const tax = store.get("taxes", it.taxId);
+      const taxPct = VG.gstTreatmentZerosTax && VG.gstTreatmentZerosTax(inv.gstTreatment) ? 0 : (tax ? tax.rate : 18);
+      setLine(key, pickItemLine(itemId, { taxPct }));
+    }
+    function loadFromSO(id) {
+      if (!id || !store.buildInvoiceDraftFromSO) return;
+      const draft = store.buildInvoiceDraftFromSO(id);
+      if (draft) { setDirty(true); setInv({ ...draft, lines: (draft.lines || []).map((l) => ({ ...l, key: l.key || Math.random().toString(36).slice(2) })) }); }
+    }
+    function save() {
+      if (!inv.customerId) return VG.toast("Select customer", "error");
+      if (!inv.lines.length || inv.lines.some((l) => !l.itemId)) return VG.toast("Add valid line items", "error");
+      if (!store.saveInvoice) return VG.toast("Invoice save unavailable", "error");
+      const rec = store.saveInvoice({ ...inv, preparedBy: inv.preparedBy || roleKey }, roleKey, isEdit ? inv.id : null);
+      if (!rec) return VG.toast("Could not save invoice", "error");
+      VG.toast(isEdit ? "Invoice updated" : "Invoice " + rec.no + " posted");
+      onSaved && onSaved(rec);
+      onClose(true);
+    }
+    const chargeLabel = inv.currency === "INR" ? " (₹)" : " (" + inv.currency + ")";
+    return (
+      <InternalScreen onBack={onClose} backLabel="Back to list" dirty={dirty} title={isEdit ? "Edit " + (VG.invoiceTypeLabel ? VG.invoiceTypeLabel(inv) : "Tax Invoice") + " " + inv.no : "Create Tax Invoice"} subtitle="Domestic & export invoices · multi-currency · LUT/Bond · Incoterms"
+        footer={<>{can("print") && <Button variant="soft" icon="eye" onClick={() => printInvoiceDocument({ ...inv, totals, fxTotals }, "preview")}>Preview PDF</Button>}<Button icon="check" onClick={save}>{isEdit ? "Save invoice" : "Post invoice"}</Button></>}>
+        <div className="grid lg:grid-cols-4 gap-3 mb-4">
+          <Field label="Invoice type" required><Select value={inv.invoiceType || "domestic"} onChange={pickInvoiceType} options={VG.INVOICE_TYPES || [{ value: "domestic", label: "Domestic Tax Invoice" }]} /></Field>
+          <Field label="GST treatment"><Select value={inv.gstTreatment || ""} onChange={pickGstTreatment} options={[{ value: "", label: "— Standard domestic —" }].concat(VG.EXPORT_GST_TREATMENTS || [])} /></Field>
+          <Field label="Customer" required><MasterSelect collection="customers" value={inv.customerId} onChange={pickCustomer} actorRole={roleKey} can={can("add")} /></Field>
+          <Field label="Invoice date" required><DateF value={inv.date} onChange={(v) => set("date", v)} /></Field>
+          <Field label="Due date"><DateF value={inv.dueDate} onChange={(v) => set("dueDate", v)} /></Field>
+          <Field label="Contact"><Text value={inv.contact} onChange={(v) => set("contact", v)} /></Field>
+          <Field label="GSTIN"><Text value={inv.gstin} onChange={(v) => set("gstin", v)} /></Field>
+          <Field label="Place of supply"><Text value={inv.placeOfSupply} onChange={(v) => set("placeOfSupply", v)} /></Field>
+          <Field label="Linked sales order"><Select value={inv.salesOrderId || ""} onChange={loadFromSO} options={[{ value: "", label: "— None —" }].concat(soList.map((o) => ({ value: o.id, label: o.no + " · " + custName(o.customerId) })))} /></Field>
+          <Field label="Payment terms"><Select value={inv.paymentTermsId} onChange={(v) => set("paymentTermsId", v)} options={store.list("paymentTerms").map((t) => ({ value: t.id, label: t.name }))} /></Field>
+          <Field label="Delivery terms"><Select value={inv.deliveryTermsId} onChange={(v) => set("deliveryTermsId", v)} options={store.list("deliveryTerms").map((t) => ({ value: t.id, label: t.name }))} /></Field>
+        </div>
+        {VG.TransactionAddressCurrency ? <div className="grid lg:grid-cols-3 gap-3 mb-4"><VG.TransactionAddressCurrency customerId={inv.customerId} values={inv} onChange={patch} roleKey={roleKey} canEditCurrency={can("edit")} showExchangeMeta /></div> : null}
+        <BankAccountSection doc={inv} onChange={patch} />
+        {isExport && (
+          <Card className="p-4 mb-4">
+            <div className="text-sm font-semibold mb-3">Export invoice details</div>
+            <div className="grid lg:grid-cols-4 gap-3">
+              <Field label="Buyer country"><Text value={inv.buyerCountry} onChange={(v) => set("buyerCountry", v)} /></Field>
+              <Field label="Consignee country"><Text value={inv.consigneeCountry} onChange={(v) => set("consigneeCountry", v)} /></Field>
+              <Field label="Port of loading"><Text value={inv.portOfLoading} onChange={(v) => set("portOfLoading", v)} /></Field>
+              <Field label="Port of discharge"><Text value={inv.portOfDischarge} onChange={(v) => set("portOfDischarge", v)} /></Field>
+              <Field label="Final destination"><Text value={inv.finalDestination} onChange={(v) => set("finalDestination", v)} /></Field>
+              <Field label="Country of origin"><Text value={inv.countryOfOrigin} onChange={(v) => set("countryOfOrigin", v)} /></Field>
+              <Field label="Country of final destination"><Text value={inv.countryOfFinalDestination} onChange={(v) => set("countryOfFinalDestination", v)} /></Field>
+              <Field label="IEC code"><Text value={inv.iecCode} onChange={(v) => set("iecCode", v)} /></Field>
+              <Field label="LUT / Bond details"><Text value={inv.lutBondDetails} onChange={(v) => set("lutBondDetails", v)} /></Field>
+              <Field label="LUT number"><Text value={inv.lutNumber} onChange={(v) => set("lutNumber", v)} /></Field>
+              <Field label="LUT validity"><DateF value={inv.lutValidity} onChange={(v) => set("lutValidity", v)} /></Field>
+              <Field label="Export supply type"><Select value={inv.exportSupplyType || "lut_without_igst"} onChange={(v) => { set("exportSupplyType", v); pickGstTreatment(v === "with_igst" ? "with_igst" : "lut_without_igst"); }} options={VG.EXPORT_SUPPLY_TYPES || []} /></Field>
+              <Field label="Shipping bill no."><Text value={inv.shippingBillNo} onChange={(v) => set("shippingBillNo", v)} /></Field>
+              <Field label="Shipping bill date"><DateF value={inv.shippingBillDate} onChange={(v) => set("shippingBillDate", v)} /></Field>
+              <Field label="AD code"><Text value={inv.adCode} onChange={(v) => set("adCode", v)} /></Field>
+              <Field label="Incoterms"><Select value={inv.incoterms || ""} onChange={(v) => set("incoterms", v)} options={(VG.INVOICE_INCOTERMS || ["EXW", "FOB", "CIF"]).map((x) => ({ value: x, label: x || "—" }))} /></Field>
+              <Field label="Mode of shipment"><Select value={inv.shipmentMode || ""} onChange={(v) => set("shipmentMode", v)} options={(VG.SHIPMENT_MODES || ["Air", "Sea"]).map((x) => ({ value: x, label: x || "—" }))} /></Field>
+              <Field label="Net weight (kg)"><Num value={inv.netWeight} onChange={(v) => set("netWeight", v)} /></Field>
+              <Field label="Gross weight (kg)"><Num value={inv.grossWeight} onChange={(v) => set("grossWeight", v)} /></Field>
+              <Field label="No. of packages"><Num value={inv.packages} onChange={(v) => set("packages", v)} /></Field>
+              <Field label="Packing details" className="lg:col-span-2"><Area value={inv.packingDetails} onChange={(v) => set("packingDetails", v)} rows={2} /></Field>
+              <Field label={"Freight" + chargeLabel}><Num value={inv.exportFreight || inv.freight} onChange={(v) => patch({ exportFreight: v, freight: v })} /></Field>
+              <Field label={"Insurance" + chargeLabel}><Num value={inv.exportInsurance || inv.insurance} onChange={(v) => patch({ exportInsurance: v, insurance: v })} /></Field>
+            </div>
+            <Field label="Export declaration" className="mt-3"><Area value={inv.exportDeclaration} onChange={(v) => set("exportDeclaration", v)} rows={2} /></Field>
+          </Card>
+        )}
+        <TransactionLinesShell title="Line items" onAddLine={addLine} addLabel="Add line" minWidth={1180} headerRow={LINE_TABLE_HEAD}>
+          {inv.lines.map((l) => { const c = computeLine(l); return (
+            <tr key={l.key} className="border-b border-white/5 align-top">
+              <td className="min-w-[340px]"><MasterSelect variant="line" collection="items" value={l.itemId} onChange={(id) => pickItem(l.key, id)} actorRole={roleKey} can={can("add")} /></td>
+              <td className="min-w-[220px]"><LineDescriptionEditor line={l} compact onChange={(v) => setLine(l.key, { desc: v })} /></td>
+              <td className="font-mono text-xs">{l.hsn || "—"}</td>
+              <td><Num value={l.qty} onChange={(v) => setLine(l.key, { qty: v })} /></td>
+              <td className="text-sm opacity-80">{l.unit}</td>
+              <td><Num value={l.rate} onChange={(v) => setLine(l.key, { rate: v })} /></td>
+              <td><Num value={l.discountPct} onChange={(v) => setLine(l.key, { discountPct: v })} /></td>
+              <td><Num value={l.taxPct} onChange={(v) => setLine(l.key, { taxPct: v })} /></td>
+              <td className="text-right font-medium">{invMoney(inv, c.total)}</td>
+              <td><button type="button" onClick={() => delLine(l.key)} className="p-1 rounded chrome-hover hover:text-rose-400"><Icon name="trash" size={14} /></button></td>
+            </tr>
+          ); })}
+        </TransactionLinesShell>
+        <div className="grid lg:grid-cols-3 gap-3 mt-4">
+          <div className="grid grid-cols-3 gap-3 lg:col-span-2 content-start">
+            <Field label={"Freight" + chargeLabel}><Num value={inv.freight} onChange={(v) => set("freight", v)} /></Field>
+            <Field label={"Packing" + chargeLabel}><Num value={inv.packing} onChange={(v) => set("packing", v)} /></Field>
+            <Field label={"Insurance" + chargeLabel}><Num value={inv.insurance} onChange={(v) => set("insurance", v)} /></Field>
+          </div>
+          <Card className="p-4 h-max">
+            <div className="text-sm font-semibold mb-2">Invoice total ({inv.currency || "INR"})</div>
+            {[["Sub total", totals.sub], ["Discount", -totals.discount], ["Taxable", totals.taxable], ["GST", totals.tax], ["Charges", totals.charges]].map(([k, v]) => (
+              <div key={k} className="flex justify-between text-sm py-0.5"><span className="opacity-60">{k}</span><span>{invMoney(inv, v)}</span></div>
+            ))}
+            <div className="flex justify-between text-base font-semibold border-t border-white/10 mt-2 pt-2"><span>Grand total</span><span>{invMoney(inv, totals.grand)}</span></div>
+            {inv.currency !== "INR" && (
+              <div className="mt-3 pt-2 border-t border-white/10 text-xs space-y-1">
+                <div className="flex justify-between"><span className="opacity-60">INR equivalent</span><span>{inr(fxTotals.grandTotalInr || 0)}</span></div>
+                <div className="flex justify-between"><span className="opacity-60">Taxable (INR)</span><span>{inr(fxTotals.taxableValueInr || 0)}</span></div>
+                <div className="opacity-50">Rate: 1 {inv.currency} = ₹{inv.exchangeRate} · {inv.exchangeRateDate || inv.date}</div>
+              </div>
+            )}
+          </Card>
+        </div>
+      </InternalScreen>
     );
   }
 
   function InvoicesPage({ roleKey, can }) {
     VG.useDB();
     const [view, setView] = useState(null);
+    const [build, setBuild] = useState(null);
     const [printPick, setPrintPick] = useState(null);
     const readySO = ordersReadyToInvoice();
+    useEffect(() => {
+      VG.openInvoiceBuilder = (draft) => setBuild(draft || {});
+      if (VG._pendingInvoiceBuild) {
+        setBuild(VG._pendingInvoiceBuild);
+        VG._pendingInvoiceBuild = null;
+      }
+      return () => { delete VG.openInvoiceBuilder; };
+    }, []);
     useEffect(() => {
       if (VG._pendingInvoiceView) {
         const id = VG._pendingInvoiceView;
@@ -1360,11 +1758,13 @@
           <button type="button" onClick={() => setView(r)} className="font-mono text-xs text-left text-sky-400 hover:text-sky-300 underline decoration-dotted underline-offset-2 cursor-pointer">{r.no}</button>
         ),
       },
+      { key: "invoiceType", label: "Type", render: (r) => <span className="text-xs">{VG.invoiceTypeLabel ? VG.invoiceTypeLabel(r) : "Tax Invoice"}</span> },
       { key: "date", label: "Date" },
+      { key: "currency", label: "Curr.", render: (r) => <span className="font-mono text-xs">{r.currency || "INR"}</span> },
       { key: "quotationNo", label: "Quotation", render: (r) => <span className="font-mono text-xs">{r.quotationNo || (r.quotationId ? (store.get("quotations", r.quotationId) || {}).no : null) || "—"}</span> },
       { key: "salesOrderNo", label: "SO", render: (r) => <span className="font-mono text-xs">{r.salesOrderNo || "—"}</span> },
       { key: "customerId", label: "Customer", render: (r) => custName(r.customerId), csv: (r) => custName(r.customerId) },
-      { key: "amount", label: "Amount", render: (r) => inr(r.amount), csv: (r) => r.amount },
+      { key: "amount", label: "Amount", render: (r) => invMoney(r, r.amount), csv: (r) => r.amount },
       {
         key: "status", label: "Status",
         render: (r) => { const st = invoiceDisplayStatus(r); return <StatusTag value={st.label} map={INV_DOC_STATUS} />; },
@@ -1377,31 +1777,45 @@
         ) : null,
       },
     ];
+    if (build != null) {
+      return <InvoiceBuilder open onClose={() => setBuild(null)} roleKey={roleKey} can={can} initial={build} onSaved={(rec) => setView(rec)} />;
+    }
+    if (view) {
+      const invLive = store.get("invoices", view.id) || view;
+      return (
+        <InvoiceView inv={invLive} onClose={() => setView(null)} roleKey={roleKey} can={can}
+          onChange={() => { const fresh = store.get("invoices", view.id); if (fresh) setView(fresh); }}
+          onEdit={can("edit") ? () => { setBuild(store.get("invoices", view.id)); setView(null); } : null} />
+      );
+    }
+    if (printPick) {
+      return <InvoicePrintCopiesModal inv={printPick.inv} mode={printPick.mode} onClose={() => setPrintPick(null)} />;
+    }
     return (
-      <div>
-        <PageHead title="Tax Invoices" desc="Generate invoices from sales orders · E-Invoice & E-way bill" />
+      <ListPage title="Tax Invoices" desc="Domestic & export invoices · multi-currency · LUT/Bond · E-Invoice & E-way" onNew={can("add") ? () => setBuild({}) : null} newLabel="Add Tax Invoice" can={can}>
         {VG.CustomerFilterBanner ? <VG.CustomerFilterBanner /> : null}
         {readySO.length > 0 && can("add") && (
           <Card className="p-3 mb-4">
             <div className="text-[11px] uppercase opacity-55 mb-2">Create invoice from sales order</div>
             <div className="flex flex-wrap gap-2">
               {readySO.slice(0, 8).map((s) => (
-                <Button key={s.id} variant="soft" className="!py-1" icon="rupee" onClick={() => {
-                  const inv = store.createInvoiceFromSO(s.id, roleKey);
-                  if (inv) { VG.toast("Invoice " + inv.no + " created"); setView(inv); }
-                }}>{s.no} · {inr((s.totals || {}).final || (s.totals || {}).grand || 0)}</Button>
+                <Button key={s.id} variant="soft" className="!py-1" icon="rupee" onClick={() => setBuild(store.buildInvoiceDraftFromSO ? store.buildInvoiceDraftFromSO(s.id) : {})}>{s.no} · {invMoney(s, (s.totals || {}).final || (s.totals || {}).grand || 0)}</Button>
               ))}
               {readySO.length > 8 && <span className="text-xs opacity-50 self-center">+{readySO.length - 8} more orders ready</span>}
             </div>
           </Card>
         )}
-        <RecordTable title="All tax invoices" columns={cols} rows={rows} can={can} printTitle="Tax Invoices"
-          searchKeys={["no", "salesOrderNo", "status"]}
-          filters={[{ key: "status", label: "All status", get: (r) => invoiceDisplayStatus(r).label, options: Object.keys(INV_DOC_STATUS) }]}
-          onView={(r) => setView(r)} empty="No invoices yet — create from a dispatched sales order" />
-        {view && <InvoiceView inv={store.get("invoices", view.id)} onClose={() => setView(null)} roleKey={roleKey} can={can} onChange={() => { const fresh = store.get("invoices", view.id); if (fresh) setView(fresh); }} />}
-        {printPick && <InvoicePrintCopiesModal inv={printPick.inv} mode={printPick.mode} onClose={() => setPrintPick(null)} />}
-      </div>
+        <RecordTable embedded suppressNew tableId="sales-invoices" title="Tax Invoice List" columns={cols} rows={rows} can={can} printTitle="Tax Invoices"
+          searchKeys={["no", "salesOrderNo", "status", "invoiceType", "currency"]}
+          filters={[
+            { key: "status", label: "All status", get: (r) => invoiceDisplayStatus(r).label, options: Object.keys(INV_DOC_STATUS) },
+            { key: "invoiceType", label: "All types", get: (r) => r.invoiceType || "domestic", options: (VG.INVOICE_TYPES || []).map((x) => x.value) },
+          ]}
+          onView={(r) => setView(r)}
+          onNew={can("add") ? () => setBuild({}) : null}
+          onEdit={can("edit") ? (r) => setBuild(r) : null}
+          empty="No invoices yet — create from a sales order or click New Tax Invoice" />
+      </ListPage>
     );
   }
 
@@ -1420,17 +1834,18 @@
       { key: "customerId", label: "Customer", render: (r) => custName(r.customerId), csv: (r) => custName(r.customerId) },
       { key: "date", label: "Date" }, { key: "grand", label: "Value", render: (r) => inr((r.totals || {}).grand || 0), csv: (r) => (r.totals || {}).grand },
     ];
+    if (build) {
+      return <ProformaBuilder open onClose={() => setBuild(null)} roleKey={roleKey} can={can} initial={build.id ? build : null} />;
+    }
     return (
-      <div>
-        <PageHead title="Proforma Invoices" desc="Generate from sales orders or add proforma manually with full details" />
+      <ListPage title="Proforma Invoices" desc="Generate from sales orders or add proforma manually with full details" onNew={can("add") ? () => setBuild({}) : null} newLabel="Add Proforma Invoice" can={can}>
         {VG.CustomerFilterBanner ? <VG.CustomerFilterBanner /> : null}
-        <RecordTable title="Proforma invoices" columns={cols} rows={rows} can={can} printTitle="Proforma Invoices" searchKeys={["no"]}
+        <RecordTable embedded suppressNew tableId="sales-proformas" title="Proforma List" columns={cols} rows={rows} can={can} printTitle="Proforma Invoices" searchKeys={["no"]}
           onView={(r) => proformaPDF(r, "preview")}
-          onNew={can("add") ? () => setBuild({}) : null} newLabel="Add Proforma Invoice"
+          onNew={can("add") ? () => setBuild({}) : null}
           onEdit={can("edit") ? (r) => setBuild(r) : null}
           empty="No proforma invoices — click Add Proforma Invoice" />
-        {build && <ProformaBuilder open onClose={() => setBuild(null)} roleKey={roleKey} can={can} initial={build.id ? build : null} />}
-      </div>
+      </ListPage>
     );
   }
   function proformaPDF(p, mode) { printDocument(proformaDoc(p), mode); }
@@ -1453,14 +1868,15 @@
           paymentTerms: pt,
           deliveryTerms: dt,
           templateId: p.templateId,
-          lines: (p.lines || []).map((l, i) => {
-            const cc = computeLine(l);
-            return { no: i + 1, sku: l.sku, desc: l.desc, hsn: l.hsn, qty: String(l.qty), unit: l.unit, rate: fmt(l.rate), disc: (l.discountPct || 0) + "%", tax: (l.taxPct || 0) + "%", amount: fmt(cc.total) };
-          }),
+          lines: mapIndustrialDocLines(p.lines, fmt),
         });
       }
     }
-    const rows = (p.lines || []).map((l, i) => { const c2 = computeLine(l); return `<tr><td>${i + 1}</td><td>${l.sku}<br><span style="color:#6b7280">${l.desc}</span></td><td class="vg-right">${l.qty} ${l.unit}</td><td class="vg-right">${inr(l.rate)}</td><td class="vg-right">${l.taxPct}%</td><td class="vg-right">${inr(c2.total)}</td></tr>`; }).join("");
+    const rows = (p.lines || []).map((l, i) => {
+      const c2 = computeLine(l);
+      const name = l.name || l.desc || "";
+      return `<tr><td>${i + 1}</td><td><b>${name}</b><br><span style="color:#6b7280;font-size:8pt">SKU: ${l.sku || ""}</span></td><td class="vg-right">${l.qty} ${l.unit}</td><td class="vg-right">${inr(l.rate)}</td><td class="vg-right">${l.taxPct}%</td><td class="vg-right">${inr(c2.total)}</td></tr>`;
+    }).join("");
     const inner = `<div class="vg-cols"><div class="vg-card"><b>Bill To</b>${custName(p.customerId)}<br>${p.billing || ""}<br>GSTIN ${p.gstin || ""}</div><div class="vg-card"><b>Ship To</b>${custName(p.customerId)}<br>${p.shipping || p.billing || ""}</div><div class="vg-card"><b>Proforma</b>No: ${p.no}<br>Date: ${p.date}</div></div><table class="vg-tbl"><thead><tr><th>#</th><th>Item</th><th class="vg-right">Qty</th><th class="vg-right">Rate</th><th class="vg-right">Tax</th><th class="vg-right">Total</th></tr></thead><tbody>${rows}</tbody></table><div class="vg-totals"><div><span>Taxable</span><span>${inr(t.taxable)}</span></div><div><span>GST</span><span>${inr(t.tax)}</span></div><div class="grand"><span>Grand Total</span><span>${inr(t.grand)}</span></div></div><div class="vg-sign"><div>Prepared by: <b>${p.by || "—"}</b></div><div>Checked by: <b>—</b></div><div>Approved by: <b>—</b></div><div>For ${store.company().name}</div></div>`;
     return { title: "Proforma Invoice", subtitle: p.no + " · " + custName(p.customerId), inner };
   }
@@ -1472,6 +1888,74 @@
     const closePopup = () => setPopup(null);
     function stageRows(stage) {
       return orders.filter((o) => (o.stage || o.status) === stage);
+    }
+    if (popup && popup.type === "stage") {
+      return (
+        <InternalScreen onBack={closePopup} backLabel="Back to tracking" title={"Stage · " + popup.stage} subtitle={(popup.rows || []).length + " order(s)"}
+          breadcrumbs={[{ label: "Order Tracking", onClick: closePopup }, { label: popup.stage }]}>
+          <div className="space-y-2">
+            {(popup.rows || []).map((o) => (
+              <div key={o.id} className="rounded-lg border border-white/10 p-3 text-sm flex flex-wrap items-center gap-3">
+                <button type="button" className="font-mono hover:underline" onClick={() => setPopup({ type: "order", order: o })}>{o.no}</button>
+                <button type="button" className="hover:underline opacity-75" onClick={() => setPopup({ type: "customer", order: o })}>{custName(o.customerId)}</button>
+                <button type="button" className="ml-auto hover:underline opacity-65" onClick={() => setPopup({ type: "value", order: o })}>{inr((o.totals || {}).grand || 0)}</button>
+              </div>
+            ))}
+            {!(popup.rows || []).length && <div className="text-sm opacity-60 text-center py-8">No orders in this stage.</div>}
+          </div>
+        </InternalScreen>
+      );
+    }
+    if (popup && popup.type === "order") {
+      const o = popup.order;
+      const wo = store.list("workOrders").find((w) => w.salesOrderId === o.id);
+      const mr = wo && wo.materialRequirementId ? store.get("materialRequirements", wo.materialRequirementId) : null;
+      const sh = store.list("shipments").filter((x) => x.salesOrderId === o.id);
+      return (
+        <InternalScreen onBack={closePopup} backLabel="Back to tracking" title={"Order · " + o.no} subtitle={custName(o.customerId)}
+          breadcrumbs={[{ label: "Order Tracking", onClick: closePopup }, { label: o.no }]}>
+          <div className="grid sm:grid-cols-2 gap-3 text-sm">
+            <Card className="p-3"><div className="opacity-55 uppercase text-[10px]">Current stage</div><div className="mt-1">{o.stage || o.status}</div></Card>
+            <Card className="p-3"><div className="opacity-55 uppercase text-[10px]">Order value</div><div className="mt-1">{inr((o.totals || {}).grand || 0)}</div></Card>
+            <Card className="p-3"><div className="opacity-55 uppercase text-[10px]">Work order</div><div className="mt-1">{wo ? wo.no + " · " + (wo.status || "") : "Not created"}</div></Card>
+            <Card className="p-3"><div className="opacity-55 uppercase text-[10px]">Material requirement</div><div className="mt-1">{mr ? mr.no + " · " + (mr.status || "") : "Not generated"}</div></Card>
+            <Card className="p-3"><div className="opacity-55 uppercase text-[10px]">Dispatch</div><div className="mt-1">{sh.length ? sh.map((x) => x.no + " (" + x.status + ")").join(", ") : "No shipment yet"}</div></Card>
+            <Card className="p-3"><div className="opacity-55 uppercase text-[10px]">Timeline events</div><div className="mt-1">{(o.timeline || []).length}</div></Card>
+          </div>
+        </InternalScreen>
+      );
+    }
+    if (popup && popup.type === "customer") {
+      const o = popup.order;
+      const c = store.get("customers", o.customerId) || {};
+      return (
+        <InternalScreen onBack={closePopup} backLabel="Back to tracking" title={"Customer · " + (c.name || c.legalName || "—")} subtitle={o.no}
+          breadcrumbs={[{ label: "Order Tracking", onClick: closePopup }, { label: o.no, onClick: () => setPopup({ type: "order", order: o }) }, { label: "Customer" }]}>
+          <div className="space-y-2 text-sm w-full">
+            <div><b>Code:</b> {c.code || "—"}</div>
+            <div><b>Contact:</b> {c.contact || "—"}</div>
+            <div><b>Email:</b> {c.email || "—"}</div>
+            <div><b>GSTIN:</b> {c.gstin || "—"}</div>
+            <div><b>City/State:</b> {(c.city || "—") + " / " + (c.state || "—")}</div>
+          </div>
+        </InternalScreen>
+      );
+    }
+    if (popup && popup.type === "value") {
+      const o = popup.order;
+      const t = o.totals || {};
+      return (
+        <InternalScreen onBack={closePopup} backLabel="Back to tracking" title={"Order Value · " + o.no} subtitle={custName(o.customerId)}
+          breadcrumbs={[{ label: "Order Tracking", onClick: closePopup }, { label: o.no, onClick: () => setPopup({ type: "order", order: o }) }, { label: "Value" }]}>
+          <div className="space-y-2 text-sm w-full max-w-xl">
+            <div className="flex justify-between"><span>Taxable</span><b>{inr(t.taxable || 0)}</b></div>
+            <div className="flex justify-between"><span>Tax</span><b>{inr(t.tax || 0)}</b></div>
+            <div className="flex justify-between"><span>Discount</span><b>{inr(t.discount || 0)}</b></div>
+            <div className="flex justify-between"><span>Charges</span><b>{inr(t.charges || 0)}</b></div>
+            <div className="flex justify-between pt-2 border-t border-white/10"><span>Grand Total</span><b>{inr(t.grand || 0)}</b></div>
+          </div>
+        </InternalScreen>
+      );
     }
     return (
       <div>
@@ -1503,68 +1987,6 @@
             );
           })}
         </div>
-        {popup && popup.type === "stage" && (
-          <Modal open onClose={closePopup} size="xl" title={"Stage · " + popup.stage} subtitle={(popup.rows || []).length + " order(s)"}>
-            <div className="space-y-2 max-h-[60vh] overflow-auto pr-1">
-              {(popup.rows || []).map((o) => (
-                <div key={o.id} className="rounded-lg border border-white/10 p-2.5 text-xs flex items-center gap-3">
-                  <button type="button" className="font-mono hover:underline" onClick={() => setPopup({ type: "order", order: o })}>{o.no}</button>
-                  <button type="button" className="hover:underline opacity-75" onClick={() => setPopup({ type: "customer", order: o })}>{custName(o.customerId)}</button>
-                  <button type="button" className="ml-auto hover:underline opacity-65" onClick={() => setPopup({ type: "value", order: o })}>{inr((o.totals || {}).grand || 0)}</button>
-                </div>
-              ))}
-              {!(popup.rows || []).length && <div className="text-xs opacity-60">No orders in this stage.</div>}
-            </div>
-          </Modal>
-        )}
-        {popup && popup.type === "order" && (() => {
-          const o = popup.order;
-          const wo = store.list("workOrders").find((w) => w.salesOrderId === o.id);
-          const mr = wo && wo.materialRequirementId ? store.get("materialRequirements", wo.materialRequirementId) : null;
-          const sh = store.list("shipments").filter((x) => x.salesOrderId === o.id);
-          return (
-            <Modal open onClose={closePopup} size="xl" title={"Order · " + o.no} subtitle={custName(o.customerId)}>
-              <div className="grid sm:grid-cols-2 gap-3 text-xs">
-                <Card className="p-3"><div className="opacity-55 uppercase text-[10px]">Current stage</div><div className="mt-1">{o.stage || o.status}</div></Card>
-                <Card className="p-3"><div className="opacity-55 uppercase text-[10px]">Order value</div><div className="mt-1">{inr((o.totals || {}).grand || 0)}</div></Card>
-                <Card className="p-3"><div className="opacity-55 uppercase text-[10px]">Work order</div><div className="mt-1">{wo ? wo.no + " · " + (wo.status || "") : "Not created"}</div></Card>
-                <Card className="p-3"><div className="opacity-55 uppercase text-[10px]">Material requirement</div><div className="mt-1">{mr ? mr.no + " · " + (mr.status || "") : "Not generated"}</div></Card>
-                <Card className="p-3"><div className="opacity-55 uppercase text-[10px]">Dispatch</div><div className="mt-1">{sh.length ? sh.map((x) => x.no + " (" + x.status + ")").join(", ") : "No shipment yet"}</div></Card>
-                <Card className="p-3"><div className="opacity-55 uppercase text-[10px]">Timeline events</div><div className="mt-1">{(o.timeline || []).length}</div></Card>
-              </div>
-            </Modal>
-          );
-        })()}
-        {popup && popup.type === "customer" && (() => {
-          const o = popup.order;
-          const c = store.get("customers", o.customerId) || {};
-          return (
-            <Modal open onClose={closePopup} size="md" title={"Customer · " + (c.name || "—")} subtitle={o.no}>
-              <div className="space-y-2 text-xs">
-                <div><b>Code:</b> {c.code || "—"}</div>
-                <div><b>Contact:</b> {c.contact || "—"}</div>
-                <div><b>Email:</b> {c.email || "—"}</div>
-                <div><b>GSTIN:</b> {c.gstin || "—"}</div>
-                <div><b>City/State:</b> {(c.city || "—") + " / " + (c.state || "—")}</div>
-              </div>
-            </Modal>
-          );
-        })()}
-        {popup && popup.type === "value" && (() => {
-          const o = popup.order;
-          const t = o.totals || {};
-          return (
-            <Modal open onClose={closePopup} size="md" title={"Order Value · " + o.no} subtitle={custName(o.customerId)}>
-              <div className="space-y-2 text-xs">
-                <div className="flex justify-between"><span>Taxable</span><b>{inr(t.taxable || 0)}</b></div>
-                <div className="flex justify-between"><span>Tax</span><b>{inr(t.tax || 0)}</b></div>
-                <div className="flex justify-between"><span>Discount</span><b>{inr(t.discount || 0)}</b></div>
-                <div className="flex justify-between"><span>Charges</span><b>{inr(t.charges || 0)}</b></div>
-                <div className="flex justify-between pt-1 border-t border-white/10"><span>Grand Total</span><b>{inr(t.grand || 0)}</b></div>
-              </div>
-            </Modal>
-          );
-        })()}
       </div>
     );
   }
@@ -1573,9 +1995,8 @@
     VG.useDB();
     const rows = store.list("orderHistory").slice().reverse();
     return (
-      <div>
-        <PageHead title="Order History" desc="Closed orders with full lifecycle timeline and activity log" />
-        <RecordTable title="Closed orders" columns={[
+      <ListPage title="Order History" desc="Closed orders with full lifecycle timeline and activity log" can={can}>
+        <RecordTable embedded suppressNew title="Order History List" columns={[
           { key: "salesOrderNo", label: "Sales Order", render: (r) => <span className="font-mono text-xs">{r.salesOrderNo}</span> },
           { key: "closureDate", label: "Closure date" },
           { key: "customerId", label: "Customer", render: (r) => custName(r.customerId), csv: (r) => custName(r.customerId) },
@@ -1589,7 +2010,7 @@
             inner: `<table class="vg-tbl"><thead><tr><th>Time</th><th>Action</th><th>User</th><th>Details</th></tr></thead><tbody>${html || "<tr><td colspan='4'>No timeline entries</td></tr>"}</tbody></table>`,
           }, "preview");
         }} empty="No closed orders yet" />
-      </div>
+      </ListPage>
     );
   }
 
@@ -1610,91 +2031,131 @@
       else { store.create("priceList", { ...form, currency: "INR" }, roleKey); VG.toast("Price added"); }
       setEdit(null);
     }
+    const priceFields = [{ k: "itemId", l: "Item", master: "items", req: true }, { k: "listRate", l: "List rate (₹)", num: true, req: true }, { k: "minRate", l: "Floor rate (₹)", num: true }, { k: "effective", l: "Effective date", date: true }];
+    if (edit) {
+      return <MasterForm title="Price" open onClose={() => setEdit(null)} record={edit} onSave={save} fields={priceFields} roleKey={roleKey} can={can} />;
+    }
     return (
-      <div>
-        <PageHead title="Price List Management" desc="Approved list & floor rates per item" />
-        <RecordTable title="Price list" columns={cols} rows={rows} can={can} printTitle="Price List" searchKeys={["item"]}
-          onNew={() => setEdit({ effective: today() })} newLabel="New Price" onEdit={can("edit") ? (r) => setEdit(r) : null}
+      <ListPage title="Price List Management" desc="Approved list & floor rates per item" onNew={() => setEdit({ effective: today() })} newLabel="Add Price" can={can}>
+        <RecordTable embedded suppressNew title="Price List" columns={cols} rows={rows} can={can} printTitle="Price List" searchKeys={["item"]}
+          onNew={() => setEdit({ effective: today() })} onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete price?", danger: true, confirmLabel: "Delete" })) { store.remove("priceList", r.id, roleKey); VG.toast("Deleted"); } } : null} />
-        {edit && <MasterForm title="Price" open onClose={() => setEdit(null)} record={edit} onSave={save}
-          fields={[{ k: "itemId", l: "Item", master: "items", req: true }, { k: "listRate", l: "List rate (₹)", num: true, req: true }, { k: "minRate", l: "Floor rate (₹)", num: true }, { k: "effective", l: "Effective date", date: true }]} roleKey={roleKey} can={can} />}
-      </div>
+      </ListPage>
     );
   }
 
-  function DiscountsPage({ roleKey, can }) {
+  function DiscountsPage({ roleKey, can, go }) {
+    return <ApprovalCenterPage roleKey={roleKey} can={can} go={go} filter="quotations" />;
+  }
+
+  function ApprovalCenterPage({ roleKey, can, go, filter }) {
     VG.useDB();
-    const pending = store.list("quotations").filter((q) => q.status === "Pending Approval");
-    function approve(q) { store.update("quotations", q.id, { status: "Approved", approvedBy: roleKey, discountApproved: true }, roleKey); VG.toast("Approved " + q.no); }
-    function reject(q) { store.update("quotations", q.id, { status: "Draft" }, roleKey); VG.toast("Sent back to draft", "warn"); }
+    const [remarks, setRemarks] = useState({});
+    const engine = VG.approvalEngine;
+    const requests = engine ? engine.listPending(filter) : [];
+    const legacyQuotes = (!filter || filter === "quotations") ? store.list("quotations").filter((q) => q.status === "Pending Approval" && !(engine && engine.findOpenRequest("quotations", q.id))) : [];
+    const legacyRevs = (!filter || filter === "revisions") ? store.list("salesOrders").filter((o) => o.revisionPendingApproval) : [];
+
+    function approveReq(req) {
+      const rm = remarks[req.id] || "";
+      const r = engine.approveRequest(req.id, roleKey, rm);
+      if (r.reason === "remarks_required") return VG.toast("Remarks required", "warn");
+      if (!r.ok) return VG.toast("Cannot approve", "error");
+      VG.toast(req.entityNo + (r.done ? " approved" : " — level " + (r.level || "") + " pending"));
+    }
+    function rejectReq(req) {
+      const rm = remarks[req.id] || window.prompt("Rejection reason:", "") || "";
+      engine.rejectRequest(req.id, roleKey, rm);
+      VG.toast("Rejected", "warn");
+    }
+    function approveQuote(q) {
+      const rm = remarks[q.id] || "";
+      if (engine) engine.approveQuotation(q.id, roleKey, rm);
+      else store.update("quotations", q.id, { status: "Approved", approvedBy: roleKey, discountApproved: true }, roleKey);
+      VG.toast("Approved " + q.no);
+    }
+    function rejectQuote(q) {
+      const rm = remarks[q.id] || window.prompt("Reason:", "") || "";
+      if (engine) engine.rejectQuotation(q.id, roleKey, rm);
+      else store.update("quotations", q.id, { status: "Draft" }, roleKey);
+      VG.toast("Sent back to draft", "warn");
+    }
+
+    const total = requests.length + legacyQuotes.length + legacyRevs.length;
     return (
       <div>
-        <PageHead title="Discount Approval" desc={"Quotations with discount above " + DISCOUNT_LIMIT + "% need approval"} />
-        {pending.length === 0 ? <Card className="p-10 text-center opacity-60">No pending discount approvals</Card> : (
-          <div className="space-y-3">{pending.map((q) => { const t = computeQuote(q); const dpct = t.sub ? (t.discount / t.sub * 100).toFixed(1) : 0; return (
-            <Card key={q.id} className="p-4 flex flex-wrap items-center gap-4">
-              <div className="flex-1 min-w-[200px]"><div className="font-mono text-sm">{q.no}</div><div className="opacity-70 text-sm">{custName(q.customerId)} · {inr(t.grand)}</div></div>
-              <Pill color="#f59e0b">discount {dpct}%</Pill>
-              {can("approve") ? <div className="flex gap-2"><Button icon="check" onClick={() => approve(q)}>Approve</Button><Button variant="soft" onClick={() => reject(q)}>Reject</Button></div> : <Pill>view only — no approval rights</Pill>}
-            </Card>); })}</div>
-        )}
-      </div>
-    );
-  }
-
-  function RevisionApprovalPage({ roleKey, can }) {
-    VG.useDB();
-    const [tick, setTick] = useState(0);
-    const pending = store.list("salesOrders").filter((o) => o.revisionPendingApproval).slice().reverse();
-    function approve(o) {
-      store.approveSalesOrderRevision(o.id, roleKey);
-      VG.toast("Revision approved and production notified");
-      setTick((x) => x + 1);
-    }
-    function reject(o) {
-      const reason = window.prompt("Reason for rejection (optional):", "") || "";
-      store.rejectSalesOrderRevision(o.id, roleKey, reason);
-      VG.toast("Revision rejected", "warn");
-      setTick((x) => x + 1);
-    }
-    return (
-      <div key={tick}>
-        <PageHead title="Revision Approval Queue" desc="Approve post-send sales order revisions and notify production" />
-        {pending.length === 0 ? <Card className="p-10 text-center opacity-60">No pending sales order revisions</Card> : (
+        <PageHead title="Approval Center" desc="Multi-level quotation discount and sales order revision approvals" />
+        <div className="flex flex-wrap gap-2 mb-4">
+          <Pill color="#f59e0b">{total} pending</Pill>
+          {go && <Button variant="soft" onClick={() => go("discounts")}>Discount queue</Button>}
+          {go && <Button variant="soft" onClick={() => go("revisions")}>Revision queue</Button>}
+        </div>
+        {total === 0 ? <Card className="p-10 text-center opacity-60">No pending approvals</Card> : (
           <div className="space-y-3">
-            {pending.map((o) => (
-              <Card key={o.id} className="p-4">
-                <div className="flex flex-wrap items-start gap-3">
-                  <div className="flex-1 min-w-[240px]">
-                    <div className="font-mono text-sm">{o.no}</div>
-                    <div className="opacity-70 text-sm mt-1">{custName(o.customerId)} · Rev {o.revisionNo || 0}</div>
-                    <div className="opacity-55 text-xs mt-1">Delivery: {o.deliveryDate || "—"} · Priority: {o.priority || "Normal"}</div>
-                    <div className="opacity-55 text-xs mt-1">{(o.technicalSpec || "").slice(0, 140) || "No technical spec"}{(o.technicalSpec || "").length > 140 ? "..." : ""}</div>
-                  </div>
-                  <Pill color="#f59e0b">Pending approval</Pill>
-                  {can("approve") ? (
-                    <div className="flex gap-2">
-                      <Button icon="check" onClick={() => approve(o)}>Approve</Button>
-                      <Button variant="soft" onClick={() => reject(o)}>Reject</Button>
+            {requests.map((req) => {
+              const wf = engine.workflowFor(req.process);
+              const q = req.entityType === "quotations" ? store.get("quotations", req.entityId) : null;
+              const t = q ? computeQuote(q) : null;
+              return (
+                <Card key={req.id} className="p-4">
+                  <div className="flex flex-wrap items-start gap-3">
+                    <div className="flex-1 min-w-[220px]">
+                      <div className="font-mono text-sm">{req.entityNo || req.entityId}</div>
+                      <div className="opacity-70 text-sm mt-1">{req.process} · {inr(req.amount)}</div>
+                      <div className="opacity-55 text-xs mt-1">Level {req.currentLevel} of {req.levels} · {req.status}{q ? " · " + custName(q.customerId) : ""}</div>
+                      {t && <Pill color="#f59e0b" className="mt-2">discount {t.sub ? (t.discount / t.sub * 100).toFixed(1) : 0}%</Pill>}
                     </div>
-                  ) : <Pill>view only — no approval rights</Pill>}
-                </div>
-                {(o.revisionHistory || []).length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-white/10">
-                    <div className="text-[11px] uppercase opacity-60 mb-2">Revision history</div>
-                    <div className="space-y-1">
-                      {(o.revisionHistory || []).slice().reverse().slice(0, 3).map((h, i) => (
-                        <div key={i} className="text-xs opacity-75">Rev {h.rev} · {new Date(h.ts || Date.now()).toLocaleString()} · {h.by}</div>
+                    {can("approve") && engine.canApprove(roleKey, wf) ? (
+                      <div className="flex flex-col gap-2 min-w-[200px]">
+                        <Text value={remarks[req.id] || ""} onChange={(v) => setRemarks((m) => ({ ...m, [req.id]: v }))} placeholder={wf && wf.remarksMandatory ? "Remarks required" : "Remarks (optional)"} />
+                        <div className="flex gap-2">
+                          <Button icon="check" onClick={() => approveReq(req)}>Approve</Button>
+                          <Button variant="soft" onClick={() => rejectReq(req)}>Reject</Button>
+                        </div>
+                      </div>
+                    ) : <Pill>view only</Pill>}
+                  </div>
+                  {(req.trail || []).length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-white/10 text-xs opacity-60 space-y-1">
+                      {(req.trail || []).slice(-3).map((h, i) => (
+                        <div key={i}>L{h.level} {h.action} · {h.by} · {new Date(h.at).toLocaleString()}</div>
                       ))}
                     </div>
+                  )}
+                </Card>
+              );
+            })}
+            {legacyQuotes.map((q) => {
+              const t = computeQuote(q);
+              const dpct = t.sub ? (t.discount / t.sub * 100).toFixed(1) : 0;
+              return (
+                <Card key={q.id} className="p-4 flex flex-wrap items-center gap-4">
+                  <div className="flex-1 min-w-[200px]"><div className="font-mono text-sm">{q.no}</div><div className="opacity-70 text-sm">{custName(q.customerId)} · {inr(t.grand)}</div></div>
+                  <Pill color="#f59e0b">discount {dpct}%</Pill>
+                  {can("approve") ? <div className="flex gap-2"><Button icon="check" onClick={() => approveQuote(q)}>Approve</Button><Button variant="soft" onClick={() => rejectQuote(q)}>Reject</Button></div> : <Pill>view only</Pill>}
+                </Card>
+              );
+            })}
+            {legacyRevs.map((o) => (
+              <Card key={o.id} className="p-4 flex flex-wrap items-center gap-4">
+                <div className="flex-1"><div className="font-mono text-sm">{o.no}</div><div className="opacity-70 text-sm">{custName(o.customerId)} · Rev {o.revisionNo || 0}</div></div>
+                <Pill color="#f59e0b">SO revision</Pill>
+                {can("approve") ? (
+                  <div className="flex gap-2">
+                    <Button icon="check" onClick={() => { store.approveSalesOrderRevision(o.id, roleKey); VG.toast("Approved"); }}>Approve</Button>
+                    <Button variant="soft" onClick={() => { store.rejectSalesOrderRevision(o.id, roleKey, ""); VG.toast("Rejected", "warn"); }}>Reject</Button>
                   </div>
-                )}
+                ) : <Pill>view only</Pill>}
               </Card>
             ))}
           </div>
         )}
       </div>
     );
+  }
+
+  function RevisionApprovalPage({ roleKey, can, go }) {
+    return <ApprovalCenterPage roleKey={roleKey} can={can} go={go} filter="revisions" />;
   }
 
   function CommsPage({ roleKey, can }) {
@@ -1710,15 +2171,16 @@
       if (!form.customerId) return VG.toast("Select customer from master", "error");
       store.create("communications", { ...form, by: roleKey }, roleKey); VG.toast("Logged"); setEdit(null);
     }
+    const commFields = [{ k: "customerId", l: "Customer", master: "customers", req: true }, { k: "date", l: "Date", date: true }, { k: "mode", l: "Mode", select: ["Call", "Email", "Visit", "Meeting", "WhatsApp"] }, { k: "subject", l: "Subject", full: true }, { k: "note", l: "Note", area: true, full: true }];
+    if (edit) {
+      return <MasterForm title="Communication" open onClose={() => setEdit(null)} record={edit} onSave={save} fields={commFields} roleKey={roleKey} can={can} />;
+    }
     return (
-      <div>
-        <PageHead title="Communication History" desc="Every customer interaction, logged" />
+      <ListPage title="Communication History" desc="Every customer interaction, logged" onNew={() => setEdit({ date: today(), mode: "Call" })} newLabel="Log Communication" can={can}>
         {VG.CustomerFilterBanner ? <VG.CustomerFilterBanner /> : null}
-        <RecordTable title="Communications" columns={cols} rows={rows} can={can} printTitle="Communication History" searchKeys={["subject", "note", "mode"]}
-          onNew={() => setEdit({ date: today(), mode: "Call" })} newLabel="Log communication" />
-        {edit && <MasterForm title="Communication" open onClose={() => setEdit(null)} record={edit} onSave={save}
-          fields={[{ k: "customerId", l: "Customer", master: "customers", req: true }, { k: "date", l: "Date", date: true }, { k: "mode", l: "Mode", select: ["Call", "Email", "Visit", "Meeting", "WhatsApp"] }, { k: "subject", l: "Subject", full: true }, { k: "note", l: "Note", area: true, full: true }]} roleKey={roleKey} can={can} />}
-      </div>
+        <RecordTable embedded suppressNew title="Communication List" columns={cols} rows={rows} can={can} printTitle="Communication History" searchKeys={["subject", "note", "mode"]}
+          onNew={() => setEdit({ date: today(), mode: "Call" })} />
+      </ListPage>
     );
   }
 
@@ -1728,7 +2190,14 @@
     const reports = [
       { n: "Quotation Register", run: () => fx.printTable("Quotation Register", [{ key: "no", label: "No" }, { key: "c", label: "Customer", csv: (r) => custName(r.customerId) }, { key: "date", label: "Date" }, { key: "v", label: "Value", csv: (r) => inr((r.totals || computeQuote(r)).grand) }, { key: "status", label: "Status" }], quotes) },
       { n: "Sales Order Register", run: () => fx.printTable("Sales Order Register", [{ key: "no", label: "No" }, { key: "c", label: "Customer", csv: (r) => custName(r.customerId) }, { key: "date", label: "Date" }, { key: "v", label: "Value", csv: (r) => inr((r.totals || {}).grand || 0) }, { key: "status", label: "Status" }], orders) },
-      { n: "Tax Invoice Register", run: () => fx.printTable("Tax Invoice Register", [{ key: "no", label: "No" }, { key: "so", label: "SO", csv: (r) => r.salesOrderNo }, { key: "c", label: "Customer", csv: (r) => custName(r.customerId) }, { key: "date", label: "Date" }, { key: "v", label: "Amount", csv: (r) => r.amount }, { key: "einv", label: "E-Invoice", csv: (r) => (r.eInvoice && r.eInvoice.irn) ? "Yes" : "No" }, { key: "eway", label: "E-way", csv: (r) => (r.ewayBill && r.ewayBill.no) || r.ewayBillNo || "—" }, { key: "status", label: "Status" }], store.list("invoices")) },
+      { n: "Tax Invoice Register", run: () => fx.printTable("Tax Invoice Register", [{ key: "no", label: "No" }, { key: "type", label: "Type", csv: (r) => VG.invoiceTypeLabel ? VG.invoiceTypeLabel(r) : "Domestic" }, { key: "curr", label: "Currency", csv: (r) => r.currency || "INR" }, { key: "so", label: "SO", csv: (r) => r.salesOrderNo }, { key: "c", label: "Customer", csv: (r) => custName(r.customerId) }, { key: "date", label: "Date" }, { key: "v", label: "Amount", csv: (r) => r.amount }, { key: "inr", label: "INR Eq.", csv: (r) => (r.fxTotals && r.fxTotals.grandTotalInr) || r.amount }, { key: "fx", label: "FX Rate", csv: (r) => r.exchangeRate || 1 }, { key: "einv", label: "E-Invoice", csv: (r) => (r.eInvoice && r.eInvoice.irn) ? "Yes" : "No" }, { key: "status", label: "Status" }], store.list("invoices")) },
+      { n: "Export Invoice Register", run: () => fx.printTable("Export Invoice Register", [{ key: "no", label: "No" }, { key: "c", label: "Customer", csv: (r) => custName(r.customerId) }, { key: "country", label: "Buyer country", csv: (r) => r.buyerCountry }, { key: "curr", label: "Currency", csv: (r) => r.currency }, { key: "v", label: "Amount (FCY)", csv: (r) => r.amount }, { key: "inr", label: "INR Eq.", csv: (r) => (r.fxTotals && r.fxTotals.grandTotalInr) || "" }, { key: "lut", label: "LUT", csv: (r) => r.lutNumber || "—" }, { key: "inc", label: "Incoterms", csv: (r) => r.incoterms || "—" }], store.list("invoices").filter((i) => VG.isExportInvoiceType && VG.isExportInvoiceType(i.invoiceType))) },
+      { n: "Currency-wise Sales Report", run: () => { const m = {}; store.list("invoices").forEach((i) => { const c = i.currency || "INR"; m[c] = (m[c] || 0) + (Number(i.amount) || 0); }); fx.printTable("Currency-wise Sales", [{ key: "c", label: "Currency" }, { key: "v", label: "Total (FCY)" }], Object.keys(m).map((c) => ({ c, v: m[c] }))); } },
+      { n: "Exchange Rate Report", run: () => fx.printTable("Exchange Rate Report", [{ key: "no", label: "Invoice" }, { key: "curr", label: "Currency", csv: (r) => r.currency }, { key: "rate", label: "Rate", csv: (r) => r.exchangeRate }, { key: "date", label: "Rate date", csv: (r) => r.exchangeRateDate }, { key: "src", label: "Source", csv: (r) => r.exchangeRateSource }], store.list("invoices").filter((i) => i.currency && i.currency !== "INR")) },
+      { n: "LUT-wise Export Report", run: () => fx.printTable("LUT-wise Export Report", [{ key: "lut", label: "LUT No.", csv: (r) => r.lutNumber || "—" }, { key: "no", label: "Invoice" }, { key: "c", label: "Customer", csv: (r) => custName(r.customerId) }, { key: "v", label: "Amount", csv: (r) => r.amount }, { key: "decl", label: "Declaration", csv: (r) => (r.exportDeclaration || "").slice(0, 60) }], store.list("invoices").filter((i) => i.lutNumber || i.gstTreatment === "lut_without_igst")) },
+      { n: "Country-wise Export Sales", run: () => { const m = {}; store.list("invoices").filter((i) => VG.isExportInvoiceType && VG.isExportInvoiceType(i.invoiceType)).forEach((i) => { const k = i.buyerCountry || i.countryOfFinalDestination || "—"; m[k] = (m[k] || 0) + (Number((i.fxTotals && i.fxTotals.grandTotalInr) || i.amount) || 0); }); fx.printTable("Country-wise Export Sales (INR)", [{ key: "country", label: "Country" }, { key: "inr", label: "INR Total" }], Object.keys(m).map((country) => ({ country, inr: m[country] }))); } },
+      { n: "Customer-wise Export Sales", run: () => fx.printTable("Customer-wise Export Sales", [{ key: "c", label: "Customer", csv: (r) => custName(r.customerId) }, { key: "no", label: "Invoice" }, { key: "curr", label: "Currency", csv: (r) => r.currency }, { key: "fcy", label: "FCY Amount", csv: (r) => r.amount }, { key: "inr", label: "INR Eq.", csv: (r) => (r.fxTotals && r.fxTotals.grandTotalInr) || "" }], store.list("invoices").filter((i) => VG.isExportInvoiceType && VG.isExportInvoiceType(i.invoiceType))) },
+      { n: "Foreign Currency Receivables", run: () => fx.printTable("Foreign Currency Receivables", [{ key: "no", label: "Invoice" }, { key: "c", label: "Customer", csv: (r) => custName(r.customerId) }, { key: "curr", label: "Currency", csv: (r) => r.currency }, { key: "bal", label: "Balance (FCY)", csv: (r) => (Number(r.amount) || 0) - (Number(r.amountPaid) || 0) }, { key: "inr", label: "INR Eq.", csv: (r) => { const bal = (Number(r.amount) || 0) - (Number(r.amountPaid) || 0); const fx = r.exchangeRate || 1; return Math.round(bal * fx * 100) / 100; } }], store.list("invoices").filter((i) => i.currency && i.currency !== "INR" && i.status !== "Paid")) },
       { n: "Won / Lost Analysis", run: () => fx.printTable("Won / Lost Analysis", [{ key: "no", label: "No" }, { key: "c", label: "Customer", csv: (r) => custName(r.customerId) }, { key: "status", label: "Status" }], quotes.filter((q) => q.status === "Won" || q.status === "Lost")) },
       { n: "Customer Master", run: () => fx.printTable("Customer Master", [{ key: "code", label: "Code" }, { key: "name", label: "Name" }, { key: "gstin", label: "GSTIN" }, { key: "state", label: "State" }], store.list("customers")) },
     ];
@@ -1772,7 +2241,7 @@
     }
     return (
       <Modal open={open} onClose={onClose} size="md" dirty={dirty} title={(record && record.id ? "Edit " : "New ") + title}
-        footer={<><Button variant="soft" onClick={onClose}>Close</Button><Button icon="check" onClick={submit}>Save</Button></>}>
+        actions={<Button icon="check" onClick={submit}>Save</Button>}>
         <div className="grid sm:grid-cols-2 gap-3">
           {fields.map((f) => (
             <Field key={f.k} label={f.l} required={f.req} error={err[f.k]} className={f.full || f.area ? "sm:col-span-2" : ""}>
@@ -1797,7 +2266,9 @@
     { id: "enquiries", label: "Enquiries", icon: "message", group: "Sales & CRM" },
     { id: "leads", label: "Leads", icon: "inbox", group: "Sales & CRM" },
     { id: "followups", label: "Follow-ups", icon: "bell", group: "Sales & CRM" },
+    { id: "commcenter", label: "Comm. Center", icon: "message", group: "Sales & CRM" },
     { id: "comms", label: "Communication", icon: "headset", group: "Sales & CRM" },
+    { id: "approvals", label: "Approval Center", icon: "shield", group: "Sales & CRM" },
     { id: "quotations", label: "Quotations", icon: "edit", group: "Sales & CRM" },
     { id: "proformas", label: "Proforma Invoice", icon: "rupee", group: "Sales & CRM" },
     { id: "invoices", label: "Tax Invoices", icon: "rupee", group: "Sales & CRM" },
@@ -1809,6 +2280,9 @@
     { id: "pricelist", label: "Price List", icon: "rupee", group: "Setup" },
     { id: "currencies", label: "Currencies", icon: "rupee", group: "Setup" },
     { id: "pincodes", label: "PIN Codes", icon: "grid", group: "Setup" },
+    { id: "intelligence", label: "AI Intelligence", icon: "sparkle", group: "Intelligence" },
+    { id: "analytics", label: "Analytics", icon: "trending", group: "Reports" },
+    { id: "forecast", label: "Forecasting", icon: "chart", group: "Intelligence" },
     { id: "reports", label: "Reports", icon: "chart", group: "Reports" },
   ];
   if (VG.registerModuleSections) VG.registerModuleSections("sales", SECTIONS);
@@ -1817,7 +2291,14 @@
     customers: (p) => React.createElement(VG.CustomersPage, p),
     currencies: (p) => React.createElement(VG.CustomerPages.currencies, p),
     pincodes: (p) => React.createElement(VG.CustomerPages.pincodes, p),
-    pricelist: PriceListPage, leads: LeadsPage, enquiries: (p) => React.createElement(VG.EnquiriesPage, p), followups: FollowupsPage, comms: CommsPage, quotations: QuotationsPage, discounts: DiscountsPage, revisions: RevisionApprovalPage, proformas: ProformasPage, invoices: InvoicesPage, orders: OrdersPage, tracking: TrackingPage, history: OrderHistoryPage, reports: ReportsPage,
+    pricelist: PriceListPage, leads: LeadsPage, enquiries: (p) => React.createElement(VG.EnquiriesPage, p), followups: FollowupsPage,
+    commcenter: (p) => React.createElement(VG.CommunicationCenterPage, p),
+    comms: CommsPage, approvals: ApprovalCenterPage, quotations: QuotationsPage, discounts: DiscountsPage, revisions: RevisionApprovalPage,
+    proformas: ProformasPage, invoices: InvoicesPage, orders: OrdersPage, tracking: TrackingPage, history: OrderHistoryPage,
+    intelligence: (p) => React.createElement(VG.SalesIntelligencePage, p),
+    analytics: (p) => React.createElement(VG.SalesAnalyticsPage, p),
+    forecast: (p) => React.createElement(VG.SalesForecastingPage, p),
+    reports: ReportsPage,
   };
 
   VG.modules = VG.modules || {};

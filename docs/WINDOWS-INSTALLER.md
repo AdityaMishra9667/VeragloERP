@@ -42,8 +42,9 @@ Output is the same path. If the build fails, use a Windows machine or GitHub Act
 1. Copy `Veraglo-ERP-Setup-1.0.0.exe` (USB, network share, etc.).
 2. Run the installer → choose install folder → finish.
 3. Launch **Veraglo ERP** from Desktop or Start Menu.
-4. First run: **14-day trial** or enter **Serial + License code** from Admin → Generate License.
-5. Sign in with any demo role (password pre-filled).
+4. First run: click **Continue with 14-day evaluation trial** on the activation screen (or enter Serial + License code).
+5. On **Create administrator**, set your email and password (there are no default logins on a new install).
+6. Sign in with the account you just created.
 
 ## What is included
 
@@ -72,6 +73,8 @@ The `.exe` installer is intended for **single-PC** or **one install per machine*
 | Port in use | Set env `VERAGLO_PORT=3848` before starting |
 | Blank window | Wait 10s; check firewall allows localhost |
 | Reset data | Delete `%APPDATA%\Veraglo ERP\VeragloERP\data` |
+| Cannot sign in after deploy | Fresh installs have **no pre-set password**. Use **Create administrator** on first launch, or on the server run `cd server && npm run db:reset-admin` |
+| Stuck on activation | Click **Continue with 14-day evaluation trial** |
 
 ## Code signing (optional)
 

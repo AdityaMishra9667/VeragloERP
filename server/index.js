@@ -6,14 +6,218 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { access, constants } from "fs/promises";
 import * as db from "./db.js";
+import { createAdminUser, generatePassword, hasLoginUsers } from "./auth-utils.js";
+import { ensureDeploymentReady } from "./first-run.js";
+import * as weather from "./weather.js";
+import * as passwordReset from "./password-reset.js";
+import { sendMail } from "./mail.js";
+import * as portal from "./portal.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.join(__dirname, "..");
+const indexHtmlPath = path.join(rootDir, "index.html");
 const PORT = Number(process.env.PORT || 3000);
 
 const app = express();
 app.use(cors({ origin: process.env.CORS_ORIGIN || true }));
 app.use(express.json({ limit: "25mb" }));
+
+/** Public auth / first-run diagnostics for login troubleshooting. */
+app.get("/api/auth/status", async (_req, res) => {
+  try {
+    const state = (await db.getState()) || { _v: 11, settings: { activation: {} }, erpUsers: [] };
+    const ready = ensureDeploymentReady(state);
+    const act = (ready.settings && ready.settings.activation) || {};
+    const today = new Date().toISOString().slice(0, 10);
+    const trialValid = act.trialEndsAt && act.trialEndsAt >= today;
+    const licensed =
+      act.status === "Trial" && trialValid
+      || (act.status === "Active" && !!act.licenseKeyId)
+      || (!act.licenseKeyId && trialValid);
+    res.json({
+      ok: true,
+      storage: db.storageMode(),
+      hasUsers: hasLoginUsers(ready),
+      needsSetup: !hasLoginUsers(ready),
+      licensed,
+      trialEndsAt: act.trialEndsAt || null,
+      activationStatus: act.status || "unknown",
+      hint: !hasLoginUsers(ready)
+        ? "First launch: use Create administrator on the login screen, or POST /api/setup/bootstrap-admin"
+        : "Sign in with the email and password from Admin → Users",
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+/**
+ * Create the first administrator when no login users exist (fresh GitHub / server deploy).
+ * Safe to call only on empty installations — returns 403 once users exist.
+ */
+app.post("/api/setup/bootstrap-admin", async (req, res) => {
+  try {
+    await db.ensureSchema();
+    let state = await db.getState();
+    if (!state || !state._v) {
+      state = {
+        _v: 11,
+        seq: { USR: 0 },
+        erpUsers: [],
+        customRoles: [],
+        locations: [{ id: "loc1", name: "Main Warehouse", locType: "Warehouse", status: "Active" }],
+        settings: { activation: { status: "Trial" }, security: { minPasswordLength: 8 } },
+        connectedSessions: [],
+        revokedSessions: [],
+        auditLog: [],
+      };
+    }
+    state = ensureDeploymentReady(state);
+    if (hasLoginUsers(state)) {
+      return res.status(403).json({
+        error: "users_exist",
+        message: "An administrator already exists. Sign in with that account or run: cd server && npm run db:reset-admin",
+      });
+    }
+    const body = req.body || {};
+    const creds = await createAdminUser(state, {
+      email: body.email || process.env.ADMIN_EMAIL || "admin@veraglo.com",
+      password: body.password || process.env.ADMIN_PASSWORD || generatePassword(),
+      name: body.name || process.env.ADMIN_NAME || "System Administrator",
+    });
+    state.auditLog = (state.auditLog || []).concat({
+      id: "A-bootstrap-" + Date.now(),
+      ts: Date.now(),
+      actor: "system",
+      action: "create",
+      entity: "erpUsers",
+      refId: creds.userId,
+      summary: "Bootstrap administrator: " + creds.email,
+    });
+    await db.saveState(state);
+    res.status(201).json({
+      ok: true,
+      email: creds.email,
+      password: creds.password,
+      userId: creds.userId,
+      message: "Administrator created — sign in with these credentials and change the password in Admin → Users",
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "bootstrap_failed", message: e.message });
+  }
+});
+
+/** Forgot password — public, rate-limited, no user enumeration. */
+app.get("/api/auth/forgot-password/settings", async (_req, res) => {
+  try {
+    const state = (await db.getState()) || {};
+    const cfg = passwordReset.forgotPasswordSettings(state);
+    res.json({
+      ok: true,
+      enabled: cfg.enabled,
+      otpExpiryMins: cfg.otpExpiryMins,
+      linkExpiryMins: cfg.linkExpiryMins,
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post("/api/auth/forgot-password/request", async (req, res) => {
+  try {
+    const state = (await db.getState()) || { _v: 11, erpUsers: [], settings: {} };
+    const baseUrl = process.env.APP_URL || `${req.protocol}://${req.get("host")}`;
+    const result = await passwordReset.requestPasswordReset(state, {
+      identifier: req.body && req.body.identifier,
+      ip: req.ip || req.headers["x-forwarded-for"] || "",
+      baseUrl,
+    });
+    if (result.disabled) return res.status(403).json(result);
+    await db.saveState(state);
+    res.json(result);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ ok: false, error: "request_failed" });
+  }
+});
+
+app.post("/api/auth/forgot-password/verify-otp", async (req, res) => {
+  try {
+    const state = (await db.getState()) || { passwordResetRequests: [] };
+    const result = passwordReset.verifyResetOtp(state, {
+      requestId: req.body && req.body.requestId,
+      otp: req.body && req.body.otp,
+      ip: req.ip || "",
+    });
+    await db.saveState(state);
+    if (!result.ok) return res.status(400).json(result);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post("/api/auth/forgot-password/verify-link", async (req, res) => {
+  try {
+    const state = (await db.getState()) || { passwordResetRequests: [] };
+    const token = (req.body && req.body.token) || req.query.token;
+    const result = passwordReset.verifyResetLink(state, { token, ip: req.ip || "" });
+    await db.saveState(state);
+    if (!result.ok) return res.status(400).json(result);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post("/api/auth/forgot-password/reset", async (req, res) => {
+  try {
+    const state = (await db.getState()) || { erpUsers: [] };
+    const result = await passwordReset.completePasswordReset(state, {
+      requestId: req.body && req.body.requestId,
+      password: req.body && req.body.password,
+      ip: req.ip || "",
+    });
+    await db.saveState(state);
+    if (!result.ok) return res.status(400).json(result);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+/** Login weather theme — public, cached, non-blocking for sign-in. */
+app.get("/api/weather/settings", async (_req, res) => {
+  try {
+    const state = (await db.getState()) || {};
+    res.json({ ok: true, ...weather.weatherLoginSettings(state) });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get("/api/weather/current", async (req, res) => {
+  try {
+    const state = (await db.getState()) || {};
+    const cfg = weather.weatherLoginSettings(state);
+    if (!cfg.enabled) {
+      return res.json({ ok: false, disabled: true, reason: "Weather login theme disabled" });
+    }
+    const source = req.query.source || cfg.locationSource || "company";
+    const data = await weather.getCurrentWeather({
+      source,
+      state,
+      manualCity: req.query.city || cfg.manualCity,
+      lat: req.query.lat,
+      lon: req.query.lon,
+      city: req.query.city,
+    });
+    res.json({ ...data, settings: { wallpapers: cfg.wallpapers, defaultWallpaper: cfg.defaultWallpaper } });
+  } catch (e) {
+    res.status(200).json({ ok: false, error: e.message, unavailable: true });
+  }
+});
 
 app.get("/api/health", async (_req, res) => {
   try {
@@ -113,6 +317,44 @@ app.get("/api/sessions", async (_req, res) => {
   }
 });
 
+/** Customer portal — public quotation view (token in link). */
+app.get("/api/portal/quote/:token", async (req, res) => {
+  try {
+    const state = (await db.getState()) || {};
+    res.json(portal.portalQuotePayload(state, req.params.token));
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post("/api/portal/view/:token", async (req, res) => {
+  try {
+    const state = (await db.getState()) || {};
+    const link = portal.recordPortalView(state, req.params.token, {
+      userAgent: req.headers["user-agent"] || "",
+      ip: req.ip || "",
+    });
+    if (!link) return res.status(404).json({ ok: false, error: "not_found" });
+    await db.saveState(state);
+    res.json({ ok: true, views: (link.views || []).length });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+/** Send notification email via SMTP settings in ERP state. */
+app.post("/api/notifications/send", async (req, res) => {
+  try {
+    const { to, subject, text, html } = req.body || {};
+    if (!to || !subject) return res.status(400).json({ ok: false, error: "to and subject are required" });
+    const state = (await db.getState()) || { settings: { notifications: {} } };
+    const result = await sendMail(state, { to, subject, text: text || "", html });
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 /** Validate local/network data folder (server-side when path exists on host). */
 app.post("/api/datapath/validate", async (req, res) => {
   const folder = String((req.body && req.body.path) || "").trim();
@@ -145,13 +387,37 @@ app.use(express.static(rootDir, { etag: false, maxAge: 0, setHeaders(res, filePa
   }
 }}));
 
+app.get("/portal.html", (_req, res) => {
+  const portalPath = path.join(rootDir, "portal.html");
+  if (fs.existsSync(portalPath)) res.sendFile(portalPath);
+  else res.status(404).send("Portal not found");
+});
+
 app.get("*", (_req, res) => {
-  res.sendFile(path.join(rootDir, "index.html"));
+  if (!fs.existsSync(indexHtmlPath)) {
+    res.status(503).type("html").send(
+      "<!doctype html><html><body><h1>Frontend not found</h1>"
+      + "<p>Expected <code>index.html</code> at " + indexHtmlPath + "</p>"
+      + "<p>Run the server from the repository root branch and use <code>cd server && npm start</code>.</p>"
+      + "</body></html>"
+    );
+    return;
+  }
+  res.sendFile(indexHtmlPath);
 });
 
 async function start() {
   try {
+    if (!fs.existsSync(indexHtmlPath)) {
+      console.error("FATAL: index.html not found at " + indexHtmlPath);
+      console.error("  Run from the Veraglo ERP repo root. Expected layout: index.html + src/ + server/");
+      process.exit(1);
+    }
     await db.ensureSchema();
+    const existing = await db.getState();
+    if (existing && existing._v) {
+      await db.saveState(ensureDeploymentReady(existing));
+    }
     const h = await db.healthCheck();
     const mode = db.storageMode();
     console.log(`Veraglo ERP API listening on http://localhost:${PORT}`);
@@ -160,9 +426,11 @@ async function start() {
   } catch (e) {
     console.error("Server startup failed:", e.message);
     if (db.storageMode() === "postgresql") {
-      console.error("  docker compose up -d");
-      console.error("  cp server/.env.example server/.env");
-      console.error("  Or set USE_FILE_STORAGE=1 for desktop / portable mode");
+      console.error("");
+      console.error("Fix options:");
+      console.error("  1. Start Postgres:  docker compose up -d");
+      console.error("  2. No Docker:       USE_FILE_STORAGE=1 ./start.sh");
+      console.error("  3. Diagnose:        ./scripts/check-localhost.sh");
     }
     process.exit(1);
   }

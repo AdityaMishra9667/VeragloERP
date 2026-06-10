@@ -265,7 +265,7 @@
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-[11px] uppercase tracking-wider opacity-55 border-y border-white/10">
+              <tr className="vg-table-head-row text-left text-[11px] uppercase tracking-wider">
                 <th className="px-4 py-2.5 font-medium">ID</th>
                 <th className="px-4 py-2.5 font-medium">Description</th>
                 <th className="px-4 py-2.5 font-medium hidden md:table-cell">Owner</th>
@@ -276,7 +276,7 @@
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} className="border-b border-white/5 hover:bg-white/5 transition">
+                <tr key={r.id} className="vg-table-row border-b border-white/5">
                   <td className="px-4 py-3 font-mono text-xs opacity-70">{r.id}</td>
                   <td className="px-4 py-3 max-w-[280px] truncate">{r.label}</td>
                   <td className="px-4 py-3 hidden md:table-cell opacity-75">{r.owner}</td>
@@ -344,7 +344,7 @@
 
   /* Per-module banner palette + scene description (acts like a photographic hero). */
   const BANNERS = {
-    sales: { c1: "#4f46e5", c2: "#06b6d4", desc: "Win more deals — manage leads, quotations, orders and customer relationships in one place." },
+    sales: { c1: "#4f46e5", c2: "#06b6d4", desc: "Manage enquiries, quotations, sales orders and customer relationships from one connected workspace." },
     enquiry: { c1: "#0284c7", c2: "#22d3ee", desc: "Capture every enquiry and nurture it into a qualified opportunity." },
     inventory: { c1: "#059669", c2: "#10b981", desc: "Real-time stock across stores, racks and bins with auto reorder alerts." },
     purchase: { c1: "#d97706", c2: "#f59e0b", desc: "From requisition to purchase order to goods receipt — fully tracked procurement." },
@@ -358,34 +358,43 @@
     reports: { c1: "#2563eb", c2: "#3b82f6", desc: "Cross-module analytics, scheduled reports and exportable insights." },
     admin: { c1: "#475569", c2: "#64748b", desc: "Users, roles, company profile, backups and the full system audit trail." },
   };
-  function ModuleBanner({ mod, actions }) {
+  function isDashboardSection(sectionId) {
+    return sectionId === "dashboard";
+  }
+  VG.isDashboardSection = isDashboardSection;
+
+  function ModuleBreadcrumb({ mod, sectionLabel, groupLabel, onHome }) {
+    return (
+      <nav className="vg-module-crumb vg-workspace-inset flex flex-wrap items-center gap-1.5 text-[11px] pt-2 pb-1 opacity-60" aria-label="Breadcrumb">
+        <button type="button" onClick={onHome} className="hover:opacity-100 transition font-medium" style={{ color: "var(--accent)" }}>
+          {mod.name}
+        </button>
+        <Icon name="chevronRight" size={12} className="opacity-35 shrink-0" />
+        {groupLabel && groupLabel !== "Overview" && (
+          <>
+            <span>{groupLabel}</span>
+            <Icon name="chevronRight" size={12} className="opacity-35 shrink-0" />
+          </>
+        )}
+        <span className="font-semibold opacity-90">{sectionLabel}</span>
+      </nav>
+    );
+  }
+  VG.ModuleBreadcrumb = ModuleBreadcrumb;
+
+  function ModuleBanner({ mod }) {
     const b = BANNERS[mod.id] || { c1: mod.accent, c2: "#22d3ee", desc: mod.tagline };
     const img = (VG.MODULE_BANNER_IMG && VG.MODULE_BANNER_IMG[mod.id]) || null;
     return (
-      <div className="vg-module-banner relative overflow-hidden rounded-2xl mb-4 shadow-glass animate-fade-up min-h-[132px] sm:min-h-[148px]">
+      <div className="vg-module-banner relative overflow-hidden w-full animate-fade-up">
         {img && <img src={img} alt="" className="absolute inset-0 w-full h-full object-cover" loading="lazy" decoding="async" />}
-        <div className="absolute inset-0" style={{ background: `linear-gradient(105deg, ${b.c1}e6 0%, ${b.c2}bb 45%, rgba(8,13,24,.88) 100%)` }} />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/20" />
-        <Icon name={mod.icon} size={180} className="absolute -right-6 -bottom-10 text-white/10 pointer-events-none hidden sm:block" />
-        <div className="relative p-4 sm:p-6 text-white">
-          <div className="flex items-center gap-2 mb-1.5">
-            <span className="grid place-items-center w-10 h-10 rounded-xl bg-white/20 backdrop-blur shrink-0">
-              <Icon name={mod.icon} size={20} />
-            </span>
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-white/85">{mod.category}</span>
-          </div>
-          <h1 className="text-xl sm:text-2xl font-display font-bold leading-tight drop-shadow-md">{mod.name}</h1>
-          <p className="mt-1 text-sm text-white/90 max-w-2xl leading-relaxed">{b.desc}</p>
-          {actions && actions.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {actions.map((a) => (
-                <button key={a.label} type="button" onClick={a.onClick}
-                  className={"inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-medium transition hover:-translate-y-0.5 " + (a.primary ? "bg-white text-slate-900 hover:bg-white/95 shadow-md" : "bg-white/15 text-white hover:bg-white/25 backdrop-blur border border-white/20")}>
-                  {a.icon && <Icon name={a.icon} size={15} />}{a.label}
-                </button>
-              ))}
-            </div>
-          )}
+        <div className="absolute inset-0" style={{ background: `linear-gradient(105deg, ${b.c1}d9 0%, ${b.c2}a8 42%, rgba(8,13,24,.82) 100%)` }} />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/10" />
+        <Icon name={mod.icon} size={140} className="absolute -right-4 -bottom-8 text-white/[0.08] pointer-events-none hidden md:block" />
+        <div className="relative px-5 py-5 sm:px-6 sm:py-6 text-white">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/70 mb-2">{mod.category || "Module"}</p>
+          <h1 className="text-xl sm:text-[1.65rem] font-display font-bold leading-tight tracking-tight drop-shadow-sm">{mod.name}</h1>
+          <p className="mt-1.5 text-sm text-white/88 max-w-2xl leading-relaxed">{b.desc}</p>
         </div>
       </div>
     );
@@ -396,7 +405,7 @@
     return (
       <div className="flex flex-wrap items-center justify-between gap-2 mb-2 animate-fade-up">
         <div className="flex items-center gap-2.5 min-w-0">
-          <span className="grid place-items-center w-10 h-10 rounded-xl text-white shadow-md shrink-0" style={{ background: mod.accent }}>
+          <span className="grid place-items-center w-10 h-10 rounded-xl text-white shrink-0" style={{ background: mod.accent }}>
             <Icon name={mod.icon} size={18} />
           </span>
           <div className="min-w-0">
@@ -468,17 +477,23 @@
     }, [mod.id, section, setSection]);
 
     const current = visibleSections.find((s) => s.id === section);
+    const isDashboard = isDashboardSection(section);
     return (
-      <div className="animate-fade-up">
-        <ModuleBanner mod={mod} actions={actions} />
-        {section !== "dashboard" && current && (
-          <div className="mb-3 px-1 flex items-center gap-2 text-xs opacity-55">
-            <Icon name="grid" size={14} />
-            <span>{current.label}</span>
-            <span className="opacity-40">· use left menu to switch</span>
-          </div>
-        )}
-        {children}
+      <div className={"vg-workspace-fade" + (isDashboard ? " vg-dash-shell" : " vg-full-width-workspace vg-internal-workspace")}>
+        {isDashboard ? (
+          <>
+            <ModuleBanner mod={mod} />
+            <div className="vg-dash-body">{children}</div>
+          </>
+        ) : current ? (
+          <ModuleBreadcrumb
+            mod={mod}
+            sectionLabel={current.label}
+            groupLabel={current.group}
+            onHome={() => setSection("dashboard")}
+          />
+        ) : null}
+        {!isDashboard ? <div className="vg-list-page-host w-full max-w-none">{children}</div> : null}
       </div>
     );
   }
@@ -486,15 +501,15 @@
 
   /* Cross-module deep-linking: VG.goTo("quality","inspections") opens that
      module on that section. Modules call VG.consumeSection(id, fallback). */
-  VG.goTo = function (module, section, opts) {
-    VG._pendingSection = { module, section };
+  VG.goTo = function (modId, section, opts) {
+    VG._pendingSection = { module: modId, section: section };
     if (opts && opts.customerId) {
       VG._pendingCustomerFilter = { customerId: opts.customerId, label: opts.label || "" };
     }
-    if (VG._openModule) VG._openModule(module);
-    if (VG._activeModuleNav && VG._activeModuleNav.modId === module && VG._activeModuleNav.setSection) {
+    if (VG._openModule) VG._openModule(modId);
+    if (VG._activeModuleNav && VG._activeModuleNav.modId === modId && VG._activeModuleNav.setSection) {
       VG._activeModuleNav.setSection(section);
-      VG.publishModuleNav(module, section, VG._activeModuleNav.setSection);
+      VG.publishModuleNav(modId, section, VG._activeModuleNav.setSection);
     }
   };
   VG.consumeSection = function (modId, fallback) {
@@ -544,19 +559,12 @@
     const isAnalytics = /analytic/i.test(tab);
 
     return (
-      <div className="animate-fade-up">
-        <ModuleBanner mod={mod} actions={[
-          ...(can("add") && mod.shortcuts ? [{ label: mod.shortcuts[0], icon: "plus", primary: true, onClick: () => setTab(mod.tabs[1] || mod.tabs[0]) }] : []),
-          { label: "Reports", icon: "chart", onClick: () => setTab(mod.tabs.find((t) => /report/i.test(t)) || mod.tabs[0]) },
-        ]} />
-
-        {isOverview && (
-          <div className="space-y-6 max-w-[1600px]">
-            <div>
-              <h2 className="text-xl font-display font-bold">{mod.name}</h2>
-              <p className="text-sm opacity-55 mt-0.5">{mod.tagline}</p>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className={"animate-fade-up" + (isOverview ? " vg-dash-shell" : " vg-full-width-workspace vg-internal-workspace")}>
+        {isOverview ? (
+          <>
+            <ModuleBanner mod={mod} />
+            <div className="vg-dash-body space-y-5 w-full max-w-none">
+            <div className="grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-4 gap-3 vg-kpi-grid">
               {mod.kpis.map((k, i) => (
                 <KpiCard key={k.label} kpi={k} delay={i * 60} />
               ))}
@@ -574,7 +582,15 @@
                 <div className="mt-3"><ActivityFeed activities={mod.activities} /></div>
               </Card>
             )}
-          </div>
+            </div>
+          </>
+        ) : (
+          <ModuleBreadcrumb
+            mod={mod}
+            sectionLabel={tab}
+            groupLabel="Views"
+            onHome={() => setTab(mod.tabs[0])}
+          />
         )}
 
         {!isOverview && isReports && <ReportsView mod={mod} can={can} />}

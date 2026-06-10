@@ -2,7 +2,7 @@
    master-data dropdowns (with inline create), validated fields, the record
    table (search / filter / export / print), and printable documents. VG.fx */
 (function (VG) {
-  const { useState, useEffect, useLayoutEffect, useRef, useMemo } = React;
+  const { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } = React;
   const { Icon, Button, Pill, Card } = VG.ui;
   const store = VG.store;
 
@@ -22,9 +22,9 @@
     return (
       <div className="fixed bottom-5 right-5 z-[100] space-y-2 w-[min(92vw,360px)]">
         {toastBus.items.map((t) => (
-          <div key={t.id} className="glass-dark rounded-xl shadow-glass p-3 flex items-start gap-2.5 animate-fade-up">
+          <div key={t.id} className="vg-toast-item glass-dark rounded-xl shadow-glass p-3 flex items-start gap-2.5 animate-fade-up">
             <Icon name={t.type === "error" ? "alert" : t.type === "warn" ? "alert" : "check"} size={16} style={{ color: color[t.type] }} />
-            <div className="text-sm flex-1">{t.message}</div>
+            <div className="flex-1">{t.message}</div>
           </div>
         ))}
       </div>
@@ -36,7 +36,7 @@
   const confirmSubs = new Set();
   VG.confirm = function (opts) {
     return new Promise((resolve) => {
-      confirmState = { title: "Are you sure?", message: "", confirmLabel: "Confirm", danger: false, ...opts, resolve };
+      confirmState = { title: "Are you sure?", message: "", confirmLabel: "Confirm", cancelLabel: "Cancel", danger: false, ...opts, resolve };
       confirmSubs.forEach((f) => f());
     });
   };
@@ -47,71 +47,118 @@
     const s = confirmState;
     const done = (val) => { const r = s.resolve; confirmState = null; set((v) => v + 1); r(val); };
     return (
-      <div className="fixed inset-0 z-[110] grid place-items-center p-4 bg-black/50" onMouseDown={() => done(false)}>
-        <div className="glass-dark rounded-2xl shadow-glass p-5 w-[min(92vw,420px)] animate-scale-in" onMouseDown={(e) => e.stopPropagation()}>
-          <h3 className="text-lg font-semibold font-display">{s.title}</h3>
-          {s.message && <p className="text-sm opacity-70 mt-2">{s.message}</p>}
-          <div className="flex justify-end gap-2 mt-5">
-            <Button variant="soft" onClick={() => done(false)}>Cancel</Button>
-            <button onClick={() => done(true)} className="inline-flex items-center gap-2 rounded-xl text-sm font-medium px-3.5 py-2 text-white" style={{ background: s.danger ? "#ef4444" : "var(--accent)" }}>{s.confirmLabel}</button>
+      <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[120] w-[min(92vw,420px)] animate-fade-up" role="dialog" aria-live="polite">
+        <div className={"vg-confirm-panel glass-dark rounded-xl shadow-glass border p-4 " + (s.danger ? "border-rose-500/35" : "border-white/10")}>
+          <div className="flex items-start gap-3">
+            <span className="grid place-items-center w-8 h-8 rounded-lg shrink-0" style={{ background: s.danger ? "rgba(239,68,68,.2)" : "var(--accent-soft)" }}>
+              <Icon name={s.danger ? "alert" : "shield"} size={16} style={{ color: s.danger ? "#f87171" : "var(--accent)" }} />
+            </span>
+            <div className="flex-1 min-w-0">
+              <h3 className="font-semibold font-display">{s.title}</h3>
+              {s.message && <p className="mt-1 leading-relaxed">{s.message}</p>}
+              <div className="flex justify-end gap-2 mt-3">
+                <Button variant="soft" className="!py-1.5" onClick={() => done(false)}>{s.cancelLabel || "Cancel"}</Button>
+                <button type="button" onClick={() => done(true)} className="inline-flex items-center gap-2 rounded-xl font-medium px-3 py-1.5 text-white" style={{ background: s.danger ? "#ef4444" : "var(--accent)", fontSize: "var(--vg-fs-button)" }}>{s.confirmLabel}</button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
     );
   }
 
-  /* ============ Modal ============
-     Standard ERP modal: sticky header + footer, scrollable body, optional
-     near-full-screen size, and an unsaved-changes guard. ESC behaviour:
-       • clean form  → ESC closes immediately
-       • dirty form  → 1st ESC arms a warning, 2nd ESC (or "Close without saving") closes
-  */
-  function Modal({ open, onClose, title, subtitle, children, footer, size = "lg", dirty = false }) {
-    const [guard, setGuard] = useState(false);
-    useEffect(() => { if (open) setGuard(false); }, [open]);
-    useEffect(() => {
-      if (!open) return;
-      const h = (e) => {
-        if (e.key !== "Escape") return;
-        e.preventDefault();
-        if (!dirty) { onClose(); return; }
-        setGuard((g) => { if (g) { onClose(); return false; } return true; });
+  /* ============ Success / info banner (non-modal) ============ */
+  let bannerState = null;
+  const bannerSubs = new Set();
+  VG.showBanner = function (opts) {
+    return new Promise((resolve) => {
+      bannerState = {
+        type: opts.type || "success",
+        title: opts.title || "",
+        message: opts.message || "",
+        duration: opts.duration != null ? opts.duration : 5000,
+        resolve,
       };
-      document.addEventListener("keydown", h);
-      return () => document.removeEventListener("keydown", h);
-    }, [open, dirty, onClose]);
-    if (!open) return null;
-    const requestClose = () => { if (dirty) setGuard(true); else onClose(); };
-    const w = { sm: "max-w-md", md: "max-w-2xl", lg: "max-w-4xl", xl: "max-w-6xl", full: "max-w-[1400px]" }[size] || "max-w-4xl";
-    const tall = size === "full";
-    const overlay = (
-      <div className="fixed inset-0 z-[90] flex items-stretch sm:items-center justify-center p-2 sm:p-4 bg-black/55" onMouseDown={requestClose}>
-        <div className={"glass-dark vg-app-shell rounded-2xl shadow-glass w-full flex flex-col max-h-[96vh] " + w + (tall ? " sm:h-[94vh]" : "") + " animate-scale-in relative"} onMouseDown={(e) => e.stopPropagation()}>
-          <div className="flex items-start justify-between gap-4 px-5 py-4 border-b border-white/10 shrink-0 rounded-t-2xl">
-            <div className="min-w-0">
-              <h3 className="text-lg font-semibold font-display truncate">{title}</h3>
-              {subtitle && <p className="text-xs opacity-60 mt-0.5">{subtitle}</p>}
-            </div>
-            <button onClick={requestClose} title="Close (Esc)" className="p-2 rounded-lg chrome-hover shrink-0"><Icon name="x" size={18} /></button>
+      bannerSubs.forEach((f) => { try { f(); } catch (e) {} });
+      if (opts.toast !== false && opts.message) VG.toast(opts.message, opts.type === "error" ? "error" : opts.type === "warn" ? "warn" : "success");
+      if (bannerState.duration > 0) {
+        setTimeout(() => {
+          if (bannerState && bannerState.resolve === resolve) {
+            const r = bannerState.resolve;
+            bannerState = null;
+            bannerSubs.forEach((f) => { try { f(); } catch (e) {} });
+            r(true);
+          }
+        }, bannerState.duration);
+      }
+    });
+  };
+  function BannerHost() {
+    const [, setTick] = useState(0);
+    useEffect(() => {
+      const bump = () => setTick((t) => t + 1);
+      bannerSubs.add(bump);
+      return () => bannerSubs.delete(bump);
+    }, []);
+    if (!bannerState) return null;
+    const s = bannerState;
+    const dismiss = () => {
+      const r = s.resolve;
+      bannerState = null;
+      setTick((t) => t + 1);
+      if (r) r(true);
+    };
+    const colors = { success: "border-emerald-500/35", error: "border-rose-500/35", warn: "border-amber-500/35", info: "border-indigo-500/25" };
+    const iconColor = { success: "#34d399", error: "#f87171", warn: "#f59e0b", info: "#60a5fa" };
+    return (
+      <div className={"fixed top-5 right-5 z-[118] w-[min(92vw,380px)] animate-fade-up glass-dark rounded-xl shadow-glass border p-3 " + (colors[s.type] || colors.info)}>
+        <div className="flex items-start gap-2.5">
+          <Icon name={s.type === "success" ? "check" : s.type === "error" ? "alert" : "info"} size={16} style={{ color: iconColor[s.type] || iconColor.info }} className="shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0 text-sm">
+            {s.title && <div className="font-semibold text-xs">{s.title}</div>}
+            {s.message && <div className={"text-xs opacity-85 " + (s.title ? "mt-0.5" : "")}>{s.message}</div>}
           </div>
-          <div className="px-5 py-4 overflow-y-auto grow">{children}</div>
-          {footer && <div className="flex flex-wrap justify-end gap-2 px-5 py-3.5 border-t border-white/10 shrink-0 rounded-b-2xl bg-black/10">{footer}</div>}
-          {guard && (
-            <div className="absolute inset-0 z-20 grid place-items-center rounded-2xl bg-black/60" onMouseDown={(e) => e.stopPropagation()}>
-              <div className="glass-dark rounded-2xl shadow-glass p-5 w-[min(92%,420px)] animate-scale-in">
-                <div className="flex items-center gap-2 mb-2"><Icon name="alert" size={18} style={{ color: "#f59e0b" }} /><h4 className="font-semibold">Unsaved changes</h4></div>
-                <p className="text-sm opacity-70">You have unsaved changes. Do you want to close without saving? <span className="opacity-50">(Press Esc again to discard.)</span></p>
-                <div className="flex justify-end gap-2 mt-4">
-                  <Button variant="soft" onClick={() => setGuard(false)}>Keep editing</Button>
-                  <button onClick={onClose} className="inline-flex items-center gap-2 rounded-xl text-sm font-medium px-3.5 py-2 text-white" style={{ background: "#ef4444" }}>Close without saving</button>
-                </div>
-              </div>
-            </div>
-          )}
+          <button type="button" onClick={dismiss} className="p-1 rounded-lg opacity-70 hover:opacity-100 shrink-0" title="Dismiss"><Icon name="x" size={14} /></button>
         </div>
       </div>
     );
-    return (ReactDOM && ReactDOM.createPortal) ? ReactDOM.createPortal(overlay, document.body) : overlay;
+  }
+
+  /* Full-page workspace UI — Modal is an alias for inline InternalScreen (no portal overlay). */
+  VG._uiLayout = "premium-full-page";
+
+  /* ============ Modal (legacy name — inline full-width InternalScreen in main workspace) ============ */
+  function Modal({ open, onClose, title, subtitle, children, footer, dirty = false, breadcrumbs, backLabel, actions }) {
+    if (!open) return null;
+    const Screen = VG.InternalScreen;
+    if (Screen) {
+      return (
+        <Screen
+          onBack={onClose}
+          backLabel={backLabel || "Back"}
+          title={title}
+          subtitle={subtitle}
+          footer={footer}
+          actions={actions}
+          dirty={dirty}
+          breadcrumbs={breadcrumbs}
+          className="w-full min-h-0"
+          bodyClassName="w-full"
+        >
+          {children}
+        </Screen>
+      );
+    }
+    return (
+      <div className="vg-internal-screen w-full min-h-0">
+        <div className="flex items-center gap-3 mb-4 border-b border-white/10 pb-3">
+          <div className="flex-1 min-w-0"><h2 className="text-lg font-semibold">{title}</h2>{subtitle && <p className="text-xs opacity-60">{subtitle}</p>}</div>
+          <div className="flex gap-2 shrink-0">{actions}<Button variant="soft" icon="chevronLeft" onClick={onClose}>{backLabel || "Back"}</Button></div>
+        </div>
+        <div className="w-full">{children}</div>
+        {footer && <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-white/10">{footer}</div>}
+      </div>
+    );
   }
 
   /* ============ Fields ============ */
@@ -175,6 +222,19 @@
       ],
     },
     locations: { label: "Location", fields: [{ k: "code", l: "Code", req: true }, { k: "name", l: "Name", req: true }] },
+    itemLocations: {
+      label: "Item Location",
+      fields: [
+        { k: "locationId", l: "Storage location", master: "locations", req: true },
+        { k: "name", l: "Item location name", req: true },
+        { k: "rack", l: "Rack" },
+        { k: "shelf", l: "Shelf" },
+        { k: "bin", l: "Bin" },
+        { k: "zone", l: "Zone" },
+        { k: "description", l: "Description", type: "area" },
+        { k: "status", l: "Status", select: ["Active", "Inactive"], req: true },
+      ],
+    },
     units: { label: "Unit", fields: [{ k: "name", l: "Unit name", req: true }] },
     paymentTerms: { label: "Payment Term", fields: [{ k: "name", l: "Term", req: true }] },
     deliveryTerms: { label: "Delivery Term", fields: [{ k: "name", l: "Term", req: true }] },
@@ -197,7 +257,8 @@
     items: { label: "Item", auto: { skuFromCategory: true }, fields: [
       { k: "categoryId", l: "Category", master: "categories", req: true },
       { k: "skuPreview", l: "SKU (auto-generated)", readonly: true },
-      { k: "name", l: "Description", req: true },
+      { k: "name", l: "Item Name", req: true },
+      { k: "description", l: "Item Description", type: "area" },
       { k: "unit", l: "Unit", select: "units", req: true }, { k: "hsn", l: "HSN / SAC" }, { k: "rate", l: "Rate (₹)", type: "number", req: true },
       { k: "taxId", l: "GST", select: "taxes", req: true }, { k: "reorder", l: "Reorder level", type: "number" }, { k: "minStock", l: "Min stock", type: "number" },
       { k: "locationId", l: "Default location", master: "locations" }, { k: "warranty", l: "Warranty" } ] },
@@ -206,6 +267,7 @@
   const ReactDOM = window.ReactDOM;
 
   function itemSearchHaystack(rec) {
+    if (VG.itemDisplay && VG.itemDisplay.searchHaystack) return VG.itemDisplay.searchHaystack(rec);
     const im = VG.itemMfr;
     const cat = store.get("categories", rec.categoryId);
     return [
@@ -222,6 +284,7 @@
     return cat ? (cat.code || "") + " " + (cat.name || "") : "";
   }
   function itemDropdownLine(rec) {
+    if (VG.itemDisplay && VG.itemDisplay.dropdownLine) return VG.itemDisplay.dropdownLine(rec);
     const im = VG.itemMfr;
     const mfr = (im && im.manufacturerName(rec)) || "—";
     const part = (im && im.partNumber(rec)) || "—";
@@ -240,6 +303,7 @@
   function labelOf(coll, rec) {
     if (!rec) return "";
     if (coll === "items") {
+      if (VG.itemDisplay && VG.itemDisplay.tableLabel) return VG.itemDisplay.tableLabel(rec);
       if (VG.itemMfr && VG.itemMfr.label) return VG.itemMfr.label(rec);
       return rec.sku + " — " + (rec.name || "");
     }
@@ -250,6 +314,10 @@
       return rec.no + (c ? " · " + c.name : "");
     }
     if (coll === "categories") return (rec.code || "") + " · " + (rec.typeCode || "") + " · " + (rec.name || rec.id);
+    if (coll === "itemLocations") {
+      const loc = store.get("locations", rec.locationId);
+      return (rec.code ? rec.code + " · " : "") + (rec.name || "") + (loc ? " @ " + loc.name : "");
+    }
     if (coll === "customers") return (rec.code ? rec.code + " · " : "") + (rec.legalName || rec.name || rec.id);
     return (rec.code ? rec.code + " · " : "") + (rec.name || rec.id);
   }
@@ -276,7 +344,7 @@
       cfg.fields.forEach((f) => { if (f.req && (form[f.k] === undefined || form[f.k] === "")) e[f.k] = "Required"; });
       if (Object.keys(e).length) { setErr(e); return; }
       const payload = { ...form };
-      if (cfg.auto && cfg.auto.code) payload.code = store.nextNo(cfg.auto.code).replace(/\//g, "-");
+      if (cfg.auto && cfg.auto.code) payload.code = store.nextMasterCode ? store.nextMasterCode(cfg.auto.code) : store.nextNo(cfg.auto.code);
       if (collection === "categories") {
         if (!payload.code) payload.code = store.nextCategoryCode();
         payload.typeCode = String(payload.typeCode || "RWM").toUpperCase();
@@ -285,6 +353,10 @@
         if (!payload.code) payload.code = store.nextManufacturerCode();
         payload.active = payload.active !== false;
       }
+      if (collection === "itemLocations") {
+        if (!payload.code) payload.code = store.nextMasterCode ? store.nextMasterCode("ILOC", { collection: "itemLocations", field: "code", pad: 3 }) : ("ILOC" + String((store.list("itemLocations").length || 0) + 1).padStart(3, "0"));
+        payload.status = payload.status || "Active";
+      }
       const rec = store.create(collection, payload, actorRole);
       VG.toast(cfg.label + " added");
       onCreated(rec);
@@ -292,7 +364,7 @@
     }
     return (
       <Modal open={open} onClose={onClose} title={"New " + cfg.label} size="md" dirty={dirty}
-        footer={<><Button variant="soft" onClick={onClose}>Close</Button><Button icon="check" onClick={save}>Save {cfg.label}</Button></>}>
+        actions={<Button icon="check" onClick={save}>Save {cfg.label}</Button>}>
         <div className="grid sm:grid-cols-2 gap-3">
           {cfg.fields.map((f) => (
             <Field key={f.k} label={f.l} required={f.req} error={err[f.k]} className={f.type === "area" ? "sm:col-span-2" : ""}>
@@ -314,10 +386,11 @@
   /* ---- MasterSelect: portal dropdown, smart flip, rich item search ---- */
   function ItemOptionRow({ rec, hi, idx, value, onPick, query, onHover }) {
     const im = VG.itemMfr;
+    const id = VG.itemDisplay;
     const mfr = (im && im.manufacturerName(rec)) || "—";
     const part = (im && im.partNumber(rec)) || "—";
     const stock = itemOnHand(rec);
-    const cat = itemCategoryLabel(rec);
+    const cat = (id && id.categoryName(rec)) || itemCategoryLabel(rec).replace(/^CAT-\d+\s*/, "") || "—";
     const q = (query || "").trim().toLowerCase();
     const mark = (text) => {
       if (!q || !text) return text;
@@ -329,13 +402,9 @@
     return (
       <button type="button" data-idx={idx} onClick={() => onPick(rec)} onMouseEnter={() => onHover(idx)}
         className={"w-full text-left rounded-lg px-3 py-2.5 border border-transparent " + (hi ? "vg-master-option-hi" : "chrome-hover") + (rec.id === value ? " ring-1 ring-white/20" : "")}>
-        <div className="font-mono text-xs font-semibold tracking-tight">{mark(rec.sku)}</div>
-        <div className="text-sm mt-0.5 leading-snug">{mark(rec.name)}</div>
-        <div className="text-[11px] opacity-60 mt-1 flex flex-wrap gap-x-2 gap-y-0.5">
-          <span>{mark(mfr)}</span><span>·</span><span className="font-mono">{mark(part)}</span>
-          <span>·</span><span>Stock: <b>{stock}</b> {rec.unit || "Nos"}</span>
-          {cat && <><span>·</span><span>{cat}</span></>}
-        </div>
+        <div className="text-[11px] opacity-70 font-mono leading-snug">{mark([rec.sku, rec.name || "—", cat, mfr, part, "Stock: " + stock + " " + (rec.unit || "Nos")].join(" | "))}</div>
+        <div className="text-sm mt-1 font-medium leading-snug">{mark(rec.name || "—")}</div>
+        <div className="text-[11px] opacity-55 mt-0.5 font-mono">{mark(rec.sku)}</div>
       </button>
     );
   }
@@ -436,8 +505,13 @@
     };
 
     function triggerText() {
-      if (!selected) return placeholder || (collection === "items" ? "Search SKU, description, MFR…" : "Select from master…");
-      if (isLineItem) return <><span className="font-mono text-xs font-semibold shrink-0">{selected.sku}</span><span className="truncate opacity-80 mx-1.5">—</span><span className="truncate">{selected.name}</span></>;
+      if (!selected) return placeholder || (collection === "items" ? "Search SKU, item name, description, category, MFR…" : "Select from master…");
+      if (isLineItem) return (
+        <span className="flex flex-col items-start min-w-0 leading-tight">
+          <span className="truncate font-medium text-sm w-full">{selected.name || "—"}</span>
+          <span className="font-mono text-[10px] opacity-55 truncate w-full">SKU: {selected.sku || "—"}</span>
+        </span>
+      );
       return labelOf(collection, selected);
     }
 
@@ -446,11 +520,11 @@
         <div className="relative mb-1.5 shrink-0">
           <Icon name="search" size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 opacity-50" />
           <input ref={searchRef} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKey}
-            placeholder={collection === "items" ? "SKU · description · MFR · part no…  ↑↓ Enter" : "Search…  ↑↓ Enter"}
+            placeholder={collection === "items" ? "SKU · item name · description · category · MFR · HSN…  ↑↓ Enter" : "Search…  ↑↓ Enter"}
             className="w-full rounded-lg glass pl-8 pr-2 py-2 text-sm bg-transparent outline-none focus:ring-2" style={ring} />
         </div>
         <div ref={listRef} className="overflow-y-auto overflow-x-hidden flex-1 min-h-0 scroll-smooth space-y-0.5">
-          {filtered.length === 0 && <div className="text-xs opacity-50 px-2 py-3 text-center">No matches — try SKU, description, or manufacturer</div>}
+          {filtered.length === 0 && <div className="text-xs opacity-50 px-2 py-3 text-center">No matches — try SKU, item name, description, category, or manufacturer</div>}
           {filtered.map((r, i) => (
             collection === "items" ? (
               <ItemOptionRow key={r.id} rec={r} hi={i === hi} idx={i} value={value} query={q} onPick={choose} onHover={setHi} />
@@ -495,13 +569,13 @@
   function TransactionLinesShell({ title, onAddLine, addLabel, headerRow, children, minWidth = 1120 }) {
     return (
       <div className="vg-line-table-wrap rounded-xl glass overflow-hidden mb-4 border border-white/5">
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/10 bg-black/15 sticky top-0 z-20 backdrop-blur-md">
+        <div className="vg-line-table-toolbar flex items-center justify-between px-4 py-2.5 sticky top-0 z-20 backdrop-blur-md">
           <span className="text-sm font-semibold">{title || "Line items"}</span>
           {onAddLine && <Button variant="soft" icon="plus" onClick={onAddLine} className="!py-1.5">{addLabel || "Add line"}</Button>}
         </div>
         <div className="overflow-x-auto overflow-y-auto max-h-[min(58vh,540px)] scroll-smooth">
           <table className="vg-line-table w-full text-sm border-separate border-spacing-0" style={{ minWidth }}>
-            <thead className="text-[10px] uppercase tracking-wider opacity-60 sticky top-0 z-10 backdrop-blur-md" style={{ background: "color-mix(in srgb, var(--vg-bg) 92%, transparent)" }}>
+            <thead className="vg-sticky-thead">
               {headerRow}
             </thead>
             <tbody>{children}</tbody>
@@ -527,54 +601,164 @@
     VG.toast("Exported " + filename + ".csv");
   }
 
-  function RecordTable({ title, columns, rows, search = true, searchKeys, filters, can, onView, onEdit, onDelete, onNew, newLabel = "New", extra, printTitle, empty = "No records yet" }) {
-    const [q, setQ] = useState("");
-    const [fil, setFil] = useState({});
+  function RecordTable({
+    tableId, title, columns, rows, search = true, searchKeys, filters, can, onView, onEdit, onDelete, onNew,
+    newLabel = "New", extra, printTitle, empty = "No records yet", pageSize = 75, columnToggle = true,
+    stickyHeader = true, defaultDensity = "comfortable", embedded = false, suppressNew = false,
+  }) {
+    const stateKey = tableId || (title ? "tbl-" + String(title).replace(/\s+/g, "-").toLowerCase() : "");
+    const saved = stateKey && VG.getTableState ? VG.getTableState(stateKey) : {};
+    const [q, setQ] = useState(saved.q || "");
+    const [fil, setFil] = useState(saved.fil || {});
+    const [page, setPage] = useState(saved.page || 0);
+    const [density, setDensity] = useState(saved.density || defaultDensity);
+    const [hiddenCols, setHiddenCols] = useState(saved.hiddenCols || {});
+    const [colWidths, setColWidths] = useState(saved.colWidths || {});
+    const [colMenu, setColMenu] = useState(false);
+    const scrollRef = useRef(null);
+    const resizeRef = useRef(null);
+
+    const persist = useCallback((patch) => {
+      if (!stateKey || !VG.saveTableState) return;
+      VG.saveTableState(stateKey, {
+        q, fil, page, density, hiddenCols, colWidths,
+        scrollTop: scrollRef.current ? scrollRef.current.scrollTop : 0,
+        ...patch,
+      });
+    }, [stateKey, q, fil, page, density, hiddenCols, colWidths]);
+
+    useEffect(() => {
+      if (scrollRef.current && saved.scrollTop) scrollRef.current.scrollTop = saved.scrollTop;
+    }, [stateKey]);
+
+    useEffect(() => { persist(); }, [q, fil, page, density, hiddenCols, colWidths]);
+
     const ql = q.toLowerCase();
     let data = rows;
     if (q) data = data.filter((r) => (searchKeys ? searchKeys.map((k) => r[k]) : Object.values(r)).join(" ").toLowerCase().includes(ql));
     (filters || []).forEach((f) => { if (fil[f.key]) data = data.filter((r) => String(f.get ? f.get(r) : r[f.key]) === fil[f.key]); });
+
+    const totalPages = Math.max(1, Math.ceil(data.length / pageSize));
+    const safePage = Math.min(page, totalPages - 1);
+    useEffect(() => { if (safePage !== page) setPage(safePage); }, [safePage, page]);
+
+    const pageData = data.slice(safePage * pageSize, (safePage + 1) * pageSize);
+    const visibleCols = columns.filter((c) => !hiddenCols[c.key]);
     const showActions = onView || onEdit || onDelete;
+    const cellPy = density === "compact" ? "py-1.5" : "py-3";
+    const headPy = density === "compact" ? "py-1.5" : "py-2.5";
+
+    function startResize(key, e) {
+      e.preventDefault();
+      const startX = e.clientX;
+      const startW = colWidths[key] || 120;
+      resizeRef.current = { key, startX, startW };
+      const onMove = (ev) => {
+        if (!resizeRef.current) return;
+        const w = Math.max(60, resizeRef.current.startW + (ev.clientX - resizeRef.current.startX));
+        setColWidths((s) => ({ ...s, [resizeRef.current.key]: w }));
+      };
+      const onUp = () => {
+        resizeRef.current = null;
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+      };
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    }
+
+    function openViewSafe(r) {
+      if (!onView) return;
+      if (stateKey && VG.getOpenRecord && VG.registerOpenRecord) {
+        const openId = VG.getOpenRecord(stateKey);
+        if (openId === r.id) {
+          onView(r);
+          return;
+        }
+        VG.registerOpenRecord(stateKey, r.id);
+      }
+      persist({ scrollTop: scrollRef.current ? scrollRef.current.scrollTop : 0 });
+      onView(r);
+    }
+
+    const showNew = onNew && can && can("add") && !suppressNew;
+
     return (
-      <Card className="p-0 overflow-hidden">
-        <div className="flex flex-wrap items-center gap-2 p-4">
-          {title && <div className="font-semibold text-sm mr-auto">{title}</div>}
+      <div className={"vg-record-table w-full max-w-none" + (embedded ? " vg-record-table--embedded" : "")}>
+        <div className={"vg-record-table-toolbar flex flex-wrap items-center gap-2 py-2.5 " + (embedded ? "vg-list-page-toolbar" : "vg-workspace-inset py-3")}>
+          {title && <div className="font-semibold text-sm mr-auto text-[var(--vg-heading)]">{title}</div>}
           {search && (
             <div className="relative">
               <Icon name="search" size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 opacity-50" />
-              <input value={q} onChange={(e) => setQ(e.target.value)} className="rounded-lg glass pl-8 pr-3 py-2 text-sm bg-transparent outline-none placeholder:opacity-40 w-40 sm:w-56" placeholder="Search…" />
+              <input value={q} onChange={(e) => { setQ(e.target.value); setPage(0); }} className="rounded-lg glass pl-8 pr-3 py-2 text-sm bg-transparent outline-none placeholder:opacity-40 w-40 sm:w-56" placeholder="Search…" />
             </div>
           )}
           {(filters || []).map((f) => (
-            <select key={f.key} value={fil[f.key] || ""} onChange={(e) => setFil((s) => ({ ...s, [f.key]: e.target.value }))} className="vg-input rounded-lg glass px-2.5 py-2 text-sm outline-none">
+            <select key={f.key} value={fil[f.key] || ""} onChange={(e) => { setFil((s) => ({ ...s, [f.key]: e.target.value })); setPage(0); }} className="vg-input rounded-lg glass px-2.5 py-2 text-sm outline-none">
               <option value="" className="vg-option">{f.label}</option>
               {f.options.map((o) => <option key={o.value || o} value={o.value || o} className="vg-option">{o.label || o}</option>)}
             </select>
           ))}
-          <div className="flex items-center gap-2 ml-auto">
+          <div className="flex items-center gap-1.5 ml-auto flex-wrap justify-end">
+            <div className="flex rounded-lg glass overflow-hidden text-[11px]">
+              <button type="button" onClick={() => setDensity("compact")} className={"px-2 py-1.5 " + (density === "compact" ? "bg-white/15" : "opacity-55")} title="Compact rows">Compact</button>
+              <button type="button" onClick={() => setDensity("comfortable")} className={"px-2 py-1.5 " + (density === "comfortable" ? "bg-white/15" : "opacity-55")} title="Comfortable rows">Comfort</button>
+            </div>
+            {columnToggle && columns.length > 2 && (
+              <div className="relative">
+                <Button variant="ghost" icon="grid" className="!py-1.5 !text-xs" onClick={() => setColMenu((v) => !v)}>Columns</Button>
+                {colMenu && (
+                  <div className="absolute right-0 top-full mt-1 z-30 glass-dark rounded-xl shadow-glass p-2 min-w-[160px] text-xs" onMouseLeave={() => setColMenu(false)}>
+                    {columns.map((c) => (
+                      <label key={c.key} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer">
+                        <input type="checkbox" checked={!hiddenCols[c.key]} onChange={() => setHiddenCols((s) => ({ ...s, [c.key]: !s[c.key] }))} />
+                        {c.label || c.key}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             {extra}
-            {can && can("export") && <Button variant="soft" icon="download" className="hidden sm:inline-flex" onClick={() => exportCSV((printTitle || title || "export").replace(/\s+/g, "-"), columns, data)}>Export</Button>}
-            {can && can("print") && <Button variant="ghost" icon="printer" className="hidden md:inline-flex" onClick={() => printTable(printTitle || title, columns, data)}>Print</Button>}
-            {onNew && can && can("add") && <Button icon="plus" onClick={onNew}>{newLabel}</Button>}
+            {can && can("export") && <Button variant="soft" icon="download" className="hidden sm:inline-flex" onClick={() => exportCSV((printTitle || title || "export").replace(/\s+/g, "-"), visibleCols, data)}>Export</Button>}
+            {can && can("print") && <Button variant="ghost" icon="printer" className="hidden md:inline-flex" onClick={() => printTable(printTitle || title, visibleCols, data)}>Print</Button>}
+            {showNew && <Button icon="plus" onClick={onNew}>{newLabel}</Button>}
           </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-[11px] uppercase tracking-wider opacity-55 border-y border-white/10">
-                {columns.map((c) => <th key={c.key} className={"px-4 py-2.5 font-medium " + (c.thClass || "")}>{c.label}</th>)}
-                {showActions && <th className="px-4 py-2.5 font-medium text-right">Actions</th>}
+        <div
+          ref={scrollRef}
+          className={"overflow-auto vg-record-table-scroll " + (stickyHeader ? "max-h-[min(72vh,calc(100dvh-14rem))]" : "")}
+          onScroll={() => { if (stateKey) persist(); }}
+        >
+          <table className="w-full text-sm vg-data-table" style={{ minWidth: "100%" }}>
+            <thead className={stickyHeader ? "vg-sticky-thead" : ""}>
+              <tr className="vg-table-head-row text-left text-[11px] uppercase tracking-wider">
+                {visibleCols.map((c) => (
+                  <th
+                    key={c.key}
+                    className={"px-3 sm:px-4 font-medium relative select-none " + headPy + " " + (c.thClass || "")}
+                    style={colWidths[c.key] ? { width: colWidths[c.key], minWidth: colWidths[c.key] } : undefined}
+                  >
+                    <span className="pr-2">{c.label}</span>
+                    <span
+                      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-white/20"
+                      onMouseDown={(e) => startResize(c.key, e)}
+                      title="Resize column"
+                    />
+                  </th>
+                ))}
+                {showActions && <th className={"px-3 sm:px-4 font-medium text-right " + headPy}>Actions</th>}
               </tr>
             </thead>
             <tbody>
-              {data.length === 0 && <tr><td colSpan={columns.length + 1} className="px-4 py-10 text-center opacity-50">{empty}</td></tr>}
-              {data.map((r) => (
-                <tr key={r.id} className="border-b border-white/5 chrome-hover transition">
-                  {columns.map((c) => <td key={c.key} className={"px-4 py-3 " + (c.tdClass || "")}>{c.render ? c.render(r) : r[c.key]}</td>)}
+              {pageData.length === 0 && <tr><td colSpan={visibleCols.length + (showActions ? 1 : 0)} className="px-4 py-10 text-center opacity-50">{empty}</td></tr>}
+              {pageData.map((r) => (
+                <tr key={r.id} className="vg-table-row border-b border-white/5">
+                  {visibleCols.map((c) => <td key={c.key} className={"px-3 sm:px-4 " + cellPy + " " + (c.tdClass || "")} style={colWidths[c.key] ? { width: colWidths[c.key], minWidth: colWidths[c.key] } : undefined}>{c.render ? c.render(r) : r[c.key]}</td>)}
                   {showActions && (
-                    <td className="px-4 py-3">
+                    <td className={"px-3 sm:px-4 " + cellPy}>
                       <div className="flex items-center justify-end gap-1.5 opacity-80">
-                        {onView && <button title="View" onClick={() => onView(r)} className="p-1 rounded chrome-hover"><Icon name="eye" size={15} /></button>}
+                        {onView && <button title="View" onClick={() => openViewSafe(r)} className="p-1 rounded chrome-hover"><Icon name="eye" size={15} /></button>}
                         {onEdit && can && can("edit") && <button title="Edit" onClick={() => onEdit(r)} className="p-1 rounded chrome-hover"><Icon name="edit" size={15} /></button>}
                         {onDelete && can && can("delete") && <button title="Delete" onClick={() => onDelete(r)} className="p-1 rounded chrome-hover hover:text-rose-400"><Icon name="trash" size={15} /></button>}
                       </div>
@@ -585,8 +769,17 @@
             </tbody>
           </table>
         </div>
-        {data.length > 0 && <div className="px-4 py-2.5 text-[11px] opacity-50 border-t border-white/10">{data.length} record{data.length > 1 ? "s" : ""}</div>}
-      </Card>
+        <div className={(embedded ? "vg-list-page-footer" : "vg-workspace-inset") + " px-0 py-2.5 text-[11px] opacity-50 border-t border-white/10 flex flex-wrap items-center gap-2 justify-between"}>
+          <span>{data.length} record{data.length !== 1 ? "s" : ""}{data.length !== rows.length ? " (filtered)" : ""}</span>
+          {totalPages > 1 && (
+            <div className="flex items-center gap-2">
+              <button type="button" disabled={safePage <= 0} onClick={() => setPage((p) => Math.max(0, p - 1))} className="px-2 py-1 rounded glass disabled:opacity-30">Prev</button>
+              <span>Page {safePage + 1} / {totalPages}</span>
+              <button type="button" disabled={safePage >= totalPages - 1} onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))} className="px-2 py-1 rounded glass disabled:opacity-30">Next</button>
+            </div>
+          )}
+        </div>
+      </div>
     );
   }
 
@@ -611,11 +804,12 @@
   function companyFooter() {
     const c = store.company();
     const terms = c.terms || c.docFooter || "";
-    return `<div class="vg-foot"><div>${c.bank || c.bankName || ""}${c.ifsc ? " · IFSC " + c.ifsc : ""}</div><div>${terms}</div><div>© ${new Date().getFullYear()} ${c.legalName || c.name}${c.jurisdiction ? " · " + c.jurisdiction : ""}</div></div>`;
+    return `<div class="vg-foot vg-foot-document-end"><div>${terms}</div><div>© ${new Date().getFullYear()} ${c.legalName || c.name}${c.jurisdiction ? " · " + c.jurisdiction : ""}</div></div>`;
   }
   function buildPrintCSS() {
     const base = VG.printBaseCSS ? VG.printBaseCSS() : "*{box-sizing:border-box;font-family:Inter,Arial,sans-serif}";
-    return `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');` + base + `
+    const footerCss = VG.printFooterRepeatCSS ? VG.printFooterRepeatCSS(10.5, 14) : "";
+    return `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');` + base + footerCss + `
     body{margin:0;color:#0f172a}
     .vg-page{padding:28px 32px}
     .vg-head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #6366f1;padding-bottom:14px;margin-bottom:18px}
@@ -643,8 +837,7 @@
     .vg-bar button{background:#6366f1;color:#fff;border:0;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer}
     .vg-bar button.ghost{background:rgba(255,255,255,.14)}
     .vg-bar .tip{opacity:.75;font-size:12px}
-    @page{margin:14mm}
-    @media print{.vg-page{padding:0}.vg-bar{display:none!important}}
+    @media print{.vg-page{padding:0;padding-bottom:26mm!important}.vg-bar{display:none!important}}
   `;
   }
   const printCSS = buildPrintCSS();
@@ -655,12 +848,17 @@
     const tip = mode === "download" ? '<span class="tip">To download: choose <b>“Save as PDF”</b> as the destination.</span>' : '<span class="tip">Use your browser’s print dialog to print or save as PDF.</span>';
     const bar = `<div class="vg-bar"><button onclick="window.print()">🖨 Print / Save as PDF</button><button class="ghost" onclick="window.close()">Close</button>${tip}</div>`;
     const css = buildPrintCSS();
-    w.document.write(`<!doctype html><html><head><title>${title}</title><style>${css}</style></head><body>${bar}<div class="vg-page">${companyHeader()}${inner}${companyFooter()}</div><script>window.onload=function(){${auto ? "setTimeout(function(){window.print()},300)" : ""}}<\/script></body></html>`);
+    const repeatFooter = VG.buildRepeatingPrintFooter
+      ? VG.buildRepeatingPrintFooter({}, { docType: title, subtitle: "" })
+      : "";
+    w.document.write(`<!doctype html><html><head><title>${title}</title><style>${css}</style></head><body>${bar}<div class="vg-page">${companyHeader()}${inner}${companyFooter()}</div>${repeatFooter}<script>window.onload=function(){${auto ? "setTimeout(function(){window.print()},300)" : ""}}<\/script></body></html>`);
     w.document.close();
   }
   function printDocument({ title, subtitle, inner, docType, templateId, copies, useIntlLayout }, mode = "print") {
+    let tid = templateId;
+    if (!tid && docType && store.getSelectedTemplateId) tid = store.getSelectedTemplateId(docType);
     if (VG.printStyledDocument) {
-      VG.printStyledDocument({ title, subtitle, inner, docType, templateId, copies, useIntlLayout }, mode);
+      VG.printStyledDocument({ title, subtitle, inner, docType, templateId: tid, copies, useIntlLayout }, mode);
       return;
     }
     openPrint(title, `<h1 class="vg-title">${title}</h1>${subtitle ? `<div class="vg-sub">${subtitle}</div>` : ""}${inner}`, mode);
@@ -669,48 +867,134 @@
     const cols = columns.filter((c) => c.key !== "_actions");
     const head = cols.map((c) => `<th>${c.label}</th>`).join("");
     const body = rows.map((r) => "<tr>" + cols.map((c) => `<td>${c.print ? c.print(r) : (c.csv ? c.csv(r) : (r[c.key] ?? ""))}</td>`).join("") + "</tr>").join("");
-    printDocument({ title: title || "Report", subtitle: "Generated " + new Date().toLocaleString("en-IN"), inner: `<table class="vg-tbl"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>` });
+    printDocument({ title: title || "Report", subtitle: "Generated " + (VG.fmt.formatDateTime ? VG.fmt.formatDateTime(new Date()) : new Date().toLocaleString("en-IN")), inner: `<table class="vg-tbl"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>` });
   }
 
   /* ============ small atoms ============ */
   function StatusTag({ value, map }) {
-    const color = (map && map[value]) || "#94a3b8";
+    const defaults = {
+      Created: "#60a5fa", Pending: "#f59e0b", Approved: "#22c55e", Rejected: "#ef4444",
+      "In Progress": "#a855f7", Completed: "#34d399", Delayed: "#f97316", Closed: "#64748b",
+      Open: "#60a5fa", Won: "#22c55e", Lost: "#ef4444", Active: "#34d399", Inactive: "#94a3b8",
+    };
+    const color = (map && map[value]) || defaults[value] || "#94a3b8";
     return <Pill color={color}>{value}</Pill>;
   }
+  function CollapsibleSection({ title, subtitle, defaultOpen = true, children, className = "" }) {
+    const [open, setOpen] = useState(defaultOpen);
+    return (
+      <Card className={"mb-3 overflow-hidden " + className}>
+        <button type="button" onClick={() => setOpen((v) => !v)} className="w-full flex items-center justify-between gap-3 p-3 sm:p-4 text-left chrome-hover">
+          <div className="min-w-0">
+            <div className="text-sm font-semibold">{title}</div>
+            {subtitle && <div className="text-[11px] opacity-55 mt-0.5">{subtitle}</div>}
+          </div>
+          <Icon name={open ? "chevronUp" : "chevronDown"} size={16} className="shrink-0 opacity-60" />
+        </button>
+        {open && <div className="px-3 sm:px-4 pb-3 sm:pb-4 border-t border-white/10 pt-3">{children}</div>}
+      </Card>
+    );
+  }
+
+  function PrintTemplatePicker({ open, onClose, docType, mode, onConfirm }) {
+    const templates = useMemo(
+      () => (store.listActiveDocumentTemplates ? store.listActiveDocumentTemplates() : (store.list("documentTemplates") || []).filter((t) => t.active !== false)),
+      [open, store.list("documentTemplates").length]
+    );
+    const defaultId = store.getSelectedTemplateId ? store.getSelectedTemplateId(docType) : (templates[0] && templates[0].id);
+    const [tplId, setTplId] = useState(defaultId || "");
+    useEffect(() => {
+      if (open) setTplId(store.getSelectedTemplateId ? store.getSelectedTemplateId(docType) || (templates[0] && templates[0].id) || "" : "");
+    }, [open, docType, templates.length]);
+    const modeLabel = mode === "print" ? "Print" : mode === "download" ? "Download PDF" : "Preview";
+    return (
+      <Modal open={open} onClose={onClose} title={modeLabel + " — " + (docType || "Document")}
+        subtitle="Choose the PDF template for this document"
+        footer={<>
+          <Button variant="soft" onClick={onClose}>Cancel</Button>
+          <Button icon={mode === "download" ? "download" : mode === "print" ? "printer" : "eye"} onClick={() => onConfirm(tplId)}>{modeLabel}</Button>
+        </>}>
+        <Field label="Select Template">
+          <Select value={tplId} onChange={setTplId} options={templates.map((t) => ({ value: t.id, label: t.name }))} />
+        </Field>
+      </Modal>
+    );
+  }
+
   /* Standard document action set for any printable transaction. `build` returns
      a { title, subtitle, inner } document object (lazy so it always reflects latest data). */
-  function DocActions({ build, onEmail, onDocument, label, docType }) {
-    const run = (mode) => {
+  function DocActions({ build, onEmail, onDocument, label, docType, showTemplatePicker = true }) {
+    const [picker, setPicker] = useState(null);
+    const run = (mode, templateId) => {
       try {
         const doc = build();
-        printDocument({ ...doc, docType: docType || doc.docType }, mode);
+        const dt = docType || doc.docType;
+        const tid = templateId || (store.getSelectedTemplateId && store.getSelectedTemplateId(dt)) || doc.templateId;
+        printDocument({ ...doc, docType: dt, templateId: tid }, mode);
         onDocument && onDocument(mode);
       } catch (e) { VG.toast("Could not generate document", "error"); }
     };
+    const request = (mode) => {
+      if (showTemplatePicker && docType) {
+        setPicker({ mode, docType });
+        return;
+      }
+      run(mode);
+    };
     return (
       <>
-        <Button variant="soft" icon="eye" onClick={() => run("preview")}>{label ? "Preview" : "Preview"}</Button>
-        <Button variant="soft" icon="printer" onClick={() => run("print")}>Print</Button>
-        <Button variant="soft" icon="download" onClick={() => run("download")}>PDF</Button>
+        <Button variant="soft" icon="eye" onClick={() => request("preview")}>{label || "Preview"}</Button>
+        <Button variant="soft" icon="printer" onClick={() => request("print")}>Print</Button>
+        <Button variant="soft" icon="download" onClick={() => request("download")}>PDF</Button>
         {onEmail && <Button variant="soft" icon="message" onClick={onEmail}>Email</Button>}
+        {picker && (
+          <PrintTemplatePicker open docType={picker.docType} mode={picker.mode} onClose={() => setPicker(null)}
+            onConfirm={(tplId) => { setPicker(null); run(picker.mode, tplId); }} />
+        )}
       </>
     );
   }
-  function PageHead({ title, desc, children }) {
+  function PageHead({ title, desc, icon, accent, children, integrated, onNew, newLabel, can, breadcrumbs }) {
+    const Crumbs = VG.Breadcrumbs;
+    const addBtn = onNew && (!can || can("add")) ? <Button key="vg-add" icon="plus" onClick={onNew}>{newLabel || "Add new"}</Button> : null;
+    const actions = [children, addBtn].filter(Boolean);
     return (
-      <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
-        <div>
-          <h2 className="text-xl font-semibold font-display">{title}</h2>
-          {desc && <p className="text-sm opacity-60">{desc}</p>}
+      <header className={"vg-page-head animate-fade-up" + (integrated ? " vg-page-head--integrated" : " vg-workspace-inset mb-4 pt-2")}>
+        {breadcrumbs && Crumbs ? <div className="vg-page-head-crumb"><Crumbs items={breadcrumbs} /></div> : null}
+        <div className={"vg-page-head-inner flex flex-wrap items-center justify-between gap-3" + (integrated ? " vg-page-head-inner--integrated" : "")}>
+          <div className="flex items-start gap-3 min-w-0">
+            {icon && (
+              <span className="vg-page-head-icon" style={{ background: accent || "var(--accent)" }}>
+                <Icon name={icon} size={18} />
+              </span>
+            )}
+            <div className="min-w-0">
+              <h2 className="text-base sm:text-lg font-semibold font-display leading-tight text-[var(--vg-heading)]">{title}</h2>
+              {desc && <p className="text-xs text-[var(--vg-text-muted)] mt-1 leading-snug max-w-3xl">{desc}</p>}
+            </div>
+          </div>
+          {actions.length ? <div className="vg-page-head-actions flex items-center gap-2 shrink-0 flex-wrap justify-end">{actions}</div> : null}
         </div>
-        <div className="flex items-center gap-2">{children}</div>
+      </header>
+    );
+  }
+
+  /** Integrated list page: header card + list/table body, equal width, minimal gap. */
+  function ListPage({ title, desc, icon, accent, breadcrumbs, onNew, newLabel, can, headerExtra, children, className = "" }) {
+    return (
+      <div className={"vg-list-page w-full max-w-none animate-fade-up " + className}>
+        <div className="vg-list-page-panel">
+          <PageHead integrated title={title} desc={desc} icon={icon} accent={accent} breadcrumbs={breadcrumbs}
+            onNew={onNew} newLabel={newLabel} can={can}>{headerExtra}</PageHead>
+          <div className="vg-list-page-body">{children}</div>
+        </div>
       </div>
     );
   }
 
   VG.fx = {
-    Toaster, Confirmer, Modal, Field, Text, Area, Num, DateF, Select, Checkbox, MasterSelect, QuickCreate,
-    RecordTable, exportCSV, printDocument, printTable, StatusTag, PageHead, DocActions, labelOf,
+    Toaster, Confirmer, BannerHost, Modal, Field, Text, Area, Num, DateF, Select, Checkbox, MasterSelect, QuickCreate,
+    RecordTable, exportCSV, printDocument, printTable, StatusTag, PageHead, ListPage, DocActions, CollapsibleSection, labelOf,
     TransactionLinesShell, itemDropdownLine, itemSearchHaystack,
   };
 })(window.VG);
