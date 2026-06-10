@@ -50,8 +50,24 @@
     { id: "reports", label: "Reports", group: "System" },
     { id: "admin", label: "Admin Control Panel", group: "System" },
     { id: "masterData", label: "Master Data", group: "System" },
-    { id: "templates", label: "Document Template Designer", group: "System" },
+    { id: "templates", label: "Document Templates", group: "System" },
     { id: "backup", label: "Backup & Restore", group: "System" },
+  ];
+
+  VG.DOCUMENT_TEMPLATE_DOC_TYPES = [
+    { label: "Quotation", docType: "Quotation" },
+    { label: "Proforma Invoice", docType: "Proforma Invoice" },
+    { label: "Tax Invoice", docType: "Tax Invoice" },
+    { label: "Export Invoice", docType: "Export Invoice" },
+    { label: "Sales Order", docType: "Sales Order" },
+    { label: "Purchase Order", docType: "Purchase Order" },
+    { label: "Delivery Challan", docType: "Delivery Challan" },
+    { label: "Material Receipt", docType: "Material Receipt Note" },
+    { label: "Material Issue", docType: "Material Issue Slip" },
+    { label: "Returnable Challan", docType: "Returnable Challan" },
+    { label: "Non-Returnable Challan", docType: "Non-Returnable Challan" },
+    { label: "QC Report", docType: "QC Report" },
+    { label: "Salary Slip", docType: "Salary Slip" },
   ];
 
   VG.ADMIN_DOC_TYPES = [

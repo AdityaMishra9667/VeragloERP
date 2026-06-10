@@ -595,7 +595,7 @@
       <div class="vg-totals"><div><span>Location</span><span>${locName(r.locationId)}</span></div><div><span>Batch / Lot</span><span>${r.batch || "—"}</span></div><div><span>QC status</span><span>${r.qcStatus || "—"}</span></div><div class="grand"><span>Total Value</span><span>${inr(r.totalValue || 0)}</span></div></div>
       <div class="vg-terms">${r.remarks ? "<b>Remarks:</b> " + r.remarks : ""}</div>
       <div class="vg-sign"><div>Received by: <b>${r.createdBy || "—"}</b></div><div>Checked by: <b>—</b></div><div>Approved by: <b>—</b></div><div>For ${store.company().name}</div></div>`;
-    return { title: "Material Receipt (GRN)", subtitle: r.no + " · " + r.date, inner };
+    return { title: "Material Receipt (GRN)", subtitle: r.no + " · " + r.date, inner, docType: "Material Receipt Note" };
   }
   function ReceiptPage({ roleKey, can }) {
     VG.useDB();
@@ -724,7 +724,10 @@
       <tbody><tr><td>${itemNameSkuPdf(m.itemId)}</td><td class="vg-right">${m.qtyIssued || 0}</td><td>${m.unit}</td><td>${locName(m.locationId)}</td><td>${m.batch || "—"}</td></tr></tbody></table>
       <div class="vg-terms">${m.purpose ? "<b>Purpose:</b> " + m.purpose + "<br>" : ""}${m.remarks ? "<b>Remarks:</b> " + m.remarks : ""}</div>
       <div class="vg-sign"><div>Issued by: <b>${m.issuedBy || "—"}</b></div><div>Checked by: <b>—</b></div><div>Received by: <b>${m.receivedBy || "—"}</b></div><div>For ${store.company().name}</div></div>`;
-    return { title: m.type || "Material Issue", subtitle: m.no + " · " + m.date, inner };
+    const docType = (m.type || "").indexOf("Returnable") >= 0 && (m.type || "").indexOf("Non-Returnable") < 0 ? "Returnable Challan"
+      : (m.type || "").indexOf("Non-Returnable") >= 0 ? "Non-Returnable Challan"
+      : "Material Issue Slip";
+    return { title: m.type || "Material Issue", subtitle: m.no + " · " + m.date, inner, docType };
   }
   function IssuePage({ roleKey, can, defaultType }) {
     VG.useDB();

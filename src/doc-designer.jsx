@@ -272,7 +272,11 @@
 
   VG.resolveDocTemplate = function (docType, templateId) {
     const list = store.list("documentTemplates") || [];
-    let t = templateId ? list.find((x) => x.id === templateId) : null;
+    let t = templateId ? list.find((x) => x.id === templateId && x.active !== false) : null;
+    if (!t && docType && store.getSelectedTemplateId) {
+      const selId = store.getSelectedTemplateId(docType);
+      if (selId) t = list.find((x) => x.id === selId && x.active !== false);
+    }
     if (!t && docType) t = store.getDefaultTemplate(docType);
     const base = { ...DEFAULT_LAYOUT, ...(t || {}) };
     if (base.themeId) {

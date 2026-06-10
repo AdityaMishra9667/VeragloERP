@@ -5,7 +5,7 @@
 (function (VG) {
   const { useState, useEffect } = React;
   const KEY = "veraglo-erp-db";
-  const VERSION = 12;
+  const VERSION = 20;
   const ITEM_DESC_MAX = 30000;
   const AUTH_INACTIVE_MSG = "User account does not exist or has been deactivated.";
   const ITEM_MFR_DUP_MSG = "This manufacturer and part number already exist in Item Master. Duplicate item cannot be created.";
@@ -343,6 +343,8 @@
         pdfFontFamily: "inter", fontWeight: "medium", lineSpacing: "comfortable", density: "comfortable",
       },
       dashboard: { pinnedModules: [], hiddenModules: [], moduleOrder: [] },
+      documentTemplateSelections: {},
+      documentTemplatesVersion: 0,
       notifications: {
         smtpHost: "", smtpPort: 587, smtpUser: "", smtpPass: "", smtpFrom: "noreply@veraglo.in",
         smtpTls: true, lowStockAlert: true, approvalAlerts: true, paymentReminders: true, followupReminders: true,
@@ -402,6 +404,7 @@
     if (!db.settings.dataPath) db.settings.dataPath = defaultSettings().dataPath;
     if (!db.settings.weatherLogin) db.settings.weatherLogin = defaultSettings().weatherLogin;
     else db.settings.weatherLogin = { ...defaultSettings().weatherLogin, ...db.settings.weatherLogin, wallpapers: { ...defaultSettings().weatherLogin.wallpapers, ...(db.settings.weatherLogin.wallpapers || {}) } };
+    if (!db.settings.documentTemplateSelections) db.settings.documentTemplateSelections = {};
     migrateLicense(db);
     db.seq = db.seq || {};
     ["PR", "PO", "QC", "QCI", "NCR", "BOM", "WO", "MR", "FG", "SH", "INV", "LP", "PAY", "USR"].forEach((k) => { if (db.seq[k] == null) db.seq[k] = 0; });
@@ -646,6 +649,74 @@
     }
   }
 
+  const MASTER_TEMPLATE_ID = "tpl_master";
+
+  function masterTemplatePreset() {
+    const indPreset = typeof VG !== "undefined" && VG.applyDocThemePreset ? VG.applyDocThemePreset("industrial") : {};
+    return {
+      id: MASTER_TEMPLATE_ID,
+      name: "Standard ERP Template",
+      description: "Common master PDF layout for quotations, invoices, orders, challans, receipts, and other ERP documents.",
+      docType: "All",
+      active: true,
+      isDefault: true,
+      isMaster: true,
+      variant: "premium_offer",
+      docVariant: "quotation-international",
+      docTitleOverride: "Commercial Offer",
+      showLogoOnly: true,
+      showCompanyTagline: false,
+      showCompanyNameInHeader: false,
+      showDocSubtitle: false,
+      logoSize: 72,
+      showColoredTableHeader: false,
+      showQr: true,
+      accentColor: "#c8102e",
+      textColor: "#1a1a1a",
+      warrantyDefault: "Warranty: 12 months from the date of invoice.",
+      roundOffEnabled: true,
+      roundOffMode: "auto",
+      titleLetterSpacing: "0.02em",
+      createdBy: "system",
+      ...indPreset,
+    };
+  }
+
+  function documentTemplateSelectionKeys() {
+    const fromCfg = typeof VG !== "undefined" && VG.DOCUMENT_TEMPLATE_DOC_TYPES
+      ? VG.DOCUMENT_TEMPLATE_DOC_TYPES.map((x) => x.docType)
+      : [];
+    const fallback = [
+      "Quotation", "Proforma Invoice", "Tax Invoice", "Export Invoice", "Sales Order", "Purchase Order",
+      "Delivery Challan", "Material Receipt Note", "Material Issue Slip", "Returnable Challan",
+      "Non-Returnable Challan", "QC Report", "Salary Slip",
+    ];
+    return [...new Set(fallback.concat(fromCfg))];
+  }
+
+  function migrateDocumentTemplatesV2(db) {
+    if (!db.settings) db.settings = defaultSettings();
+    if ((db.settings.documentTemplatesVersion || 0) >= 2) return;
+    const masterBase = masterTemplatePreset();
+    const list = db.documentTemplates || [];
+    const idx = list.findIndex((t) => t.id === MASTER_TEMPLATE_ID);
+    if (idx >= 0) {
+      list[idx] = { ...list[idx], ...masterBase, name: "Standard ERP Template", active: true, isMaster: true, isDefault: true };
+    } else {
+      list.push({ ...masterBase, createdAt: Date.now() });
+    }
+    list.forEach((t, i) => {
+      if (t.id !== MASTER_TEMPLATE_ID) list[i] = { ...t, active: false, isDefault: false };
+    });
+    db.documentTemplates = list;
+    const selections = { ...(db.settings.documentTemplateSelections || {}) };
+    documentTemplateSelectionKeys().forEach((dt) => {
+      if (!selections[dt]) selections[dt] = MASTER_TEMPLATE_ID;
+    });
+    db.settings.documentTemplateSelections = selections;
+    db.settings.documentTemplatesVersion = 2;
+  }
+
   function migrateAdmin(db) {
     const c = db.company || {};
     if (!c.legalName) c.legalName = c.name;
@@ -780,6 +851,7 @@
       }]);
     }
     extraRoles.forEach((r) => { if (!(db.customRoles || []).some((x) => x.key === r.key)) db.customRoles.push(r); });
+    migrateDocumentTemplatesV2(db);
     if (!(db.fieldPermissions || []).length) {
       db.fieldPermissions = [
         { id: "fp1", module: "quotation", field: "discountPct", roleKey: "sales_executive", visible: true, editable: true, mandatory: false, approvalRequired: true },
@@ -2876,9 +2948,70 @@
       return base;
     },
 
+    getStandardTemplate() {
+      return (DB.documentTemplates || []).find((t) => t.id === MASTER_TEMPLATE_ID && t.active !== false)
+        || (DB.documentTemplates || []).find((t) => t.isMaster && t.active !== false)
+        || (DB.documentTemplates || []).find((t) => t.active !== false)
+        || null;
+    },
+
+    listActiveDocumentTemplates() {
+      const active = (DB.documentTemplates || []).filter((t) => t.active !== false);
+      if (active.length) return active;
+      const std = this.getStandardTemplate();
+      return std ? [std] : [];
+    },
+
+    normalizeDocTypeForTemplate(docType) {
+      const map = {
+        "Material Receipt": "Material Receipt Note",
+        "Material Issue": "Material Issue Slip",
+        GRN: "Material Receipt Note",
+        MRN: "Material Receipt Note",
+      };
+      return map[docType] || docType;
+    },
+
+    getDocumentTemplateSelection(docType) {
+      const sel = (DB.settings && DB.settings.documentTemplateSelections) || {};
+      const dt = this.normalizeDocTypeForTemplate(docType);
+      if (sel[dt]) return sel[dt];
+      if (sel[docType]) return sel[docType];
+      if (docType === "Tax Invoice" && sel["Export Invoice"]) return sel["Export Invoice"];
+      return null;
+    },
+
+    getSelectedTemplateId(docType) {
+      const id = this.getDocumentTemplateSelection(docType);
+      if (id) {
+        const t = (DB.documentTemplates || []).find((x) => x.id === id && x.active !== false);
+        if (t) return t.id;
+      }
+      const std = this.getStandardTemplate();
+      return std ? std.id : null;
+    },
+
+    saveDocumentTemplateSelection(docType, templateId, actor) {
+      const tpl = this.get("documentTemplates", templateId);
+      if (!tpl || tpl.active === false) return { ok: false, message: "Template not found or inactive" };
+      const selections = { ...(DB.settings.documentTemplateSelections || {}), [docType]: templateId };
+      DB.settings.documentTemplateSelections = selections;
+      this.saveAdminSettings({ documentTemplateSelections: selections }, actor);
+      this.audit(actor, "update", "settings", "documentTemplateSelections", docType + " → " + tpl.name);
+      return { ok: true, templateId, docType };
+    },
+
     getDefaultTemplate(docType) {
+      const selId = this.getSelectedTemplateId(docType);
+      if (selId) {
+        const picked = (DB.documentTemplates || []).find((t) => t.id === selId && t.active !== false);
+        if (picked) return picked;
+      }
+      const std = this.getStandardTemplate();
+      if (std) return std;
       return (DB.documentTemplates || []).find((t) => t.docType === docType && t.isDefault && t.active !== false)
-        || (DB.documentTemplates || []).find((t) => t.docType === docType && t.active !== false);
+        || (DB.documentTemplates || []).find((t) => t.docType === docType && t.active !== false)
+        || null;
     },
 
     dashboardPrefs(roleKey) {
