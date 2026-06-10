@@ -5,6 +5,7 @@
   const { Icon, Button, Pill, Card } = ui;
   const { Field, Text, Area, Num, Select, Checkbox, RecordTable, PageHead, ListPage, StatusTag, Modal, MasterSelect, printDocument } = fx;
 
+  const today = VG.fmt.todayISO;
   const clone = (x) => JSON.parse(JSON.stringify(x));
   const fmtBytes = (n) => (n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB");
   const fmtTime = (ts) => (ts ? new Date(ts).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "Never");
@@ -1056,35 +1057,48 @@
     );
   };
 
-  /* ================= Numbering Series ================= */
+  /* ================= Numbering Settings ================= */
   function SeriesForm({ open, onClose, record, roleKey }) {
     const isEdit = !!(record && record.id);
-    const [f, setF] = useState(() => ({ useFy: true, padding: 4, reset: "Yearly", branchWise: false, manualOverride: false, active: true, ...record }));
+    const ne = VG.numberingEngine || {};
+    const [f, setF] = useState(() => ({ useCalendarYear: true, useFy: false, padding: 5, startSequence: 1, reset: "Yearly", branchWise: false, manualOverride: false, active: true, ...record }));
     const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
-    useEffect(() => { if (open) setF({ useFy: true, padding: 4, reset: "Yearly", branchWise: false, manualOverride: false, active: true, ...record }); }, [open, record && record.id]);
+    useEffect(() => { if (open) setF({ useCalendarYear: true, useFy: false, padding: 5, startSequence: 1, reset: "Yearly", branchWise: false, manualOverride: false, active: true, ...record }); }, [open, record && record.id]);
+    const preview = ne.previewSeries ? ne.previewSeries(f, today()) : "";
     function save() {
       if (!f.prefix || !f.docType) return VG.toast("Prefix and document type required", "error");
-      const payload = { ...f, useFy: !!f.useFy, branchWise: !!f.branchWise, manualOverride: !!f.manualOverride, active: !!f.active };
+      const prefix = ne.sanitizeAlphaNum ? ne.sanitizeAlphaNum(f.prefix) : String(f.prefix).replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+      if (!prefix) return VG.toast("Prefix must contain letters or numbers only", "error");
+      const payload = {
+        ...f, prefix, useFy: !!f.useFy, useCalendarYear: f.useFy ? false : f.useCalendarYear !== false,
+        branchWise: !!f.branchWise, manualOverride: !!f.manualOverride, active: !!f.active,
+        padding: Number(f.padding) || 5, startSequence: Number(f.startSequence) || 1,
+      };
       if (isEdit) store.update("numberSeries", f.id, payload, roleKey);
       else store.create("numberSeries", payload, roleKey);
-      VG.toast("Series saved");
+      if (ne.syncCountersFromData && store.db) ne.syncCountersFromData(store.db());
+      VG.toast("Numbering series saved");
       onClose();
     }
     const types = VG.ADMIN_DOC_TYPES || [];
     return (
-      <Modal open={open} onClose={onClose} title={isEdit ? "Edit Number Series" : "New Number Series"}
+      <Modal open={open} onClose={onClose} title={isEdit ? "Edit Numbering Series" : "New Numbering Series"}
         actions={<Button icon="check" onClick={save}>Save</Button>}>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <Field label="Document type" required><Select value={f.docType} onChange={(v) => set("docType", v)} options={types.map((t) => ({ value: t, label: t }))} /></Field>
-          <Field label="Prefix" required hint="e.g. GLS/QTN"><Text value={f.prefix} onChange={(v) => set("prefix", v)} /></Field>
-          <Field label="Padding digits"><Num value={f.padding} onChange={(v) => set("padding", v)} /></Field>
+          <Field label="Prefix" required hint="Letters & numbers only · e.g. QT, SO, INV"><Text value={f.prefix} onChange={(v) => set("prefix", (ne.sanitizeAlphaNum ? ne.sanitizeAlphaNum(v) : v.replace(/[^A-Za-z0-9]/g, "").toUpperCase()))} /></Field>
+          <Field label="Sequence padding"><Num value={f.padding} onChange={(v) => set("padding", v)} /></Field>
+          <Field label="Starting sequence"><Num value={f.startSequence} onChange={(v) => set("startSequence", v)} /></Field>
           <Field label="Reset cycle"><Select value={f.reset} onChange={(v) => set("reset", v)} options={["Never", "Yearly", "Monthly"].map((x) => ({ value: x, label: x }))} /></Field>
+          <Field label="Format preview"><Text value={preview || "—"} onChange={() => {}} disabled /></Field>
           <div className="lg:col-span-3 flex flex-wrap gap-4">
-            <Checkbox checked={!!f.useFy} onChange={(v) => set("useFy", v)} label="Include financial year" />
+            <Checkbox checked={f.useCalendarYear !== false && !f.useFy} onChange={(v) => { set("useCalendarYear", v); if (v) set("useFy", false); }} label="Include calendar year (e.g. 2026)" />
+            <Checkbox checked={!!f.useFy} onChange={(v) => { set("useFy", v); if (v) set("useCalendarYear", false); }} label="Include financial year (e.g. 2627)" />
             <Checkbox checked={!!f.branchWise} onChange={(v) => set("branchWise", v)} label="Branch-wise series" />
             <Checkbox checked={!!f.manualOverride} onChange={(v) => set("manualOverride", v)} label="Allow manual override" />
             <Checkbox checked={f.active !== false} onChange={(v) => set("active", v)} label="Active" />
           </div>
+          <p className="lg:col-span-3 text-[11px] opacity-55">Alphanumeric only — no slash, dash, dot or special characters. Example: QT202600001</p>
         </div>
       </Modal>
     );
@@ -1092,13 +1106,16 @@
 
   function NumberSeriesPage({ roleKey, can }) {
     VG.useDB();
+    const ne = VG.numberingEngine || {};
     const [edit, setEdit] = useState(null);
+    if (ne.ensureDefaultSeries && store.db) ne.ensureDefaultSeries(store.db());
     const rows = store.list("numberSeries");
     const cols = [
       { key: "docType", label: "Document" },
       { key: "prefix", label: "Prefix", render: (r) => <span className="font-mono text-xs">{r.prefix}</span> },
-      { key: "useFy", label: "FY", render: (r) => r.useFy ? "✓" : "—" },
-      { key: "padding", label: "Padding" },
+      { key: "preview", label: "Preview", render: (r) => <span className="font-mono text-[10px] opacity-70">{ne.previewSeries ? ne.previewSeries(r, today()) : "—"}</span> },
+      { key: "year", label: "Year", render: (r) => r.useFy ? "FY" : r.useCalendarYear !== false ? "Cal" : "—" },
+      { key: "padding", label: "Pad" },
       { key: "reset", label: "Reset" },
       { key: "active", label: "Status", render: (r) => <StatusTag value={r.active !== false ? "Active" : "Inactive"} map={{ Active: "#34d399", Inactive: "#94a3b8" }} /> },
     ];
@@ -1106,8 +1123,12 @@
       return <SeriesForm open onClose={() => setEdit(null)} record={edit.id ? edit : null} roleKey={roleKey} />;
     }
     return (
-      <ListPage title="Numbering Series" desc="Auto-number prefixes for quotations, orders, challans and invoices" onNew={can("add") ? () => setEdit({}) : null} newLabel="Add Series" can={can}>
-        <RecordTable embedded suppressNew title="Series List" columns={cols} rows={rows} can={can} printTitle="Number Series" searchKeys={["prefix", "docType"]}
+      <ListPage title="Numbering Settings" desc="Module-wise alphanumeric document numbers · prefix + year + sequence (no special characters)" onNew={can("add") ? () => setEdit({}) : null} newLabel="Add Series" can={can}>
+        <Card className="p-4 mb-4 text-sm opacity-75">
+          All new documents use clean alphanumeric codes (e.g. <span className="font-mono">QT202600125</span>, <span className="font-mono">SO202600045</span>).
+          Historical numbers with slashes are preserved. Master codes (Customer, Supplier, Employee) use the same rule via auto-generation.
+        </Card>
+        <RecordTable embedded suppressNew title="Document Numbering Series" columns={cols} rows={rows} can={can} printTitle="Numbering Settings" searchKeys={["prefix", "docType"]}
           onNew={can("add") ? () => setEdit({}) : null} onEdit={can("edit") ? (r) => setEdit(r) : null}
           onDelete={can("delete") ? async (r) => { if (await VG.confirm({ title: "Delete series?", danger: true, confirmLabel: "Delete" })) { store.remove("numberSeries", r.id, roleKey); VG.toast("Deleted"); } } : null} />
       </ListPage>
@@ -1694,7 +1715,7 @@
     { id: "masterData", label: "Master Data", icon: "database", group: "Masters" },
     { id: "importExport", label: "Import / Export", icon: "download", group: "Masters" },
     { id: "templates", label: "Document Template Designer", icon: "folder", group: "Documents" },
-    { id: "numberSeries", label: "Numbering Series", icon: "grid", group: "Documents" },
+    { id: "numberSeries", label: "Numbering Settings", icon: "grid", group: "Documents" },
     { id: "skuNumbering", label: "SKU Numbering", icon: "box", group: "Masters" },
     { id: "security", label: "Security", icon: "shield", group: "System" },
     { id: "notifications", label: "Notifications", icon: "bell", group: "System" },

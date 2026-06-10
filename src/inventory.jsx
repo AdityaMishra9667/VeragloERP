@@ -464,7 +464,7 @@
     const [edit, setEdit] = useState(null);
     const rows = store.list("suppliers");
     const cols = [{ key: "code", label: "Code", render: (r) => <span className="font-mono text-xs">{r.code}</span> }, { key: "name", label: "Supplier" }, { key: "contact", label: "Contact" }, { key: "gstin", label: "GSTIN", render: (r) => <span className="font-mono text-xs">{r.gstin}</span> }, { key: "category", label: "Grade", render: (r) => <Pill color="#14b8a6">{r.category}</Pill> }, { key: "rating", label: "Rating" }];
-    function save(form) { if (!form.name || !form.gstin) return VG.toast("Name & GSTIN required", "error"); if (form.id) store.update("suppliers", form.id, form, roleKey); else store.create("suppliers", { ...form, code: store.nextNo("SUPP").replace(/\//g, "-") }, roleKey); VG.toast("Saved"); setEdit(null); }
+    function save(form) { if (!form.name || !form.gstin) return VG.toast("Name & GSTIN required", "error"); if (form.id) store.update("suppliers", form.id, form, roleKey); else store.create("suppliers", { ...form, code: store.nextSupplierCode ? store.nextSupplierCode() : store.nextMasterCode("SUPP") }, roleKey); VG.toast("Saved"); setEdit(null); }
     const supplierFields = [{ k: "name", l: "Company name", req: true }, { k: "contact", l: "Contact person" }, { k: "phone", l: "Phone" }, { k: "email", l: "Email" }, { k: "gstin", l: "GSTIN", req: true }, { k: "category", l: "Grade", select: ["A-grade", "B-grade", "C-grade", "Watch"] }, { k: "rating", l: "Rating", num: true }, { k: "address", l: "Address", area: true, full: true }];
     if (edit) {
       return <MasterForm title="Supplier" open onClose={() => setEdit(null)} record={edit} onSave={save} roleKey={roleKey} can={can} fields={supplierFields} />;
@@ -513,7 +513,7 @@
     ];
     function save(form) {
       if (!form.name || !form.locationId) return VG.toast("Storage location and name required", "error");
-      const payload = { ...form, status: form.status || "Active", code: form.code || ("ILOC-" + String(store.list("itemLocations").length + 1).padStart(3, "0")) };
+      const payload = { ...form, status: form.status || "Active", code: form.code || (store.nextMasterCode ? store.nextMasterCode("ILOC", { collection: "itemLocations", field: "code", pad: 3 }) : ("ILOC" + String(store.list("itemLocations").length + 1).padStart(3, "0"))) };
       if (form.id) store.update("itemLocations", form.id, payload, roleKey);
       else store.create("itemLocations", payload, roleKey);
       VG.toast("Item location saved");

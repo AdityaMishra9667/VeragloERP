@@ -56,7 +56,7 @@
       if (!f.name) return VG.toast("Name required", "error");
       if (isEdit) { store.update("employees", f.id, f, roleKey); VG.toast("Employee updated"); }
       else {
-        const code = store.nextEmployeeCode ? store.nextEmployeeCode() : ("EMP-" + String(store.list("employees").length + 1).padStart(4, "0"));
+        const code = store.nextEmployeeCode ? store.nextEmployeeCode() : (store.nextMasterCode ? store.nextMasterCode("EMP") : ("EMP" + String(store.list("employees").length + 1).padStart(6, "0")));
         store.create("employees", { ...f, code }, roleKey);
         VG.toast("Employee " + code + " added");
       }

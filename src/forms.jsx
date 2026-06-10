@@ -344,7 +344,7 @@
       cfg.fields.forEach((f) => { if (f.req && (form[f.k] === undefined || form[f.k] === "")) e[f.k] = "Required"; });
       if (Object.keys(e).length) { setErr(e); return; }
       const payload = { ...form };
-      if (cfg.auto && cfg.auto.code) payload.code = store.nextNo(cfg.auto.code).replace(/\//g, "-");
+      if (cfg.auto && cfg.auto.code) payload.code = store.nextMasterCode ? store.nextMasterCode(cfg.auto.code) : store.nextNo(cfg.auto.code);
       if (collection === "categories") {
         if (!payload.code) payload.code = store.nextCategoryCode();
         payload.typeCode = String(payload.typeCode || "RWM").toUpperCase();
@@ -354,7 +354,7 @@
         payload.active = payload.active !== false;
       }
       if (collection === "itemLocations") {
-        if (!payload.code) payload.code = "ILOC-" + String((store.list("itemLocations").length || 0) + 1).padStart(3, "0");
+        if (!payload.code) payload.code = store.nextMasterCode ? store.nextMasterCode("ILOC", { collection: "itemLocations", field: "code", pad: 3 }) : ("ILOC" + String((store.list("itemLocations").length || 0) + 1).padStart(3, "0"));
         payload.status = payload.status || "Active";
       }
       const rec = store.create(collection, payload, actorRole);

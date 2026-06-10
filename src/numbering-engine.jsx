@@ -1,0 +1,334 @@
+/* Veraglo ERP — Global alphanumeric document & master numbering engine */
+(function (VG) {
+  const PREFIX_DOC_TYPE = {
+    QT: "Quotation", QTN: "Quotation",
+    PI: "Proforma Invoice",
+    SO: "Sales Order",
+    PO: "Purchase Order",
+    PR: "Purchase Request",
+    RFQ: "RFQ",
+    ENQ: "Enquiry",
+    LEAD: "Lead",
+    MRN: "Material Receipt Note",
+    GRN: "Material Receipt Note",
+    MIS: "Material Issue Slip",
+    MIN: "Material Issue Slip",
+    RC: "Returnable Challan",
+    NRC: "Non-Returnable Challan",
+    INV: "Tax Invoice",
+    CN: "Credit Note",
+    DN: "Debit Note",
+    QC: "QC Report",
+    NCR: "QC Report",
+    WO: "Work Order",
+    BOM: "BOM",
+    MR: "Material Requirement",
+    FG: "Finished Goods Transfer",
+    QCI: "QC Inspection",
+    SH: "Delivery Challan",
+    LP: "Leave",
+    PAY: "Payroll Run",
+    VB: "Vendor Bill",
+    VP: "Vendor Payment",
+    RET: "Return",
+    PV: "Physical Verification",
+    TRF: "Stock Transfer",
+    SCR: "Scrap",
+    CUST: "Customer",
+    SUPP: "Supplier",
+    EMP: "Employee",
+  };
+
+  const DEFAULT_SERIES_DEFS = [
+    ["Quotation", "QT"], ["Proforma Invoice", "PI"], ["Sales Order", "SO"], ["Tax Invoice", "INV"],
+    ["Purchase Order", "PO"], ["Purchase Request", "PR"], ["RFQ", "RFQ"], ["Enquiry", "ENQ"], ["Lead", "LEAD"],
+    ["Material Receipt Note", "GRN"], ["Material Issue Slip", "MIN"], ["Returnable Challan", "RC"],
+    ["Non-Returnable Challan", "NRC"], ["Delivery Challan", "SH"], ["Work Order", "WO"], ["BOM", "BOM"],
+    ["QC Report", "QC"], ["Credit Note", "CN"], ["Debit Note", "DN"], ["Leave", "LP"], ["Payroll Run", "PAY"],
+    ["Vendor Bill", "VB"], ["Vendor Payment", "VP"],
+  ];
+
+  const MASTER_DEFS = {
+    CUST: { collection: "customers", field: "code", pad: 6 },
+    SUPP: { collection: "suppliers", field: "code", pad: 6 },
+    EMP: { collection: "employees", field: "code", pad: 6 },
+    CAT: { collection: "categories", field: "code", pad: 3 },
+    MFR: { collection: "manufacturers", field: "code", pad: 3 },
+    LOC: { collection: "locations", field: "code", pad: 3 },
+    ILOC: { collection: "itemLocations", field: "code", pad: 3 },
+  };
+
+  function db() {
+    return (VG.store && VG.store.db && VG.store.db()) || null;
+  }
+
+  function sanitizeAlphaNum(s) {
+    return String(s || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+  }
+
+  function calendarYear(d) {
+    const dt = d ? new Date(d) : new Date();
+    return String(dt.getFullYear());
+  }
+
+  function financialYearShort(d) {
+    const dt = d ? new Date(d) : new Date();
+    const y = dt.getFullYear();
+    const start = dt.getMonth() >= 3 ? y : y - 1;
+    return String(start % 100) + String((start + 1) % 100);
+  }
+
+  function isAlphanumericOnly(value) {
+    const s = String(value || "").trim();
+    return !s || /^[A-Za-z0-9]+$/.test(s);
+  }
+
+  function defaultSeriesRow(docType, prefix) {
+    return {
+      docType,
+      prefix: sanitizeAlphaNum(prefix),
+      useCalendarYear: true,
+      useFy: false,
+      padding: 5,
+      startSequence: 1,
+      reset: "Yearly",
+      branchWise: false,
+      manualOverride: false,
+      active: true,
+    };
+  }
+
+  function ensureDefaultSeries(database) {
+    if (!database) return;
+    if (!Array.isArray(database.numberSeries)) database.numberSeries = [];
+    DEFAULT_SERIES_DEFS.forEach(([docType, prefix], i) => {
+      if (!database.numberSeries.some((s) => s.docType === docType)) {
+        database.numberSeries.push({ id: "ns" + (database.numberSeries.length + i + 1), ...defaultSeriesRow(docType, prefix) });
+      }
+    });
+    database.numberSeries.forEach((s) => {
+      s.prefix = sanitizeAlphaNum(s.prefix);
+      if (s.useCalendarYear == null && s.useFy) s.useCalendarYear = false;
+      if (s.useCalendarYear == null) s.useCalendarYear = true;
+      if (s.startSequence == null) s.startSequence = 1;
+      if (!s.padding) s.padding = 5;
+    });
+  }
+
+  function seriesForPrefix(prefix) {
+    const database = db();
+    if (!database) return null;
+    ensureDefaultSeries(database);
+    const docType = PREFIX_DOC_TYPE[prefix];
+    if (!docType) return null;
+    return (database.numberSeries || []).find((s) => s.active !== false && s.docType === docType) || null;
+  }
+
+  function periodKey(series, dateRef) {
+    const dt = dateRef ? new Date(dateRef) : new Date();
+    if (!series || series.reset === "Never") return "ALL";
+    if (series.reset === "Monthly") return dt.getFullYear() + String(dt.getMonth() + 1).padStart(2, "0");
+    if (series.useCalendarYear) return "Y" + calendarYear(dateRef);
+    if (series.useFy) return "FY" + financialYearShort(dateRef);
+    return "Y" + calendarYear(dateRef);
+  }
+
+  function formatNumber(series, seq, dateRef) {
+    const s = series || {};
+    const parts = [sanitizeAlphaNum(s.prefix)];
+    if (s.useCalendarYear) parts.push(calendarYear(dateRef));
+    else if (s.useFy) parts.push(financialYearShort(dateRef));
+    parts.push(String(seq).padStart(Number(s.padding) || 5, "0"));
+    return parts.join("");
+  }
+
+  function previewSeries(series, dateRef) {
+    const start = Number(series && series.startSequence) || 1;
+    return formatNumber(series, start, dateRef || new Date().toISOString().slice(0, 10));
+  }
+
+  function tailSeqFromNo(no, prefix) {
+    const clean = sanitizeAlphaNum(no);
+    const p = sanitizeAlphaNum(prefix);
+    if (!clean || !p) return 0;
+    if (!clean.startsWith(p)) {
+      const legacy = String(no || "").match(/(\d+)\s*$/);
+      return legacy ? parseInt(legacy[1], 10) : 0;
+    }
+    const tail = clean.slice(p.length);
+    const m = tail.match(/(\d+)$/);
+    return m ? parseInt(m[1], 10) : 0;
+  }
+
+  function seqStoreKey(prefix, series, dateRef) {
+    if (series) return "NS_" + series.id + "_" + periodKey(series, dateRef);
+    return "DOC_" + sanitizeAlphaNum(prefix) + "_" + periodKey({ reset: "Yearly", useCalendarYear: true }, dateRef);
+  }
+
+  function bumpSeq(key, startAt) {
+    const database = db();
+    if (!database) return startAt || 1;
+    database.seq = database.seq || {};
+    const cur = Number(database.seq[key]) || 0;
+    const next = Math.max(cur, (Number(startAt) || 1) - 1) + 1;
+    database.seq[key] = next;
+    return next;
+  }
+
+  function isDuplicateDocNo(no, prefix) {
+    const database = db();
+    if (!database || !no) return false;
+    const docType = PREFIX_DOC_TYPE[prefix];
+    const collectionsByType = {
+      Quotation: ["quotations"], "Proforma Invoice": ["proformas"], "Sales Order": ["salesOrders"],
+      "Tax Invoice": ["invoices"], "Purchase Order": ["purchaseOrders"], "Purchase Request": ["purchaseRequests"],
+      RFQ: ["rfqs"], Enquiry: ["enquiries"], Lead: ["leads"], "Material Receipt Note": ["materialReceipts"],
+      "Material Issue Slip": ["materialIssues"], "Delivery Challan": ["shipments"], "Work Order": ["workOrders"],
+      BOM: ["boms"], "QC Report": ["qcInspections", "ncrs"], Leave: ["leaveRequests"], "Payroll Run": ["payrollRuns"],
+      "Vendor Bill": ["vendorBills"], "Vendor Payment": ["vendorPayments"],
+    };
+    const cols = collectionsByType[docType] || [];
+    const target = sanitizeAlphaNum(no);
+    return cols.some((coll) => (database[coll] || []).some((r) => sanitizeAlphaNum(r.no) === target));
+  }
+
+  function nextDocumentNo(prefix, dateRef) {
+    const database = db();
+    if (!database) return sanitizeAlphaNum(prefix) + "00001";
+    ensureDefaultSeries(database);
+    const ser = seriesForPrefix(prefix);
+    const date = dateRef || new Date().toISOString().slice(0, 10);
+    const key = seqStoreKey(prefix, ser, date);
+    let seq = bumpSeq(key, ser ? ser.startSequence : 1);
+    let no = formatNumber(ser || { prefix: sanitizeAlphaNum(prefix), padding: 5, useCalendarYear: true }, seq, date);
+    let guard = 0;
+    while (isDuplicateDocNo(no, prefix) && guard < 500) {
+      seq = bumpSeq(key, seq + 1);
+      no = formatNumber(ser || { prefix: sanitizeAlphaNum(prefix), padding: 5, useCalendarYear: true }, seq, date);
+      guard++;
+    }
+    return no;
+  }
+
+  function maxMasterSeq(prefix, collection, field) {
+    const database = db();
+    if (!database) return 0;
+    const p = sanitizeAlphaNum(prefix);
+    let max = 0;
+    (database[collection] || []).forEach((rec) => {
+      const raw = String(rec[field] || "").toUpperCase();
+      const clean = sanitizeAlphaNum(raw);
+      if (clean.startsWith(p)) {
+        const tail = clean.slice(p.length);
+        const m = tail.match(/^(\d+)$/);
+        if (m) max = Math.max(max, parseInt(m[1], 10));
+      }
+      const legacy = raw.match(new RegExp("^" + p + "[\\-_]?(\\d+)$"));
+      if (legacy) max = Math.max(max, parseInt(legacy[1], 10));
+    });
+    return max;
+  }
+
+  function nextMasterCode(prefix, opts) {
+    const def = MASTER_DEFS[prefix] || opts || {};
+    const collection = (opts && opts.collection) || def.collection;
+    const field = (opts && opts.field) || def.field || "code";
+    const pad = (opts && opts.pad) || def.pad || 6;
+    const p = sanitizeAlphaNum(prefix);
+    const max = maxMasterSeq(p, collection, field);
+    return p + String(max + 1).padStart(pad, "0");
+  }
+
+  function syncCountersFromData(database) {
+    if (!database) return;
+    ensureDefaultSeries(database);
+    database.seq = database.seq || {};
+    database.numberSeries.forEach((ser) => {
+      const prefix = sanitizeAlphaNum(ser.prefix);
+      const docType = ser.docType;
+      const collectionsByType = {
+        Quotation: ["quotations"], "Proforma Invoice": ["proformas"], "Sales Order": ["salesOrders"],
+        "Tax Invoice": ["invoices"], "Purchase Order": ["purchaseOrders"], "Purchase Request": ["purchaseRequests"],
+        RFQ: ["rfqs"], Enquiry: ["enquiries"], Lead: ["leads"], "Material Receipt Note": ["materialReceipts"],
+        "Material Issue Slip": ["materialIssues"], "Delivery Challan": ["shipments"], "Work Order": ["workOrders"],
+        BOM: ["boms"], "QC Report": ["qcInspections", "ncrs"], Leave: ["leaveRequests"], "Payroll Run": ["payrollRuns"],
+        "Vendor Bill": ["vendorBills"], "Vendor Payment": ["vendorPayments"],
+      };
+      let max = Number(ser.startSequence) || 1;
+      (collectionsByType[docType] || []).forEach((coll) => {
+        (database[coll] || []).forEach((rec) => {
+          max = Math.max(max, tailSeqFromNo(rec.no, prefix));
+        });
+      });
+      const key = "NS_" + ser.id + "_" + periodKey(ser, new Date().toISOString().slice(0, 10));
+      database.seq[key] = Math.max(Number(database.seq[key]) || 0, max);
+    });
+    Object.keys(PREFIX_DOC_TYPE).forEach((prefix) => {
+      const ser = (database.numberSeries || []).find((s) => sanitizeAlphaNum(s.prefix) === sanitizeAlphaNum(prefix));
+      if (ser) return;
+      const key = "DOC_" + sanitizeAlphaNum(prefix);
+      let max = Number(database.seq[prefix]) || 0;
+      const cols = ["quotations", "proformas", "salesOrders", "invoices", "purchaseOrders", "purchaseRequests",
+        "rfqs", "enquiries", "leads", "materialReceipts", "materialIssues", "shipments", "workOrders",
+        "boms", "qcInspections", "ncrs", "leaveRequests", "payrollRuns", "vendorBills", "vendorPayments",
+        "finishedGoodsTransfers", "materialRequirements", "qcIssues", "returns", "physicalVerifications"];
+      cols.forEach((coll) => {
+        (database[coll] || []).forEach((rec) => {
+          if (rec.no) max = Math.max(max, tailSeqFromNo(rec.no, prefix));
+        });
+      });
+      database.seq[key] = max;
+    });
+  }
+
+  function migrateNumbering(database) {
+    if (!database) return database;
+    ensureDefaultSeries(database);
+    (database.numberSeries || []).forEach((s) => {
+      const oldPrefix = s.prefix;
+      s.prefix = sanitizeAlphaNum(s.prefix);
+      if (s.useCalendarYear == null) s.useCalendarYear = !s.useFy;
+      if (s.startSequence == null) s.startSequence = 1;
+      if (!s.padding) s.padding = 5;
+      if (oldPrefix !== s.prefix) {
+        database.numberMappings = database.numberMappings || [];
+        database.numberMappings.push({ ts: Date.now(), type: "series_prefix", old: oldPrefix, new: s.prefix, docType: s.docType });
+      }
+    });
+    if (!database.settings) database.settings = {};
+    if (!database.settings.numbering) {
+      database.settings.numbering = {
+        alphanumericOnly: true,
+        preserveLegacyNumbers: true,
+        defaultPadding: 5,
+        defaultYearMode: "calendar",
+      };
+    }
+    syncCountersFromData(database);
+    return database;
+  }
+
+  if (typeof VG.store !== "undefined" && VG.store.db) {
+    try { migrateNumbering(VG.store.db()); } catch (e) { /* store may still be seeding */ }
+  }
+
+  VG.numberingEngine = {
+    sanitizeAlphaNum,
+    isAlphanumericOnly,
+    calendarYear,
+    financialYearShort,
+    formatNumber,
+    previewSeries,
+    nextDocumentNo,
+    nextMasterCode,
+    seriesForPrefix,
+    defaultSeriesRow,
+    ensureDefaultSeries,
+    migrateNumbering,
+    syncCountersFromData,
+    tailSeqFromNo,
+    PREFIX_DOC_TYPE,
+    DEFAULT_SERIES_DEFS,
+    MASTER_DEFS,
+  };
+})(window.VG);

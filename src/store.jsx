@@ -5,7 +5,7 @@
 (function (VG) {
   const { useState, useEffect } = React;
   const KEY = "veraglo-erp-db";
-  const VERSION = 14;
+  const VERSION = 15;
   const ITEM_DESC_MAX = 30000;
   const AUTH_INACTIVE_MSG = "User account does not exist or has been deactivated.";
   const ITEM_MFR_DUP_MSG = "This manufacturer and part number already exist in Item Master. Duplicate item cannot be created.";
@@ -100,7 +100,7 @@
       { name: "Fasteners", typeCode: "RWM" }, { name: "Packaging", typeCode: "PKG" }, { name: "Optics", typeCode: "RWM" },
       { name: "PCB", typeCode: "RWM" }, { name: "Wiring", typeCode: "RWM" },
     ];
-    const categories = categoryDefs.map((c, i) => ({ id: "cat" + i, code: "CAT-" + (i + 1), name: c.name, typeCode: c.typeCode }));
+    const categories = categoryDefs.map((c, i) => ({ id: "cat" + i, code: "CAT" + String(i + 1).padStart(3, "0"), name: c.name, typeCode: c.typeCode }));
     const locDefs = [
       { name: "Head Office — Main Store", locType: "Head office", defaultWarehouse: true },
       { name: "Plant-1 Factory", locType: "Factory" },
@@ -111,7 +111,7 @@
       { name: "Bhiwandi Dispatch Hub", locType: "Branch" },
     ];
     const locations = locDefs.map((l, i) => ({
-      id: "loc" + i, code: "LOC-" + String(i + 1).padStart(2, "0"), name: l.name, locType: l.locType,
+      id: "loc" + i, code: "LOC" + String(i + 1).padStart(3, "0"), name: l.name, locType: l.locType,
       line1: "Plot 14, MIDC Industrial Area", city: "Pune", state: "Maharashtra", pin: "411018", country: "India",
       contact: "Operations", phone: "+91 20 4123 5600", email: "ops@veraglo.in", gstin: company.gstin,
       defaultWarehouse: !!l.defaultWarehouse, status: "Active",
@@ -140,7 +140,7 @@
 
     const customers = [
       {
-        id: "c1", code: "CUST-0001", name: "Reliance Retail Ltd.", legalName: "Reliance Retail Limited", tradeName: "Reliance Retail",
+        id: "c1", code: "CUST000001", name: "Reliance Retail Ltd.", legalName: "Reliance Retail Limited", tradeName: "Reliance Retail",
         type: "Company", category: "Key Account", status: "Active", pan: "AAACR5055K", gstin: "27AAACR5055K1Z5", cin: "U01100MH1999PLC120563",
         website: "www.relianceretail.com", source: "Key Account", salesPerson: "Sales Team", currency: "INR", gstRegType: "Regular", multiCurrency: false,
         priceList: "Dealer", paymentTermsId: "pt2", creditLimit: 5000000, creditDays: 45, outstanding: 1240000,
@@ -159,21 +159,21 @@
         billing: "Court House, Lokmanya Tilak Marg, Mumbai, Maharashtra 400002",
         shipping: "DC-3, Bhiwandi Logistics Park, Bhiwandi, Maharashtra 421302", credit: "45 Days Credit",
       },
-      { id: "c2", code: "CUST-0002", name: "Tata Projects Ltd.", contact: "S. Nair", phone: "+91 99000 22222", email: "snair@tataprojects.com", gstin: "36AAACT2803M1ZS", billing: "Mithona Towers, Hyderabad 500082", shipping: "Site Office, Hyderabad 500032", state: "Telangana", credit: "30 Days Credit", status: "Active", approvalStatus: "Approved" },
-      { id: "c3", code: "CUST-0003", name: "Adani Facilities Mgmt.", contact: "P. Shah", phone: "+91 90000 33333", email: "pshah@adani.com", gstin: "24AAACA1234K1Z9", billing: "Shantigram, Ahmedabad 382421", shipping: "Mundra Port, Gujarat 370421", state: "Gujarat", credit: "Against Delivery", status: "Active", approvalStatus: "Approved" },
-      { id: "c4", code: "CUST-0004", name: "Larsen Infra Pvt. Ltd.", contact: "A. Menon", phone: "+91 88000 44444", email: "amenon@larseninfra.com", gstin: "29AAACL9999K1Z2", billing: "Powai, Mumbai 400072", shipping: "EPC Site, Bengaluru 560100", state: "Karnataka", credit: "30 Days Credit", status: "Active", approvalStatus: "Approved" },
+      { id: "c2", code: "CUST000002", name: "Tata Projects Ltd.", contact: "S. Nair", phone: "+91 99000 22222", email: "snair@tataprojects.com", gstin: "36AAACT2803M1ZS", billing: "Mithona Towers, Hyderabad 500082", shipping: "Site Office, Hyderabad 500032", state: "Telangana", credit: "30 Days Credit", status: "Active", approvalStatus: "Approved" },
+      { id: "c3", code: "CUST000003", name: "Adani Facilities Mgmt.", contact: "P. Shah", phone: "+91 90000 33333", email: "pshah@adani.com", gstin: "24AAACA1234K1Z9", billing: "Shantigram, Ahmedabad 382421", shipping: "Mundra Port, Gujarat 370421", state: "Gujarat", credit: "Against Delivery", status: "Active", approvalStatus: "Approved" },
+      { id: "c4", code: "CUST000004", name: "Larsen Infra Pvt. Ltd.", contact: "A. Menon", phone: "+91 88000 44444", email: "amenon@larseninfra.com", gstin: "29AAACL9999K1Z2", billing: "Powai, Mumbai 400072", shipping: "EPC Site, Bengaluru 560100", state: "Karnataka", credit: "30 Days Credit", status: "Active", approvalStatus: "Approved" },
     ];
     const suppliers = [
-      { id: "s1", code: "SUPP-0001", name: "Syska LED Lights", contact: "M. Jain", phone: "+91 98111 55555", email: "purchase@syska.co.in", gstin: "27AABCS1234K1Z1", address: "Andheri East, Mumbai 400093", category: "A-grade", rating: 4.5 },
-      { id: "s2", code: "SUPP-0002", name: "Bajaj Electricals", contact: "K. Rao", phone: "+91 98222 66666", email: "vendor@bajajelectricals.com", gstin: "27AAACB1234K1Z2", address: "Lower Parel, Mumbai 400013", category: "A-grade", rating: 4.3 },
-      { id: "s3", code: "SUPP-0003", name: "Crompton Greaves", contact: "D. Iyer", phone: "+91 98333 77777", email: "supply@crompton.co.in", gstin: "27AAACC1234K1Z3", address: "Kanjurmarg, Mumbai 400042", category: "B-grade", rating: 4.0 },
+      { id: "s1", code: "SUPP000001", name: "Syska LED Lights", contact: "M. Jain", phone: "+91 98111 55555", email: "purchase@syska.co.in", gstin: "27AABCS1234K1Z1", address: "Andheri East, Mumbai 400093", category: "A-grade", rating: 4.5 },
+      { id: "s2", code: "SUPP000002", name: "Bajaj Electricals", contact: "K. Rao", phone: "+91 98222 66666", email: "vendor@bajajelectricals.com", gstin: "27AAACB1234K1Z2", address: "Lower Parel, Mumbai 400013", category: "A-grade", rating: 4.3 },
+      { id: "s3", code: "SUPP000003", name: "Crompton Greaves", contact: "D. Iyer", phone: "+91 98333 77777", email: "supply@crompton.co.in", gstin: "27AAACC1234K1Z3", address: "Kanjurmarg, Mumbai 400042", category: "B-grade", rating: 4.0 },
     ];
     const manufacturers = [
-      { id: "mfr1", code: "MFR-001", name: "OSRAM", brand: "OSRAM", country: "Germany", website: "www.osram.com", contact: "Regional Sales", email: "sales@osram.com", active: true },
-      { id: "mfr2", code: "MFR-002", name: "Mean Well", brand: "Mean Well", country: "Taiwan", website: "www.meanwell.com", contact: "India Distributor", email: "support@meanwell.com", active: true },
-      { id: "mfr3", code: "MFR-003", name: "Cree LED", brand: "Cree", country: "USA", website: "www.cree.com", contact: "", email: "", active: true },
-      { id: "mfr4", code: "MFR-004", name: "Ledil", brand: "Ledil", country: "Finland", website: "", contact: "", email: "", active: true },
-      { id: "mfr5", code: "MFR-005", name: "Kingboard", brand: "Kingboard", country: "China", website: "", contact: "", email: "", active: true },
+      { id: "mfr1", code: "MFR001", name: "OSRAM", brand: "OSRAM", country: "Germany", website: "www.osram.com", contact: "Regional Sales", email: "sales@osram.com", active: true },
+      { id: "mfr2", code: "MFR002", name: "Mean Well", brand: "Mean Well", country: "Taiwan", website: "www.meanwell.com", contact: "India Distributor", email: "support@meanwell.com", active: true },
+      { id: "mfr3", code: "MFR003", name: "Cree LED", brand: "Cree", country: "USA", website: "www.cree.com", contact: "", email: "", active: true },
+      { id: "mfr4", code: "MFR004", name: "Ledil", brand: "Ledil", country: "Finland", website: "", contact: "", email: "", active: true },
+      { id: "mfr5", code: "MFR005", name: "Kingboard", brand: "Kingboard", country: "China", website: "", contact: "", email: "", active: true },
     ];
     const items = [
       { id: "i1", sku: "DRV-36W", name: "Mean Well LED Driver 36W", description: "LED Driver 36W Constant Current\n• Make: Mean Well\n• Model: LCM-36X\n• Application: Indoor/outdoor LED luminaire power supply\n• Warranty: 24 months", categoryId: "cat0", unit: "Nos", hsn: "85044090", rate: 320, taxId: "gst18", reorder: 200, minStock: 120, batchTracked: true, locationId: "loc0", warranty: "24 months", manufacturerId: "mfr2", manufacturerPartNumber: "LCM-36X", manufacturerDesc: "36W constant current LED driver", manufacturerModel: "LCM-36X", brandName: "Mean Well" },
@@ -209,12 +209,12 @@
       company, units, taxes, categories, locations, paymentTerms, deliveryTerms, currencies, pincodes,
       customers, suppliers, manufacturers, items, priceList,
       leads: [
-        { id: "L1", no: "LEAD/2627/0001", date: "2026-05-21", customerId: "c1", title: "Façade lighting drivers", value: 480000, source: "Website", stage: "Qualified", status: "Open", owner: "sales", remarks: "Needs 36W & 50W drivers" },
-        { id: "L2", no: "LEAD/2627/0002", date: "2026-05-24", customerId: "c4", title: "Heat sinks bulk order", value: 220000, source: "Referral", stage: "Proposal", status: "Open", owner: "sales", remarks: "" },
+        { id: "L1", no: "LEAD202600001", date: "2026-05-21", customerId: "c1", title: "Façade lighting drivers", value: 480000, source: "Website", stage: "Qualified", status: "Open", owner: "sales", remarks: "Needs 36W & 50W drivers" },
+        { id: "L2", no: "LEAD202600002", date: "2026-05-24", customerId: "c4", title: "Heat sinks bulk order", value: 220000, source: "Referral", stage: "Proposal", status: "Open", owner: "sales", remarks: "" },
       ],
       enquiries: [
         {
-          id: "E1", no: "ENQ/2627/0001", date: "2026-05-22", type: "Sales", customerId: "c2",
+          id: "E1", no: "ENQ202600001", date: "2026-05-22", type: "Sales", customerId: "c2",
           companyName: "L&T Construction", contactPerson: "A. Sharma", contactPhone: "9876543210", contactEmail: "asharma@lt.com",
           customerType: "Existing", customerSource: "Tender", priority: "Urgent",
           projectName: "Metro Station Façade Lighting", projectLocation: "Mumbai", customerRfqNo: "RFQ-METRO-2026-042",
@@ -233,7 +233,7 @@
       proformas: [],
       salesOrders: [
         {
-          id: "so1", no: "SO/2627/0001", date: todayISO(), quotationId: "", customerId: "c1",
+          id: "so1", no: "SO202600001", date: todayISO(), quotationId: "", customerId: "c1",
           contact: "R. Kapoor", billing: "Court House, Lokmanya Tilak Marg, Mumbai 400002", shipping: "DC-3, Bhiwandi Logistics Park, Bhiwandi 421302",
           gstin: "27AAACR5055K1Z5", lines: [{ sku: "DRV-36W", name: "Mean Well LED Driver 36W", desc: "LED Driver 36W Constant Current\n• Make: Mean Well\n• Model: LCM-36X", hsn: "85044090", qty: 200, unit: "Nos", rate: 320, discountPct: 5, taxPct: 18 }],
           totals: { sub: 64000, discount: 3200, taxable: 60800, tax: 10944, charges: 0, grand: 71744 },
@@ -252,12 +252,12 @@
       invoices: [],
       payments: [],
       employees: [
-        { id: "e1", code: "EMP-0001", name: "A. Sharma", department: "Production", designation: "Line Operator", doj: "2024-04-01", ctc: 420000, pan: "ABCDE1234A", status: "Active" },
-        { id: "e2", code: "EMP-0002", name: "N. Verma", department: "Quality", designation: "QC Inspector", doj: "2023-08-15", ctc: 480000, pan: "BCDEF2345B", status: "Active" },
-        { id: "e3", code: "EMP-0003", name: "S. Iyer", department: "Accounts", designation: "Accounts Executive", doj: "2022-01-10", ctc: 540000, pan: "CDEFG3456C", status: "Active" },
+        { id: "e1", code: "EMP000001", name: "A. Sharma", department: "Production", designation: "Line Operator", doj: "2024-04-01", ctc: 420000, pan: "ABCDE1234A", status: "Active" },
+        { id: "e2", code: "EMP000002", name: "N. Verma", department: "Quality", designation: "QC Inspector", doj: "2023-08-15", ctc: 480000, pan: "BCDEF2345B", status: "Active" },
+        { id: "e3", code: "EMP000003", name: "S. Iyer", department: "Accounts", designation: "Accounts Executive", doj: "2022-01-10", ctc: 540000, pan: "CDEFG3456C", status: "Active" },
       ],
       leaveRequests: [
-        { id: "lv1", no: "LP/2627/0001", employeeId: "e1", from: todayISO(), to: todayISO(), days: 1, type: "Casual", reason: "Personal", status: "Pending", appliedOn: todayISO() },
+        { id: "lv1", no: "LP202600001", employeeId: "e1", from: todayISO(), to: todayISO(), days: 1, type: "Casual", reason: "Personal", status: "Pending", appliedOn: todayISO() },
       ],
       attendanceRecords: [
         { id: "att1", employeeId: "e1", month: "2026-05", present: 20, leave: 1, absent: 0, otHours: 8, locked: false },
@@ -267,7 +267,7 @@
       payrollRuns: [],
       salarySlips: [],
       purchaseRequests: [
-        { id: "PR1", no: "PR/2627/0001", date: todayISO(), itemId: "i6", qty: 250, uom: "Nos", neededBy: "", priority: "High", reason: "Below reorder level", status: "Pending", raisedBy: "inventory", supplierId: "s1" },
+        { id: "PR1", no: "PR202600001", date: todayISO(), itemId: "i6", qty: 250, uom: "Nos", neededBy: "", priority: "High", reason: "Below reorder level", status: "Pending", raisedBy: "inventory", supplierId: "s1" },
       ],
       purchaseOrders: [],
       rfqs: [],
@@ -427,6 +427,9 @@
     migrateItemLocations(db);
     migratePurchaseEnterprise(db);
     migrateHREnterprise(db);
+    if (typeof VG !== "undefined" && VG.numberingEngine && VG.numberingEngine.migrateNumbering) {
+      VG.numberingEngine.migrateNumbering(db);
+    }
     db._v = VERSION;
     return db;
   }
@@ -541,7 +544,7 @@
       (db.locations || []).forEach((loc, i) => {
         db.itemLocations.push({
           id: "iloc" + i,
-          code: "ILOC-" + String(i + 1).padStart(2, "0"),
+          code: "ILOC" + String(i + 1).padStart(3, "0"),
           locationId: loc.id,
           name: (loc.name || "Store") + " — Rack A / Shelf 1 / Bin 01",
           rack: "A",
@@ -731,11 +734,11 @@
     if (!Array.isArray(db.manufacturers)) db.manufacturers = [];
     if (!db.manufacturers.length) {
       db.manufacturers = [
-        { id: "mfr1", code: "MFR-001", name: "OSRAM", brand: "OSRAM", country: "Germany", active: true },
-        { id: "mfr2", code: "MFR-002", name: "Mean Well", brand: "Mean Well", country: "Taiwan", active: true },
-        { id: "mfr3", code: "MFR-003", name: "Cree LED", brand: "Cree", country: "USA", active: true },
-        { id: "mfr4", code: "MFR-004", name: "Ledil", brand: "Ledil", country: "Finland", active: true },
-        { id: "mfr5", code: "MFR-005", name: "Kingboard", brand: "Kingboard", country: "China", active: true },
+        { id: "mfr1", code: "MFR001", name: "OSRAM", brand: "OSRAM", country: "Germany", active: true },
+        { id: "mfr2", code: "MFR002", name: "Mean Well", brand: "Mean Well", country: "Taiwan", active: true },
+        { id: "mfr3", code: "MFR003", name: "Cree LED", brand: "Cree", country: "USA", active: true },
+        { id: "mfr4", code: "MFR004", name: "Ledil", brand: "Ledil", country: "Finland", active: true },
+        { id: "mfr5", code: "MFR005", name: "Kingboard", brand: "Kingboard", country: "China", active: true },
       ];
     }
     const defaults = {
@@ -804,7 +807,7 @@
     if (!Array.isArray(db.categories)) db.categories = [];
     if (!db.categories.some((c) => c.typeCode === "FNG")) {
       const n = db.categories.length + 1;
-      db.categories.push({ id: "catfng", code: "CAT-" + n, name: "Finished Goods", typeCode: "FNG" });
+      db.categories.push({ id: "catfng", code: "CAT" + String(n).padStart(3, "0"), name: "Finished Goods", typeCode: "FNG" });
     }
     (db.boms || []).forEach((b) => {
       if (b.revision === "A" || !b.revision) { b.revision = "Rev-00"; b.revisionNo = 0; }
@@ -961,15 +964,15 @@
         { id: "tpl8", docType: "Purchase Order", name: "PO — Warm Commerce", isDefault: false, ...presets("warm") },
       ];
     }
-    if (!(db.numberSeries || []).length) {
-      const defs = [
-        ["QTN", "Quotation"], ["PI", "Proforma Invoice"], ["SO", "Sales Order"], ["PO", "Purchase Order"],
-        ["MRN", "Material Receipt"], ["MIS", "Material Issue"], ["RC", "Returnable Challan"], ["INV", "Tax Invoice"],
+    if (typeof VG !== "undefined" && VG.numberingEngine && VG.numberingEngine.ensureDefaultSeries) {
+      VG.numberingEngine.ensureDefaultSeries(db);
+    } else if (!(db.numberSeries || []).length) {
+      db.numberSeries = [
+        { id: "ns1", docType: "Quotation", prefix: "QT", useCalendarYear: true, useFy: false, padding: 5, startSequence: 1, reset: "Yearly", active: true },
+        { id: "ns2", docType: "Sales Order", prefix: "SO", useCalendarYear: true, useFy: false, padding: 5, startSequence: 1, reset: "Yearly", active: true },
+        { id: "ns3", docType: "Tax Invoice", prefix: "INV", useCalendarYear: true, useFy: false, padding: 5, startSequence: 1, reset: "Yearly", active: true },
+        { id: "ns4", docType: "Purchase Order", prefix: "PO", useCalendarYear: true, useFy: false, padding: 5, startSequence: 1, reset: "Yearly", active: true },
       ];
-      db.numberSeries = defs.map(([prefix, label], i) => ({
-        id: "ns" + i, docType: label, prefix: "GLS/" + prefix, useFy: true, padding: 4, reset: "Yearly",
-        branchWise: false, manualOverride: false, active: true,
-      }));
     }
     const extraRoles = [
       { id: "role_super", key: "super_admin", label: "Super Admin", tag: "Unrestricted control", avatar: "SA", color: "#dc2626", moduleAccess: "all", actions: ALL_ACTIONS, permissions: {}, hierarchy: 1, builtIn: true, active: true },
@@ -1143,36 +1146,27 @@
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
 
     nextNo(prefix, dateRef) {
-      const DOC_BY_PREFIX = {
-        QTN: "Quotation", PI: "Proforma Invoice", SO: "Sales Order", PO: "Purchase Order",
-        PR: "Purchase Request", RFQ: "Purchase Request", MRN: "Material Receipt", MIS: "Material Issue", RC: "Returnable Challan",
-        INV: "Tax Invoice", QC: "QC Report", NCR: "QC Report", WO: "Work Order", SH: "Delivery Challan",
-        LP: "Leave", PAY: "Salary Slip", VB: "Purchase Order", VP: "Purchase Order",
-      };
-      const docType = DOC_BY_PREFIX[prefix];
-      const ser = docType && (DB.numberSeries || []).find((s) => s.active !== false && s.docType === docType);
-      if (ser) {
-        const sk = "NS_" + ser.id;
-        DB.seq[sk] = (DB.seq[sk] || 0) + 1;
-        const n = String(DB.seq[sk]).padStart(Number(ser.padding) || 4, "0");
-        const parts = String(ser.prefix || "GLS/" + prefix).split("/").filter(Boolean);
-        if (ser.useFy) parts.push(fyCode(dateRef));
-        parts.push(n);
-        return parts.join("/");
+      if (typeof VG !== "undefined" && VG.numberingEngine && VG.numberingEngine.nextDocumentNo) {
+        return VG.numberingEngine.nextDocumentNo(prefix, dateRef);
       }
       DB.seq[prefix] = (DB.seq[prefix] || 0) + 1;
-      return prefix + "/" + fyCode(dateRef) + "/" + String(DB.seq[prefix]).padStart(4, "0");
+      const y = new Date(dateRef || todayISO()).getFullYear();
+      return String(prefix || "DOC").replace(/[^A-Za-z0-9]/g, "").toUpperCase() + y + String(DB.seq[prefix]).padStart(5, "0");
     },
 
-    // Category master code: CAT-1, CAT-2 … continues from highest existing (CAT-8 → CAT-9).
+    nextMasterCode(prefix, opts) {
+      if (typeof VG !== "undefined" && VG.numberingEngine && VG.numberingEngine.nextMasterCode) {
+        return VG.numberingEngine.nextMasterCode(prefix, opts);
+      }
+      const p = String(prefix || "CODE").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+      DB.seq[p] = (DB.seq[p] || 0) + 1;
+      return p + String(DB.seq[p]).padStart(6, "0");
+    },
+    nextCustomerCode() { return this.nextMasterCode("CUST"); },
+    nextSupplierCode() { return this.nextMasterCode("SUPP"); },
+
     nextCategoryCode() {
-      let max = 0;
-      (DB.categories || []).forEach((c) => {
-        if (!c.code) return;
-        const m = String(c.code).toUpperCase().match(/^CAT-?(\d+)$/);
-        if (m) max = Math.max(max, parseInt(m[1], 10));
-      });
-      return "CAT-" + (max + 1);
+      return this.nextMasterCode("CAT", { collection: "categories", field: "code", pad: 3 });
     },
 
     skuCompanyPrefix() {
@@ -1203,13 +1197,7 @@
     },
 
     nextManufacturerCode() {
-      let max = 0;
-      (DB.manufacturers || []).forEach((m) => {
-        if (!m.code) return;
-        const match = String(m.code).toUpperCase().match(/^MFR-?(\d+)$/);
-        if (match) max = Math.max(max, parseInt(match[1], 10));
-      });
-      return "MFR-" + String(max + 1).padStart(3, "0");
+      return this.nextMasterCode("MFR", { collection: "manufacturers", field: "code", pad: 3 });
     },
 
     normalizeMfrName,
@@ -1615,14 +1603,7 @@
         remarks: "Below reorder level", supplierId: "",
       }, actor);
     },
-    nextVendorCode() {
-      let max = 0;
-      (DB.suppliers || []).forEach((s) => {
-        const m = String(s.code || "").toUpperCase().match(/^SUPP-?(\d+)$/);
-        if (m) max = Math.max(max, parseInt(m[1], 10));
-      });
-      return "SUPP-" + String(max + 1).padStart(4, "0");
-    },
+    nextVendorCode() { return this.nextSupplierCode(); },
     approvePR(prId, actor) {
       return this.update("purchaseRequests", prId, { status: "Approved", approvedBy: actor, approvedAt: Date.now() }, actor);
     },
@@ -2848,14 +2829,7 @@
         halfDay: !!data.halfDay, status: "Pending", appliedOn: todayISO(), appliedBy: actor,
       }, actor);
     },
-    nextEmployeeCode() {
-      let max = 0;
-      (DB.employees || []).forEach((e) => {
-        const m = String(e.code || "").toUpperCase().match(/^EMP-?(\d+)$/);
-        if (m) max = Math.max(max, parseInt(m[1], 10));
-      });
-      return "EMP-" + String(max + 1).padStart(4, "0");
-    },
+    nextEmployeeCode() { return this.nextMasterCode("EMP", { collection: "employees", field: "code", pad: 6 }); },
     employeeForUser(roleKey) {
       const user = (DB.erpUsers || []).find((u) => u.roleKey === roleKey || u.email === roleKey);
       if (user && user.employeeId) return this.get("employees", user.employeeId);
@@ -3084,6 +3058,9 @@
         _usePostgres = false;
       }
       this.backfillMissingWorkOrders();
+      if (typeof VG !== "undefined" && VG.numberingEngine && VG.numberingEngine.syncCountersFromData) {
+        VG.numberingEngine.syncCountersFromData(DB);
+      }
       if (typeof VG !== "undefined" && VG.ROLES) this.syncAllRolesToRuntime();
       _ready = true;
       notify();

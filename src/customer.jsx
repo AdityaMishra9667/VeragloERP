@@ -317,7 +317,7 @@
         saved = { ...payload, id: c.id };
         VG.toast("Customer updated");
       } else {
-        payload.code = store.nextNo("CUST").replace(/\//g, "-");
+        payload.code = store.nextCustomerCode ? store.nextCustomerCode() : store.nextMasterCode("CUST");
         payload.createdBy = roleKey;
         payload.approvalStatus = can("approve") ? "Approved" : "Pending";
         payload.approvedBy = can("approve") ? roleKey : "";

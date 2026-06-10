@@ -55,10 +55,11 @@
   ];
 
   VG.ADMIN_DOC_TYPES = [
-    "Quotation", "Proforma Invoice", "Tax Invoice", "Purchase Order", "Sales Order",
-    "Material Receipt Note", "Material Issue Slip", "Returnable Challan", "Non-Returnable Challan",
-    "Delivery Challan", "QC Report", "Salary Slip", "Offer Letter", "Appointment Letter",
-    "Gate Pass", "Stock Report", "Ledger Statement",
+    "Quotation", "Proforma Invoice", "Tax Invoice", "Sales Order", "Purchase Order", "Purchase Request",
+    "RFQ", "Enquiry", "Lead", "Material Receipt Note", "Material Issue Slip", "Returnable Challan",
+    "Non-Returnable Challan", "Delivery Challan", "Work Order", "BOM", "QC Report", "Credit Note",
+    "Debit Note", "Leave", "Payroll Run", "Vendor Bill", "Vendor Payment", "Customer", "Supplier", "Employee",
+    "Salary Slip", "Offer Letter", "Appointment Letter", "Gate Pass", "Stock Report", "Ledger Statement",
   ];
 
   VG.ADMIN_APPROVAL_TYPES = [
