@@ -5,7 +5,7 @@
 (function (VG) {
   const { useState, useEffect } = React;
   const KEY = "veraglo-erp-db";
-  const VERSION = 22;
+  const VERSION = 23;
   const ITEM_DESC_MAX = 30000;
   const AUTH_INACTIVE_MSG = "User account does not exist or has been deactivated.";
   const ITEM_MFR_DUP_MSG = "This manufacturer and part number already exist in Item Master. Duplicate item cannot be created.";
@@ -300,6 +300,7 @@
       approvalWorkflows: [],
       approvalRequests: [],
       notificationInbox: [],
+      portalLinks: [],
       documentTemplates: [],
       numberSeries: [],
       fieldPermissions: [],
@@ -416,7 +417,7 @@
     if (!db.settings.backup) db.settings.backup = defaultSettings().backup;
     if (!Array.isArray(db.backups)) db.backups = [];
     ["purchaseRequests", "purchaseOrders", "rfqs", "vendorQuotations", "vendorBills", "vendorPayments", "qcInspections", "qcIssues", "ncrs", "boms", "workOrders", "materialRequirements", "finishedGoodsTransfers", "dispatchQueue", "orderHistory", "shipments", "invoices", "payments", "employees", "leaveRequests", "attendanceRecords", "payrollRuns", "salarySlips",
-      "erpUsers", "customRoles", "loginLog", "approvalWorkflows", "approvalRequests", "notificationInbox", "documentTemplates", "numberSeries", "fieldPermissions", "departments", "designations", "itemLocations", "openingBalances"].forEach((k) => { if (!Array.isArray(db[k])) db[k] = []; });
+      "erpUsers", "customRoles", "loginLog", "approvalWorkflows", "approvalRequests", "notificationInbox", "portalLinks", "documentTemplates", "numberSeries", "fieldPermissions", "departments", "designations", "itemLocations", "openingBalances"].forEach((k) => { if (!Array.isArray(db[k])) db[k] = []; });
     if (!db.settings.security) db.settings.security = defaultSettings().security;
     else db.settings.security = { ...defaultSettings().security, ...db.settings.security };
     if (!db.settings.theme) db.settings.theme = defaultSettings().theme;
@@ -466,6 +467,7 @@
       VG.numberingEngine.migrateNumbering(db);
     }
     migrateSalesPhase2(db);
+    migrateSalesPhase3(db);
     db._v = VERSION;
     return db;
   }
@@ -475,6 +477,16 @@
     if (!Array.isArray(db.notificationInbox)) db.notificationInbox = [];
     if (!db.settings.salesAutomation) {
       db.settings.salesAutomation = { quoteExpiryRemindDays: 3, staleQuoteDays: 14, lastRunAt: null };
+    }
+  }
+
+  function migrateSalesPhase3(db) {
+    if (!Array.isArray(db.portalLinks)) db.portalLinks = [];
+    if (!db.settings.customerPortal) {
+      db.settings.customerPortal = { enabled: true, defaultExpiryDays: 30, allowDownload: true, trackViews: true };
+    }
+    if (!db.settings.pwa) {
+      db.settings.pwa = { enabled: true, installPrompt: true };
     }
   }
 

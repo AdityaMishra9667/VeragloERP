@@ -11,6 +11,7 @@ import { ensureDeploymentReady } from "./first-run.js";
 import * as weather from "./weather.js";
 import * as passwordReset from "./password-reset.js";
 import { sendMail } from "./mail.js";
+import * as portal from "./portal.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.join(__dirname, "..");
@@ -316,6 +317,31 @@ app.get("/api/sessions", async (_req, res) => {
   }
 });
 
+/** Customer portal — public quotation view (token in link). */
+app.get("/api/portal/quote/:token", async (req, res) => {
+  try {
+    const state = (await db.getState()) || {};
+    res.json(portal.portalQuotePayload(state, req.params.token));
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post("/api/portal/view/:token", async (req, res) => {
+  try {
+    const state = (await db.getState()) || {};
+    const link = portal.recordPortalView(state, req.params.token, {
+      userAgent: req.headers["user-agent"] || "",
+      ip: req.ip || "",
+    });
+    if (!link) return res.status(404).json({ ok: false, error: "not_found" });
+    await db.saveState(state);
+    res.json({ ok: true, views: (link.views || []).length });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 /** Send notification email via SMTP settings in ERP state. */
 app.post("/api/notifications/send", async (req, res) => {
   try {
@@ -360,6 +386,12 @@ app.use(express.static(rootDir, { etag: false, maxAge: 0, setHeaders(res, filePa
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
   }
 }}));
+
+app.get("/portal.html", (_req, res) => {
+  const portalPath = path.join(rootDir, "portal.html");
+  if (fs.existsSync(portalPath)) res.sendFile(portalPath);
+  else res.status(404).send("Portal not found");
+});
 
 app.get("*", (_req, res) => {
   if (!fs.existsSync(indexHtmlPath)) {

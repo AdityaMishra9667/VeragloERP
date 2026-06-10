@@ -2,7 +2,7 @@
 
 **Document version:** 1.0  
 **As of:** June 2026  
-**Status:** Phase 2 complete (June 2026)  
+**Status:** Phase 3 complete (June 2026)  
 **Related:** [SALES-MODULE-FEATURES.md](./SALES-MODULE-FEATURES.md) (current implemented features)
 
 ---
@@ -316,12 +316,12 @@ This roadmap prioritizes enhancements in three phases.
 
 **Outcome:** Less manual follow-up; management visibility.
 
-### Phase 3 — Scale & productization
+### Phase 3 — Scale & productization — **COMPLETE**
 
-1. **AI intelligence** — order planning, risk prediction  
-2. **Predictive analytics** — forecasting, profitability  
-3. **Mobile apps** — PWA or native  
-4. **Customer portal** — quote view, document download  
+1. **AI intelligence** — `src/sales-intelligence.jsx`; order planning queue, delivery risk, customer risk radar  
+2. **Predictive analytics** — `src/sales-forecasting.jsx`; 3-month revenue forecast, customer & product profitability  
+3. **Mobile / PWA** — `manifest.webmanifest`, `sw.js`, touch-friendly CSS, installable app shell  
+4. **Customer portal** — `portal.html`, `src/customer-portal.jsx`, `GET /api/portal/quote/:token`; share link from quotation, view tracking  
 
 **Outcome:** Commercially deployable multi-tenant ERP.
 
@@ -353,7 +353,7 @@ This roadmap prioritizes enhancements in three phases.
 - [ ] All document types use consistent templates from one admin screen  
 - [ ] Critical actions write to searchable audit trail  
 - [ ] Overdue items trigger in-app + email (optional WhatsApp) notifications  
-- [ ] Mobile browser usable for approvals and order status  
+- [x] Mobile browser usable for approvals and order status (PWA + touch targets)  
 - [ ] Export sales compliance reports without manual Excel work  
 
 ---
@@ -364,6 +364,7 @@ This roadmap prioritizes enhancements in three phases.
 |---------|------|--------|
 | 1.0 | June 2026 | Initial roadmap from enhancement review |
 | 1.1 | June 2026 | Phase 1 & 2 marked complete |
+| 1.2 | June 2026 | Phase 3 marked complete |
 
 ---
 

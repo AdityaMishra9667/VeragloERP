@@ -468,6 +468,7 @@
           { title: "Quotations pending", icon: "edit", go: "quotations", count: pendingQuotes, color: "#a78bfa", hint: "Draft or awaiting approval" },
           { title: "Follow-ups due", icon: "bell", go: "followups", count: followupsDue, color: "#f59e0b", hint: "Due today or overdue" },
           { title: "Approvals waiting", icon: "shield", go: "approvals", count: pendingApprovals.length + store.list("salesOrders").filter((o) => o.revisionPendingApproval).length, color: "#f59e0b", hint: "Discount & revision queue" },
+          { title: "Delivery risk (AI)", icon: "sparkle", go: "intelligence", count: orders.filter((o) => o.deliveryDate && o.deliveryDate < td && !["Closed", "Cancelled", "Fully Dispatched"].includes(stageOf(o))).length, color: "#ef4444", hint: "Orders past delivery date" },
           { title: "Sales orders pending action", icon: "cart", go: "orders", count: ordersPendingAction, color: "#6366f1", hint: "Saved, sent or awaiting material" },
         ],
         kpis: [

@@ -811,6 +811,14 @@
             onEmail={() => quotationEmailOffer(q, roleKey, onChange)} />
           {can("edit") && <Button variant="soft" icon="edit" onClick={() => onEdit(q)}>Edit / Revise</Button>}
           {q.status === "Pending Approval" && can("approve") && <Button icon="check" onClick={approve}>Approve</Button>}
+          {can("edit") && VG.customerPortal && (
+            <Button variant="soft" icon="link" onClick={async () => {
+              const link = VG.customerPortal.createQuotationPortalLink(q.id, roleKey);
+              if (!link) return VG.toast("Could not create portal link", "error");
+              await VG.customerPortal.copyPortalUrl(link.url);
+              onChange();
+            }} title="Customer portal link">Share portal</Button>
+          )}
           {canConvert && can("add") && <>
             <Button variant="soft" icon="rupee" onClick={convertProforma} disabled={!!linkedPI} title={linkedPI ? "Proforma " + linkedPI.no + " already exists" : ""}>Proforma Invoice</Button>
             <Button icon="cart" onClick={convertSO} disabled={!!linkedSO} title={linkedSO ? "SO " + linkedSO.no + " already exists" : ""}>Sales Order</Button>
@@ -824,6 +832,7 @@
           {lifecycle.detail && <span className="text-xs opacity-60 font-mono">{lifecycle.detail}</span>}
           {q.needsDiscountApproval && <Pill color="#f59e0b">discount approval</Pill>}
           {q.lastOfferMode && <span className="text-xs opacity-50">via {q.lastOfferMode}</span>}
+          {q.portalViews > 0 && <Pill color="#60a5fa">Client viewed ×{q.portalViews}</Pill>}
           <span className="text-sm opacity-60 ml-auto">{q.date} · valid {q.validity} days</span>
         </div>
         {canConvert && (
@@ -2271,7 +2280,9 @@
     { id: "pricelist", label: "Price List", icon: "rupee", group: "Setup" },
     { id: "currencies", label: "Currencies", icon: "rupee", group: "Setup" },
     { id: "pincodes", label: "PIN Codes", icon: "grid", group: "Setup" },
+    { id: "intelligence", label: "AI Intelligence", icon: "sparkle", group: "Intelligence" },
     { id: "analytics", label: "Analytics", icon: "trending", group: "Reports" },
+    { id: "forecast", label: "Forecasting", icon: "chart", group: "Intelligence" },
     { id: "reports", label: "Reports", icon: "chart", group: "Reports" },
   ];
   if (VG.registerModuleSections) VG.registerModuleSections("sales", SECTIONS);
@@ -2284,7 +2295,9 @@
     commcenter: (p) => React.createElement(VG.CommunicationCenterPage, p),
     comms: CommsPage, approvals: ApprovalCenterPage, quotations: QuotationsPage, discounts: DiscountsPage, revisions: RevisionApprovalPage,
     proformas: ProformasPage, invoices: InvoicesPage, orders: OrdersPage, tracking: TrackingPage, history: OrderHistoryPage,
+    intelligence: (p) => React.createElement(VG.SalesIntelligencePage, p),
     analytics: (p) => React.createElement(VG.SalesAnalyticsPage, p),
+    forecast: (p) => React.createElement(VG.SalesForecastingPage, p),
     reports: ReportsPage,
   };
 

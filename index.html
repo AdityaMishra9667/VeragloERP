@@ -6,9 +6,14 @@
     <meta name="theme-color" content="#0b1220" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
-    <meta name="vg-build" content="2026-06-sales-phase2-automation-v1" />
+    <meta name="vg-build" content="2026-06-sales-phase3-scale-v1" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <title>Veraglo ERP — Enterprise Workspace</title>
     <link rel="icon" type="image/png" href="assets/veraglo-logo.png" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="assets/veraglo-logo.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -1903,6 +1908,17 @@
         height: 100%;
         object-fit: cover;
       }
+      /* Phase 3 — mobile / PWA touch targets */
+      @media (max-width: 768px) {
+        button, .vg-quick-action-card, .vg-work-queue-card {
+          min-height: 44px;
+        }
+        .app-chrome { padding-left: 0.75rem; padding-right: 0.75rem; }
+        .vg-dash-section-head h3 { font-size: 0.95rem; }
+      }
+      @media print {
+        .app-chrome, .vg-sidebar, button { display: none !important; }
+      }
     </style>
   </head>
   <body>
@@ -1927,7 +1943,7 @@
         var files = [
           "src/data.jsx", "src/typography.jsx", "src/ui.jsx", "src/store.jsx", "src/numbering-engine.jsx", "src/date-format.jsx", "src/sku-engine.jsx", "src/item-mfr.jsx", "src/item-display.jsx", "src/admin-config.jsx", "src/doc-designer.jsx", "src/forms.jsx", "src/screen-nav.jsx", "src/doc-conversion.jsx", "src/doc-template-designer.jsx", "src/customer.jsx",
           "src/module-dashboard.jsx", "src/modules.jsx", "src/shell-ui.jsx", "src/enquiry.jsx", "src/invoice-export.jsx",
-          "src/approval-engine.jsx", "src/communication-center.jsx", "src/sales-analytics.jsx", "src/sales.jsx", "src/bom.jsx", "src/inventory.jsx", "src/purchase.jsx", "src/quality.jsx",
+          "src/approval-engine.jsx", "src/communication-center.jsx", "src/sales-analytics.jsx", "src/sales-intelligence.jsx", "src/sales-forecasting.jsx", "src/customer-portal.jsx", "src/sales.jsx", "src/bom.jsx", "src/inventory.jsx", "src/purchase.jsx", "src/quality.jsx",
           "src/production.jsx", "src/dispatch.jsx", "src/accounts.jsx", "src/hr.jsx", "src/attendance.jsx",
           "src/licensing-core.jsx", "src/admin-licensing.jsx", "src/admin-permissions.jsx", "src/weather-login.jsx", "src/forgot-password.jsx", "src/admin.jsx", "src/search.jsx", "src/welcome-home.jsx", "src/app.jsx",
         ];
@@ -1966,6 +1982,11 @@
             loaderEl.style.transition = "opacity .35s ease";
             loaderEl.style.opacity = "0";
             setTimeout(function () { if (loaderEl.parentNode) loaderEl.parentNode.removeChild(loaderEl); }, 380);
+          }
+          if ("serviceWorker" in navigator) {
+            navigator.serviceWorker.register("/sw.js").catch(function (err) {
+              console.warn("[Veraglo PWA] Service worker registration failed:", err);
+            });
           }
           VG.bootApp();
         } catch (e) {
