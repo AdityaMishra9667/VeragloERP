@@ -48,6 +48,17 @@
     ["Vendor Bill", "VB"], ["Vendor Payment", "VP"],
   ];
 
+  const DOC_TYPE_ALIASES = {
+    "Material Receipt": "Material Receipt Note",
+    "Material Issue": "Material Issue Slip",
+    "Salary Slip": "Payroll Run",
+  };
+
+  const STANDARD_PREFIX_BY_DOC = DEFAULT_SERIES_DEFS.reduce((m, [doc, prefix]) => {
+    m[doc] = prefix;
+    return m;
+  }, {});
+
   const MASTER_DEFS = {
     CUST: { collection: "customers", field: "code", pad: 6 },
     SUPP: { collection: "suppliers", field: "code", pad: 6 },
@@ -98,21 +109,48 @@
     };
   }
 
-  function ensureDefaultSeries(database) {
+  function normalizeSeriesRow(s, opts) {
+    if (!s) return s;
+    const upgrade = !!(opts && opts.upgrade);
+    if (DOC_TYPE_ALIASES[s.docType]) s.docType = DOC_TYPE_ALIASES[s.docType];
+    const stdPrefix = STANDARD_PREFIX_BY_DOC[s.docType];
+    if (upgrade && stdPrefix) s.prefix = sanitizeAlphaNum(stdPrefix);
+    else s.prefix = sanitizeAlphaNum(s.prefix || stdPrefix || "");
+    if (upgrade) {
+      s.useCalendarYear = true;
+      s.useFy = false;
+    } else {
+      if (s.useCalendarYear == null && s.useFy == null) {
+        s.useCalendarYear = true;
+        s.useFy = false;
+      }
+      if (s.useCalendarYear && s.useFy) s.useFy = false;
+      if (!s.useCalendarYear && !s.useFy) s.useCalendarYear = true;
+    }
+    if (s.startSequence == null) s.startSequence = 1;
+    if (!s.padding || Number(s.padding) < 5) s.padding = 5;
+    if (s.active == null) s.active = true;
+    if (!s.reset) s.reset = "Yearly";
+    return s;
+  }
+
+  function ensureDefaultSeries(database, opts) {
     if (!database) return;
     if (!Array.isArray(database.numberSeries)) database.numberSeries = [];
+    database.numberSeries.forEach((s) => normalizeSeriesRow(s, opts));
+    const activeByDoc = {};
+    database.numberSeries.forEach((s) => {
+      if (s.active === false) return;
+      const doc = s.docType;
+      if (!activeByDoc[doc]) activeByDoc[doc] = s;
+      else s.active = false;
+    });
     DEFAULT_SERIES_DEFS.forEach(([docType, prefix], i) => {
-      if (!database.numberSeries.some((s) => s.docType === docType)) {
+      if (!database.numberSeries.some((s) => s.docType === docType && s.active !== false)) {
         database.numberSeries.push({ id: "ns" + (database.numberSeries.length + i + 1), ...defaultSeriesRow(docType, prefix) });
       }
     });
-    database.numberSeries.forEach((s) => {
-      s.prefix = sanitizeAlphaNum(s.prefix);
-      if (s.useCalendarYear == null && s.useFy) s.useCalendarYear = false;
-      if (s.useCalendarYear == null) s.useCalendarYear = true;
-      if (s.startSequence == null) s.startSequence = 1;
-      if (!s.padding) s.padding = 5;
-    });
+    database.numberSeries.forEach((s) => normalizeSeriesRow(s, opts));
   }
 
   function seriesForPrefix(prefix) {
@@ -147,15 +185,17 @@
     return formatNumber(series, start, dateRef || new Date().toISOString().slice(0, 10));
   }
 
-  function tailSeqFromNo(no, prefix) {
+  function tailSeqFromNo(no, prefix, series) {
     const clean = sanitizeAlphaNum(no);
     const p = sanitizeAlphaNum(prefix);
-    if (!clean || !p) return 0;
-    if (!clean.startsWith(p)) {
-      const legacy = String(no || "").match(/(\d+)\s*$/);
-      return legacy ? parseInt(legacy[1], 10) : 0;
-    }
+    if (!clean || !p || !clean.startsWith(p)) return 0;
     const tail = clean.slice(p.length);
+    const pad = Number((series && series.padding) || 5);
+    if (series && (series.useCalendarYear || series.useFy) && tail.length > pad) {
+      const seqPart = tail.slice(-pad);
+      const yearPart = tail.slice(0, tail.length - pad);
+      if (/^\d+$/.test(yearPart) && /^\d+$/.test(seqPart)) return parseInt(seqPart, 10);
+    }
     const m = tail.match(/(\d+)$/);
     return m ? parseInt(m[1], 10) : 0;
   }
@@ -257,7 +297,7 @@
       let max = Number(ser.startSequence) || 1;
       (collectionsByType[docType] || []).forEach((coll) => {
         (database[coll] || []).forEach((rec) => {
-          max = Math.max(max, tailSeqFromNo(rec.no, prefix));
+          max = Math.max(max, tailSeqFromNo(rec.no, prefix, ser));
         });
       });
       const key = "NS_" + ser.id + "_" + periodKey(ser, new Date().toISOString().slice(0, 10));
@@ -274,7 +314,7 @@
         "finishedGoodsTransfers", "materialRequirements", "qcIssues", "returns", "physicalVerifications"];
       cols.forEach((coll) => {
         (database[coll] || []).forEach((rec) => {
-          if (rec.no) max = Math.max(max, tailSeqFromNo(rec.no, prefix));
+          if (rec.no) max = Math.max(max, tailSeqFromNo(rec.no, prefix, ser));
         });
       });
       database.seq[key] = max;
@@ -283,33 +323,34 @@
 
   function migrateNumbering(database) {
     if (!database) return database;
-    ensureDefaultSeries(database);
-    (database.numberSeries || []).forEach((s) => {
-      const oldPrefix = s.prefix;
-      s.prefix = sanitizeAlphaNum(s.prefix);
-      if (s.useCalendarYear == null) s.useCalendarYear = !s.useFy;
-      if (s.startSequence == null) s.startSequence = 1;
-      if (!s.padding) s.padding = 5;
-      if (oldPrefix !== s.prefix) {
-        database.numberMappings = database.numberMappings || [];
-        database.numberMappings.push({ ts: Date.now(), type: "series_prefix", old: oldPrefix, new: s.prefix, docType: s.docType });
-      }
-    });
     if (!database.settings) database.settings = {};
-    if (!database.settings.numbering) {
-      database.settings.numbering = {
-        alphanumericOnly: true,
-        preserveLegacyNumbers: true,
-        defaultPadding: 5,
-        defaultYearMode: "calendar",
-      };
+    database.settings.numbering = database.settings.numbering || {};
+    const curVer = Number(database.settings.numbering.engineVersion) || 0;
+    const upgrade = curVer < 2;
+    database.numberMappings = database.numberMappings || [];
+    if (upgrade) {
+      (database.numberSeries || []).forEach((s) => {
+        const oldPrefix = s.prefix;
+        const oldDoc = s.docType;
+        normalizeSeriesRow(s, { upgrade: true });
+        if (oldPrefix !== s.prefix || oldDoc !== s.docType) {
+          database.numberMappings.push({
+            ts: Date.now(), type: "series_normalize", oldPrefix, newPrefix: s.prefix, oldDocType: oldDoc, docType: s.docType,
+          });
+        }
+      });
     }
+    ensureDefaultSeries(database, upgrade ? { upgrade: true } : null);
+    database.settings.numbering = {
+      ...database.settings.numbering,
+      alphanumericOnly: true,
+      preserveLegacyNumbers: true,
+      defaultPadding: 5,
+      defaultYearMode: database.settings.numbering.defaultYearMode || "calendar",
+      engineVersion: 2,
+    };
     syncCountersFromData(database);
     return database;
-  }
-
-  if (typeof VG.store !== "undefined" && VG.store.db) {
-    try { migrateNumbering(VG.store.db()); } catch (e) { /* store may still be seeding */ }
   }
 
   VG.numberingEngine = {

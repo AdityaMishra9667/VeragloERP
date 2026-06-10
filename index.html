@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0b1220" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
-    <meta name="vg-build" content="2026-06-alphanumeric-numbering-v1" />
+    <meta name="vg-build" content="2026-06-alphanumeric-numbering-v2" />
     <title>Veraglo ERP — Enterprise Workspace</title>
     <link rel="icon" type="image/png" href="assets/veraglo-logo.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -1940,8 +1940,12 @@
           }
           VG.apiBase = "";
           VG.buildId = document.querySelector('meta[name="vg-build"]')?.content || "dev";
-          console.info("[Veraglo ERP] UI build:", VG.buildId, "— compact dashboard v1+. Run: git pull origin main");
+          console.info("[Veraglo ERP] UI build:", VG.buildId, "— numbering v2 (QT202600001). Run: git pull && ./start.sh");
           var initInfo = await VG.store.init();
+          if (VG.numberingEngine && VG.numberingEngine.previewSeries && VG.store.list) {
+            var qSer = (VG.store.list("numberSeries") || []).find(function (s) { return s.docType === "Quotation" && s.active !== false; });
+            if (qSer) console.info("[Veraglo ERP] Quotation format preview:", VG.numberingEngine.previewSeries(qSer));
+          }
           if (VG.applyTypography) {
             var st = VG.store.settings();
             VG.applyTypography(st.typography, st.theme);

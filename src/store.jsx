@@ -5,7 +5,7 @@
 (function (VG) {
   const { useState, useEffect } = React;
   const KEY = "veraglo-erp-db";
-  const VERSION = 15;
+  const VERSION = 16;
   const ITEM_DESC_MAX = 30000;
   const AUTH_INACTIVE_MSG = "User account does not exist or has been deactivated.";
   const ITEM_MFR_DUP_MSG = "This manufacturer and part number already exist in Item Master. Duplicate item cannot be created.";
@@ -3058,8 +3058,9 @@
         _usePostgres = false;
       }
       this.backfillMissingWorkOrders();
-      if (typeof VG !== "undefined" && VG.numberingEngine && VG.numberingEngine.syncCountersFromData) {
-        VG.numberingEngine.syncCountersFromData(DB);
+      if (typeof VG !== "undefined" && VG.numberingEngine) {
+        if (VG.numberingEngine.migrateNumbering) VG.numberingEngine.migrateNumbering(DB);
+        else if (VG.numberingEngine.syncCountersFromData) VG.numberingEngine.syncCountersFromData(DB);
       }
       if (typeof VG !== "undefined" && VG.ROLES) this.syncAllRolesToRuntime();
       _ready = true;
