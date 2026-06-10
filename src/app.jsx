@@ -404,14 +404,6 @@
     const recentIds = (prefs.recentModules || []).slice(0, 4);
     const displayName = (email || "").split("@")[0].replace(/\./g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
-    const QUICK_LINKS = [
-      { label: "Quote", icon: "edit", mod: "sales", section: "quotations", title: "Add Quotation" },
-      { label: "Customer", icon: "users", mod: "sales", section: "customers", title: "Customers" },
-      { label: "Invoice", icon: "rupee", mod: "sales", section: "invoices", title: "Tax Invoice" },
-      { label: "GRN", icon: "download", mod: "inventory", section: "receipt", title: "Material Receipt" },
-      { label: "WO", icon: "factory", mod: "production", section: "orders", title: "Work Order" },
-    ];
-
     useEffect(() => {
       if (activeId) setExpandedId(activeId);
     }, [activeId]);
@@ -606,23 +598,6 @@
                 placeholder="Search menu…"
                 aria-label="Search navigation"
               />
-            </div>
-          )}
-
-          {!narrow && !navQuery && (
-            <div className="vg-sidebar-quick no-scrollbar">
-              {QUICK_LINKS.filter((l) => modById[l.mod]).map((l) => (
-                <button
-                  key={l.label}
-                  type="button"
-                  title={l.title}
-                  onClick={() => navToSection(l.mod, l.section)}
-                  className="vg-sidebar-quick-btn"
-                >
-                  <Icon name={l.icon} size={16} />
-                  <span>{l.label}</span>
-                </button>
-              ))}
             </div>
           )}
 
