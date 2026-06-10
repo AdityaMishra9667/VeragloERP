@@ -3,7 +3,7 @@
   const { useState, useMemo, useEffect } = React;
   const ui = VG.ui, fx = VG.fx, store = VG.store, inr = VG.fmt.inr, today = VG.fmt.todayISO;
   const { Icon, Button, Pill, Card } = ui;
-  const { Field, Text, Area, Num, DateF, Select, Checkbox, MasterSelect, Modal, InternalScreen, RecordTable, PageHead, ListPage, StatusTag, printDocument, DocActions, TransactionLinesShell } = fx;
+  const { Field, Text, Area, Num, DateF, Select, Checkbox, MasterSelect, Modal, InternalScreen, RecordTable, PageHead, ListPage, StatusTag, printDocument, DocActions, CollapsibleSection, TransactionLinesShell } = fx;
 
   const QUO_STATUS = { Draft: "#94a3b8", "Pending Approval": "#f59e0b", Approved: "#34d399", Sent: "#60a5fa", Won: "#22c55e", Lost: "#ef4444", Revised: "#a78bfa" };
   const QUO_LIFECYCLE = {
@@ -54,6 +54,26 @@
     if (!roundEnabled) roundOff = 0;
     if (Math.abs(roundOff) < 0.001) roundOff = 0;
     return { sub, discount, taxable, tax, charges, grand, roundOff, final: grand + roundOff };
+  }
+  function lineMargin(l) {
+    const qty = Number(l.qty) || 0;
+    const cost = store.itemUnitCost ? store.itemUnitCost(l.itemId) : 0;
+    const c = computeLine(l);
+    const costTotal = cost * qty;
+    const margin = c.taxable - costTotal;
+    const marginPct = c.taxable > 0 ? Math.round((margin / c.taxable) * 1000) / 10 : 0;
+    return { cost, costTotal, margin, marginPct };
+  }
+  function computeQuoteMargins(q) {
+    let revenue = 0, cost = 0;
+    (q.lines || []).forEach((l) => {
+      if (!l.itemId) return;
+      revenue += computeLine(l).taxable;
+      cost += lineMargin(l).costTotal;
+    });
+    const margin = revenue - cost;
+    const marginPct = revenue > 0 ? Math.round((margin / revenue) * 1000) / 10 : 0;
+    return { revenue, cost, margin, marginPct };
   }
   function needsApproval(q) {
     const t = computeQuote(q);
@@ -150,6 +170,7 @@
       <th className="w-28">Rate</th>
       <th className="w-20">Disc%</th>
       <th className="w-20">Tax%</th>
+      <th className="w-24 text-right">Margin%</th>
       <th className="w-28 text-right">Amount</th>
       <th className="w-10" />
     </tr>
@@ -176,6 +197,16 @@
     const addLine = () => { setDirty(true); setQ((p) => ({ ...p, lines: p.lines.concat(blankLine()) })); };
     const delLine = (key) => { setDirty(true); setQ((p) => ({ ...p, lines: p.lines.filter((l) => l.key !== key) })); };
     const totals = computeQuote(q);
+    const margins = computeQuoteMargins(q);
+    const clauseLibrary = store.listQuotationClauses ? store.listQuotationClauses() : [];
+
+    function insertClause(clauseId) {
+      const cl = clauseLibrary.find((c) => c.id === clauseId);
+      if (!cl) return;
+      setDirty(true);
+      setQ((p) => ({ ...p, terms: (p.terms ? p.terms.trim() + "\n\n" : "") + cl.text }));
+      VG.toast("Clause inserted: " + cl.name, "info");
+    }
 
     function save(submit) {
       if (!q.customerId) return VG.toast("Select a customer from master", "error");
@@ -205,45 +236,56 @@
       onClose();
     }
 
+    const formActions = <>
+      <Button variant="soft" icon="eye" onClick={() => quotationPDF({ ...q, no: q.no || "DRAFT", rev: q.rev || 0, status: q.status || "Draft", totals }, "preview")}>Preview PDF</Button>
+      <Button variant="soft" icon="check" onClick={() => save(false)}>Save as Draft</Button>
+      <Button icon="shield" onClick={() => save(true)}>Submit{needsApproval(q) ? " for approval" : ""}</Button>
+    </>;
+
     return (
       <InternalScreen onBack={onClose} backLabel="Back to list" dirty={dirty} title={isEdit ? "Edit Quotation " + q.no : "New Quotation"} subtitle="All parties & items are selected from master data only"
-        footer={<>
-          <Button variant="soft" icon="eye" onClick={() => quotationPDF({ ...q, no: q.no || "DRAFT", rev: q.rev || 0, status: q.status || "Draft", totals }, "preview")}>Preview PDF</Button>
-          <Button variant="soft" icon="check" onClick={() => save(false)}>Save as Draft</Button>
-          <Button icon="shield" onClick={() => save(true)}>Submit{needsApproval(q) ? " for approval" : ""}</Button>
-        </>}>
-        <div className="grid lg:grid-cols-3 gap-3 mb-4">
-          <Field label="Customer (from master)" required className="lg:col-span-1">
-            <MasterSelect collection="customers" value={q.customerId} onChange={pickCustomer} actorRole={roleKey} can={can("add")} />
-          </Field>
-          <Field label="Contact person"><Text value={q.contact} onChange={(v) => set("contact", v)} placeholder="Auto from master" /></Field>
-          <Field label="GSTIN"><Text value={q.gstin} onChange={(v) => set("gstin", v)} placeholder="Auto from master" /></Field>
-          <Field label="Date" required><DateF value={q.date} onChange={(v) => set("date", v)} /></Field>
-          <Field label="Validity (days)"><Num value={q.validity} onChange={(v) => set("validity", v)} /></Field>
-          <Field label="Warranty" hint="Shown on PDF commercial offer"><Text value={q.warranty} onChange={(v) => set("warranty", v)} placeholder={DEFAULT_WARRANTY} /></Field>
-          <Field label="Subject"><Text value={q.subject} onChange={(v) => set("subject", v)} placeholder="Offer subject / scope headline" /></Field>
-          <Field label="Project name"><Text value={q.projectName} onChange={(v) => set("projectName", v)} /></Field>
-          <Field label="Project reference"><Text value={q.projectRef} onChange={(v) => set("projectRef", v)} /></Field>
-          <Field label="RFQ / Inquiry ref."><Text value={q.rfqRef} onChange={(v) => set("rfqRef", v)} /></Field>
-          <Field label="Project location"><Text value={q.projectLocation} onChange={(v) => set("projectLocation", v)} placeholder="City, state, country" /></Field>
-          {VG.TransactionAddressCurrency ? (
-            <VG.TransactionAddressCurrency customerId={q.customerId} values={q} onChange={patchCustomerFields} roleKey={roleKey} canEditCurrency={can("edit")} showAddresses={false} />
-          ) : (
-            <>
-              <Field label="Billing address" className="lg:col-span-1"><Area value={q.billing} onChange={(v) => set("billing", v)} rows={2} /></Field>
-              <Field label="Shipping address" className="lg:col-span-1"><Area value={q.shipping} onChange={(v) => set("shipping", v)} rows={2} /></Field>
-            </>
-          )}
-          <div className="grid grid-cols-2 gap-3 content-start lg:col-span-3">
-            <Field label="Payment terms"><Select value={q.paymentTermsId} onChange={(v) => set("paymentTermsId", v)} options={store.list("paymentTerms").map((t) => ({ value: t.id, label: t.name }))} /></Field>
-            <Field label="Delivery terms"><Select value={q.deliveryTermsId} onChange={(v) => set("deliveryTermsId", v)} options={store.list("deliveryTerms").map((t) => ({ value: t.id, label: t.name }))} /></Field>
+        footer={formActions}>
+        <CollapsibleSection title="Customer & commercial" subtitle="Party, dates, terms" defaultOpen>
+          <div className="grid lg:grid-cols-3 gap-3">
+            <Field label="Customer (from master)" required className="lg:col-span-1">
+              <MasterSelect collection="customers" value={q.customerId} onChange={pickCustomer} actorRole={roleKey} can={can("add")} />
+            </Field>
+            <Field label="Contact person"><Text value={q.contact} onChange={(v) => set("contact", v)} placeholder="Auto from master" /></Field>
+            <Field label="GSTIN"><Text value={q.gstin} onChange={(v) => set("gstin", v)} placeholder="Auto from master" /></Field>
+            <Field label="Date" required><DateF value={q.date} onChange={(v) => set("date", v)} /></Field>
+            <Field label="Validity (days)"><Num value={q.validity} onChange={(v) => set("validity", v)} /></Field>
+            <Field label="Warranty" hint="Shown on PDF commercial offer"><Text value={q.warranty} onChange={(v) => set("warranty", v)} placeholder={DEFAULT_WARRANTY} /></Field>
+            <div className="grid grid-cols-2 gap-3 content-start lg:col-span-3">
+              <Field label="Payment terms"><Select value={q.paymentTermsId} onChange={(v) => set("paymentTermsId", v)} options={store.list("paymentTerms").map((t) => ({ value: t.id, label: t.name }))} /></Field>
+              <Field label="Delivery terms"><Select value={q.deliveryTermsId} onChange={(v) => set("deliveryTermsId", v)} options={store.list("deliveryTerms").map((t) => ({ value: t.id, label: t.name }))} /></Field>
+            </div>
           </div>
-        </div>
+        </CollapsibleSection>
 
-        <TransactionLinesShell title="Line items" onAddLine={addLine} addLabel="Add line" minWidth={1180}
+        <CollapsibleSection title="Project & references" subtitle="Subject, RFQ, location" defaultOpen={!!(q.subject || q.projectName || q.rfqRef)}>
+          <div className="grid lg:grid-cols-3 gap-3">
+            <Field label="Subject"><Text value={q.subject} onChange={(v) => set("subject", v)} placeholder="Offer subject / scope headline" /></Field>
+            <Field label="Project name"><Text value={q.projectName} onChange={(v) => set("projectName", v)} /></Field>
+            <Field label="Project reference"><Text value={q.projectRef} onChange={(v) => set("projectRef", v)} /></Field>
+            <Field label="RFQ / Inquiry ref."><Text value={q.rfqRef} onChange={(v) => set("rfqRef", v)} /></Field>
+            <Field label="Project location"><Text value={q.projectLocation} onChange={(v) => set("projectLocation", v)} placeholder="City, state, country" /></Field>
+            {VG.TransactionAddressCurrency ? (
+              <VG.TransactionAddressCurrency customerId={q.customerId} values={q} onChange={patchCustomerFields} roleKey={roleKey} canEditCurrency={can("edit")} showAddresses={false} className="lg:col-span-3" />
+            ) : (
+              <>
+                <Field label="Billing address" className="lg:col-span-1"><Area value={q.billing} onChange={(v) => set("billing", v)} rows={2} /></Field>
+                <Field label="Shipping address" className="lg:col-span-1"><Area value={q.shipping} onChange={(v) => set("shipping", v)} rows={2} /></Field>
+              </>
+            )}
+          </div>
+        </CollapsibleSection>
+
+        <CollapsibleSection title="Line items" subtitle="Items, rates, margin visibility" defaultOpen>
+        <TransactionLinesShell title="" onAddLine={addLine} addLabel="Add line" minWidth={1280}
           headerRow={LINE_TABLE_HEAD}>
           {q.lines.map((l) => {
             const c = computeLine(l);
+            const m = lineMargin(l);
             const pl = store.list("priceList").find((x) => x.itemId === l.itemId);
             const below = pl && Number(l.rate) < pl.minRate;
             const rateRule = VG.fieldRule(roleKey, "quotation", "rate");
@@ -260,13 +302,16 @@
                 <td>{rateRule.editable ? <Num value={l.rate} onChange={(v) => setLine(l.key, { rate: v })} /> : <span className="opacity-70">{inr(l.rate)}</span>}{below && <div className="text-[9px] text-rose-400 mt-0.5">below floor</div>}</td>
                 <td>{discRule.editable ? <Num value={l.discountPct} onChange={(v) => setLine(l.key, { discountPct: v })} /> : <span className="opacity-70">{l.discountPct || 0}%</span>}{discRule.approvalRequired && <div className="text-[9px] text-amber-400">needs approval</div>}</td>
                 <td><Num value={l.taxPct} onChange={(v) => setLine(l.key, { taxPct: v })} /></td>
+                <td className={"text-right text-xs font-medium " + (m.marginPct < 15 ? "text-amber-400" : "text-emerald-400")}>{l.itemId ? m.marginPct + "%" : "—"}</td>
                 <td className="text-right font-medium">{inr(c.total)}</td>
                 <td><button type="button" onClick={() => delLine(l.key)} className="p-1 rounded chrome-hover hover:text-rose-400"><Icon name="trash" size={14} /></button></td>
               </tr>
             );
           })}
         </TransactionLinesShell>
+        </CollapsibleSection>
 
+        <CollapsibleSection title="Charges, terms & summary" subtitle="Freight, clauses, totals" defaultOpen>
         <div className="grid lg:grid-cols-3 gap-3">
           <div className="grid grid-cols-3 gap-3 lg:col-span-2 content-start">
             <Field label="Freight (₹)"><Num value={q.freight} onChange={(v) => set("freight", v)} /></Field>
@@ -276,7 +321,12 @@
             <Field label="Round-off (±)" hint="Manual adjustment"><Num value={q.roundOff != null ? q.roundOff : totals.roundOff} onChange={(v) => set("roundOff", v)} disabled={q.roundOffMode !== "manual"} /></Field>
             <Checkbox checked={q.roundOffEnabled !== false} onChange={(v) => set("roundOffEnabled", v)} label="Apply round-off on total" />
             <Field label="Remarks" className="col-span-3"><Area value={q.remarks} onChange={(v) => set("remarks", v)} rows={2} /></Field>
-            <Field label="Terms & conditions" className="col-span-3"><Area value={q.terms} onChange={(v) => set("terms", v)} rows={3} /></Field>
+            {clauseLibrary.length > 0 && (
+              <Field label="Insert reusable clause" className="col-span-3">
+                <Select value="" onChange={insertClause} options={[{ value: "", label: "— Select clause to insert —" }].concat(clauseLibrary.map((c) => ({ value: c.id, label: c.name })))} />
+              </Field>
+            )}
+            <Field label="Terms & conditions" className="col-span-3"><Area value={q.terms} onChange={(v) => set("terms", v)} rows={4} /></Field>
           </div>
           <Card className="p-4 h-max">
             <div className="text-sm font-semibold mb-2">Summary</div>
@@ -286,9 +336,14 @@
             <div className="flex justify-between text-sm font-semibold border-t border-white/10 mt-2 pt-2"><span>Grand total</span><span>{inr(totals.grand)}</span></div>
             {totals.roundOff ? <div className="flex justify-between text-sm py-0.5"><span className="opacity-60">Round off</span><span>{totals.roundOff > 0 ? "+" : ""}{inr(totals.roundOff)}</span></div> : null}
             {totals.roundOff ? <div className="flex justify-between text-base font-semibold border-t border-white/10 mt-1 pt-1"><span>Final amount</span><span>{inr(totals.final)}</span></div> : null}
+            <div className="mt-3 pt-3 border-t border-white/10 space-y-1 text-sm">
+              <div className="flex justify-between"><span className="opacity-60">Est. cost</span><span>{inr(margins.cost)}</span></div>
+              <div className="flex justify-between font-medium"><span className="opacity-60">Gross margin</span><span className={margins.marginPct < 15 ? "text-amber-400" : "text-emerald-400"}>{inr(margins.margin)} ({margins.marginPct}%)</span></div>
+            </div>
             {needsApproval(q) && <div className="mt-3 text-[11px] rounded-lg p-2" style={{ background: "#f59e0b22", color: "#f59e0b" }}><Icon name="alert" size={12} className="inline mr-1" />Discount &gt; {DISCOUNT_LIMIT}% — needs approval</div>}
           </Card>
         </div>
+        </CollapsibleSection>
       </InternalScreen>
     );
   }
@@ -570,7 +625,11 @@
   }
 
   /* ---------- quotation PDF ---------- */
-  function quotationPDF(q, mode) { printDocument(quotationDoc(q), mode); }
+  function quotationPDF(q, mode) {
+    const doc = quotationDoc(q);
+    const tid = q.templateId || (store.getSelectedTemplateId && store.getSelectedTemplateId("Quotation"));
+    printDocument({ ...doc, docType: "Quotation", templateId: tid }, mode);
+  }
   function quotationDoc(q) {
     const c = VG.normalizeCustomer ? VG.normalizeCustomer(store.get("customers", q.customerId) || {}) : (store.get("customers", q.customerId) || {});
     const t = computeQuote(q);

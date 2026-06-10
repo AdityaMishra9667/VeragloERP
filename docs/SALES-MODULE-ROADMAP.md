@@ -2,7 +2,7 @@
 
 **Document version:** 1.0  
 **As of:** June 2026  
-**Status:** Planning / recommended enhancements  
+**Status:** Phase 1 in progress (June 2026)  
 **Related:** [SALES-MODULE-FEATURES.md](./SALES-MODULE-FEATURES.md) (current implemented features)
 
 ---

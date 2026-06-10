@@ -34,6 +34,41 @@
     };
   }
 
+  function monthlyDocCounts(collection, months) {
+    const n = months || 6;
+    const out = [];
+    for (let i = n - 1; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(1);
+      d.setMonth(d.getMonth() - i);
+      const ym = d.toISOString().slice(0, 7);
+      out.push(store.list(collection).filter((r) => String(r.date || "").slice(0, 7) === ym).length);
+    }
+    return out;
+  }
+
+  function MiniBarChart({ series }) {
+    if (!series || !series.length) return null;
+    return (
+      <div className="grid sm:grid-cols-3 gap-4">
+        {series.map((s) => {
+          const max = Math.max.apply(null, s.data.concat([1]));
+          return (
+            <div key={s.label} className="rounded-xl glass p-3">
+              <div className="text-xs font-medium opacity-70 mb-2">{s.label}</div>
+              <div className="flex items-end gap-1 h-20">
+                {s.data.map((v, i) => (
+                  <div key={i} className="flex-1 rounded-t min-h-[4px] transition-all" style={{ height: Math.max(12, (v / max) * 100) + "%", background: s.color || "var(--accent)", opacity: v ? 0.9 : 0.25 }} title={String(v)} />
+                ))}
+              </div>
+              <div className="text-[10px] opacity-45 mt-2">Last {s.data.length} months · total {s.data.reduce((a, b) => a + b, 0)}</div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   function saveModuleDashPrefs(roleKey, modId, patch) {
     const all = store.dashboardPrefs(roleKey);
     const md = { ...(all.moduleDashboard || {}) };
@@ -506,7 +541,12 @@
           { title: "Offers pending follow-up", desc: "Overdue enquiry touch-points", value: enqStats ? enqStats.overdueFollowups : overdue.length, icon: "bell", color: "#f59e0b" },
           { title: "Orders awaiting dispatch", desc: "Ready for dispatch", value: readyDispatch.length, icon: "truck", color: "#f97316" },
         ],
-        series: [12, 18, 15, 22, 28, 24, 30, 26, 32, 35, 38, 42],
+        series: monthlyDocCounts("quotations", 12),
+        chartSeries: [
+          { label: "Quotations", data: monthlyDocCounts("quotations", 6), color: "#a78bfa" },
+          { label: "Sales orders", data: monthlyDocCounts("salesOrders", 6), color: "#6366f1" },
+          { label: "Invoices", data: monthlyDocCounts("invoices", 6), color: "#06b6d4" },
+        ],
         suggestions: (enqStats && enqStats.overdueFollowups) ? [{ text: "Complete " + enqStats.overdueFollowups + " overdue enquiry follow-ups", section: "followups" }] : overdue.length ? [{ text: "Complete " + overdue.length + " overdue follow-ups", section: "followups" }] : [{ text: "Create a quotation from an open enquiry", section: "enquiries" }],
         activity: auditRows(["enquiries", "quotations", "salesOrders", "invoices", "leads", "customers"], 8),
         reports: [
@@ -1004,6 +1044,14 @@
 
             {cfg.workQueues && cfg.workQueues.length > 0 && (
               <WorkQueueGrid queues={cfg.workQueues} go={go} />
+            )}
+            {cfg.chartSeries && cfg.chartSeries.length > 0 && (
+              <Card className="p-5 sm:p-6">
+                <SectionTitle icon="chart" title="Pipeline activity (last 6 months)" />
+                <div className="mt-4">
+                  <MiniBarChart series={cfg.chartSeries} />
+                </div>
+              </Card>
             )}
             <div className="grid lg:grid-cols-3 gap-5">
               <div className="lg:col-span-2 space-y-5">

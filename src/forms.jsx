@@ -855,8 +855,10 @@
     w.document.close();
   }
   function printDocument({ title, subtitle, inner, docType, templateId, copies, useIntlLayout }, mode = "print") {
+    let tid = templateId;
+    if (!tid && docType && store.getSelectedTemplateId) tid = store.getSelectedTemplateId(docType);
     if (VG.printStyledDocument) {
-      VG.printStyledDocument({ title, subtitle, inner, docType, templateId, copies, useIntlLayout }, mode);
+      VG.printStyledDocument({ title, subtitle, inner, docType, templateId: tid, copies, useIntlLayout }, mode);
       return;
     }
     openPrint(title, `<h1 class="vg-title">${title}</h1>${subtitle ? `<div class="vg-sub">${subtitle}</div>` : ""}${inner}`, mode);
@@ -878,22 +880,77 @@
     const color = (map && map[value]) || defaults[value] || "#94a3b8";
     return <Pill color={color}>{value}</Pill>;
   }
+  function CollapsibleSection({ title, subtitle, defaultOpen = true, children, className = "" }) {
+    const [open, setOpen] = useState(defaultOpen);
+    return (
+      <Card className={"mb-3 overflow-hidden " + className}>
+        <button type="button" onClick={() => setOpen((v) => !v)} className="w-full flex items-center justify-between gap-3 p-3 sm:p-4 text-left chrome-hover">
+          <div className="min-w-0">
+            <div className="text-sm font-semibold">{title}</div>
+            {subtitle && <div className="text-[11px] opacity-55 mt-0.5">{subtitle}</div>}
+          </div>
+          <Icon name={open ? "chevronUp" : "chevronDown"} size={16} className="shrink-0 opacity-60" />
+        </button>
+        {open && <div className="px-3 sm:px-4 pb-3 sm:pb-4 border-t border-white/10 pt-3">{children}</div>}
+      </Card>
+    );
+  }
+
+  function PrintTemplatePicker({ open, onClose, docType, mode, onConfirm }) {
+    const templates = useMemo(
+      () => (store.listActiveDocumentTemplates ? store.listActiveDocumentTemplates() : (store.list("documentTemplates") || []).filter((t) => t.active !== false)),
+      [open, store.list("documentTemplates").length]
+    );
+    const defaultId = store.getSelectedTemplateId ? store.getSelectedTemplateId(docType) : (templates[0] && templates[0].id);
+    const [tplId, setTplId] = useState(defaultId || "");
+    useEffect(() => {
+      if (open) setTplId(store.getSelectedTemplateId ? store.getSelectedTemplateId(docType) || (templates[0] && templates[0].id) || "" : "");
+    }, [open, docType, templates.length]);
+    const modeLabel = mode === "print" ? "Print" : mode === "download" ? "Download PDF" : "Preview";
+    return (
+      <Modal open={open} onClose={onClose} title={modeLabel + " — " + (docType || "Document")}
+        subtitle="Choose the PDF template for this document"
+        footer={<>
+          <Button variant="soft" onClick={onClose}>Cancel</Button>
+          <Button icon={mode === "download" ? "download" : mode === "print" ? "printer" : "eye"} onClick={() => onConfirm(tplId)}>{modeLabel}</Button>
+        </>}>
+        <Field label="Select Template">
+          <Select value={tplId} onChange={setTplId} options={templates.map((t) => ({ value: t.id, label: t.name }))} />
+        </Field>
+      </Modal>
+    );
+  }
+
   /* Standard document action set for any printable transaction. `build` returns
      a { title, subtitle, inner } document object (lazy so it always reflects latest data). */
-  function DocActions({ build, onEmail, onDocument, label, docType }) {
-    const run = (mode) => {
+  function DocActions({ build, onEmail, onDocument, label, docType, showTemplatePicker = true }) {
+    const [picker, setPicker] = useState(null);
+    const run = (mode, templateId) => {
       try {
         const doc = build();
-        printDocument({ ...doc, docType: docType || doc.docType }, mode);
+        const dt = docType || doc.docType;
+        const tid = templateId || (store.getSelectedTemplateId && store.getSelectedTemplateId(dt)) || doc.templateId;
+        printDocument({ ...doc, docType: dt, templateId: tid }, mode);
         onDocument && onDocument(mode);
       } catch (e) { VG.toast("Could not generate document", "error"); }
     };
+    const request = (mode) => {
+      if (showTemplatePicker && docType) {
+        setPicker({ mode, docType });
+        return;
+      }
+      run(mode);
+    };
     return (
       <>
-        <Button variant="soft" icon="eye" onClick={() => run("preview")}>{label ? "Preview" : "Preview"}</Button>
-        <Button variant="soft" icon="printer" onClick={() => run("print")}>Print</Button>
-        <Button variant="soft" icon="download" onClick={() => run("download")}>PDF</Button>
+        <Button variant="soft" icon="eye" onClick={() => request("preview")}>{label || "Preview"}</Button>
+        <Button variant="soft" icon="printer" onClick={() => request("print")}>Print</Button>
+        <Button variant="soft" icon="download" onClick={() => request("download")}>PDF</Button>
         {onEmail && <Button variant="soft" icon="message" onClick={onEmail}>Email</Button>}
+        {picker && (
+          <PrintTemplatePicker open docType={picker.docType} mode={picker.mode} onClose={() => setPicker(null)}
+            onConfirm={(tplId) => { setPicker(null); run(picker.mode, tplId); }} />
+        )}
       </>
     );
   }
@@ -937,7 +994,7 @@
 
   VG.fx = {
     Toaster, Confirmer, BannerHost, Modal, Field, Text, Area, Num, DateF, Select, Checkbox, MasterSelect, QuickCreate,
-    RecordTable, exportCSV, printDocument, printTable, StatusTag, PageHead, ListPage, DocActions, labelOf,
+    RecordTable, exportCSV, printDocument, printTable, StatusTag, PageHead, ListPage, DocActions, CollapsibleSection, labelOf,
     TransactionLinesShell, itemDropdownLine, itemSearchHaystack,
   };
 })(window.VG);
