@@ -186,9 +186,20 @@
   }
 
   function tailSeqFromNo(no, prefix, series) {
-    const clean = sanitizeAlphaNum(no);
+    const raw = String(no || "");
     const p = sanitizeAlphaNum(prefix);
-    if (!clean || !p || !clean.startsWith(p)) return 0;
+    if (!raw || !p) return 0;
+    if (/[^A-Za-z0-9]/.test(raw)) {
+      const parts = raw.split(/[\/\-\s]+/).filter(Boolean);
+      if (parts.length >= 2) {
+        const head = sanitizeAlphaNum(parts.slice(0, -1).join(""));
+        const last = parts[parts.length - 1];
+        if (head.startsWith(p) && /^\d+$/.test(last)) return parseInt(last, 10);
+      }
+      return 0;
+    }
+    const clean = sanitizeAlphaNum(raw);
+    if (!clean.startsWith(p)) return 0;
     const tail = clean.slice(p.length);
     const pad = Number((series && series.padding) || 5);
     if (series && (series.useCalendarYear || series.useFy) && tail.length > pad) {
@@ -284,6 +295,7 @@
     ensureDefaultSeries(database);
     database.seq = database.seq || {};
     database.numberSeries.forEach((ser) => {
+      if (ser.active === false) return;
       const prefix = sanitizeAlphaNum(ser.prefix);
       const docType = ser.docType;
       const collectionsByType = {
@@ -329,6 +341,10 @@
     const upgrade = curVer < 2;
     database.numberMappings = database.numberMappings || [];
     if (upgrade) {
+      database.seq = database.seq || {};
+      Object.keys(database.seq).forEach((k) => {
+        if (k.startsWith("NS_") || k.startsWith("DOC_")) delete database.seq[k];
+      });
       (database.numberSeries || []).forEach((s) => {
         const oldPrefix = s.prefix;
         const oldDoc = s.docType;
