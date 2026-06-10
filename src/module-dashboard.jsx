@@ -467,6 +467,7 @@
           { title: "New enquiries", icon: "inbox", go: "enquiries", count: enqStats ? enqStats.new : store.list("enquiries").filter((e) => e.status === "New Enquiry").length, color: "#60a5fa", hint: "Fresh leads awaiting review", onClick: () => { VG._pendingEnquiryFilter = "New Enquiry"; go("enquiries"); } },
           { title: "Quotations pending", icon: "edit", go: "quotations", count: pendingQuotes, color: "#a78bfa", hint: "Draft or awaiting approval" },
           { title: "Follow-ups due", icon: "bell", go: "followups", count: followupsDue, color: "#f59e0b", hint: "Due today or overdue" },
+          { title: "Approvals waiting", icon: "shield", go: "approvals", count: pendingApprovals.length + store.list("salesOrders").filter((o) => o.revisionPendingApproval).length, color: "#f59e0b", hint: "Discount & revision queue" },
           { title: "Sales orders pending action", icon: "cart", go: "orders", count: ordersPendingAction, color: "#6366f1", hint: "Saved, sent or awaiting material" },
         ],
         kpis: [

@@ -2,7 +2,7 @@
 
 **Document version:** 1.0  
 **As of:** June 2026  
-**Status:** Phase 1 in progress (June 2026)  
+**Status:** Phase 2 complete (June 2026)  
 **Related:** [SALES-MODULE-FEATURES.md](./SALES-MODULE-FEATURES.md) (current implemented features)
 
 ---
@@ -298,21 +298,21 @@ This roadmap prioritizes enhancements in three phases.
 
 ## Implementation phases
 
-### Phase 1 — Immediate (limited resources)
+### Phase 1 — Immediate (limited resources) — **COMPLETE**
 
-1. **UI modernization** — sticky actions, collapsible sections, list/form polish  
-2. **Document template redesign** — centralized manager, per-doc-type defaults, advanced designer separate  
-3. **Quotation improvements** — templates, reusable clauses, margin column  
-4. **Dashboard enhancements** — KPI cards, basic charts, work-queue tiles  
+1. **UI modernization** — sticky action bar on forms, collapsible sections on quotation builder  
+2. **Document template redesign** — centralized split-panel manager, Standard ERP Template, per-doc-type save, print template picker  
+3. **Quotation improvements** — reusable clause library, margin % per line and summary, template-aware PDF  
+4. **Dashboard enhancements** — real monthly bar charts (quotations, SOs, invoices) on Sales dashboard  
 
 **Outcome:** Faster daily use for sales team; professional documents.
 
-### Phase 2 — Automation & intelligence
+### Phase 2 — Automation & intelligence — **COMPLETE**
 
-1. **Approval engine** — multi-level, amount thresholds, notifications  
-2. **Communication center** — SMTP + WhatsApp, unified inbox  
-3. **Analytics** — funnel, win/loss, territory, export trends  
-4. **Automation engine** — reminders, escalations, auto follow-ups  
+1. **Approval engine** — `src/approval-engine.jsx`; multi-level workflows, amount thresholds, audit trail, Approval Center  
+2. **Communication center** — `src/communication-center.jsx`; unified inbox, `POST /api/notifications/send`, WhatsApp (`wa.me`)  
+3. **Analytics** — `src/sales-analytics.jsx`; funnel, win/loss, territory, export trends, CSV export  
+4. **Automation engine** — `store.runSalesAutomation()`; follow-up reminders, stale quote alerts, quote expiry, escalation  
 
 **Outcome:** Less manual follow-up; management visibility.
 
@@ -363,6 +363,7 @@ This roadmap prioritizes enhancements in three phases.
 | Version | Date | Change |
 |---------|------|--------|
 | 1.0 | June 2026 | Initial roadmap from enhancement review |
+| 1.1 | June 2026 | Phase 1 & 2 marked complete |
 
 ---
 

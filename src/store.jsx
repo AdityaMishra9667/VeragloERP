@@ -5,7 +5,7 @@
 (function (VG) {
   const { useState, useEffect } = React;
   const KEY = "veraglo-erp-db";
-  const VERSION = 21;
+  const VERSION = 22;
   const ITEM_DESC_MAX = 30000;
   const AUTH_INACTIVE_MSG = "User account does not exist or has been deactivated.";
   const ITEM_MFR_DUP_MSG = "This manufacturer and part number already exist in Item Master. Duplicate item cannot be created.";
@@ -298,6 +298,8 @@
       customRoles: [],
       loginLog: [],
       approvalWorkflows: [],
+      approvalRequests: [],
+      notificationInbox: [],
       documentTemplates: [],
       numberSeries: [],
       fieldPermissions: [],
@@ -414,7 +416,7 @@
     if (!db.settings.backup) db.settings.backup = defaultSettings().backup;
     if (!Array.isArray(db.backups)) db.backups = [];
     ["purchaseRequests", "purchaseOrders", "rfqs", "vendorQuotations", "vendorBills", "vendorPayments", "qcInspections", "qcIssues", "ncrs", "boms", "workOrders", "materialRequirements", "finishedGoodsTransfers", "dispatchQueue", "orderHistory", "shipments", "invoices", "payments", "employees", "leaveRequests", "attendanceRecords", "payrollRuns", "salarySlips",
-      "erpUsers", "customRoles", "loginLog", "approvalWorkflows", "documentTemplates", "numberSeries", "fieldPermissions", "departments", "designations", "itemLocations", "openingBalances"].forEach((k) => { if (!Array.isArray(db[k])) db[k] = []; });
+      "erpUsers", "customRoles", "loginLog", "approvalWorkflows", "approvalRequests", "notificationInbox", "documentTemplates", "numberSeries", "fieldPermissions", "departments", "designations", "itemLocations", "openingBalances"].forEach((k) => { if (!Array.isArray(db[k])) db[k] = []; });
     if (!db.settings.security) db.settings.security = defaultSettings().security;
     else db.settings.security = { ...defaultSettings().security, ...db.settings.security };
     if (!db.settings.theme) db.settings.theme = defaultSettings().theme;
@@ -463,8 +465,17 @@
     if (typeof VG !== "undefined" && VG.numberingEngine && VG.numberingEngine.migrateNumbering) {
       VG.numberingEngine.migrateNumbering(db);
     }
+    migrateSalesPhase2(db);
     db._v = VERSION;
     return db;
+  }
+
+  function migrateSalesPhase2(db) {
+    if (!Array.isArray(db.approvalRequests)) db.approvalRequests = [];
+    if (!Array.isArray(db.notificationInbox)) db.notificationInbox = [];
+    if (!db.settings.salesAutomation) {
+      db.settings.salesAutomation = { quoteExpiryRemindDays: 3, staleQuoteDays: 14, lastRunAt: null };
+    }
   }
 
   function migratePurchaseEnterprise(db) {
@@ -2312,8 +2323,14 @@
       push("purchase", "bills", "Vendor bills pending payment", (DB.vendorBills || []).filter((x) => x.status !== "Paid").length, "#0891b2");
       push("purchase", "rfq", "RFQs awaiting quotation", (DB.rfqs || []).filter((x) => x.status === "Draft" || x.status === "Sent").length, "#a78bfa");
       push("sales", "followups", "Follow-ups due", (DB.followups || []).filter((x) => x.status === "Pending" && (x.date || "") <= todayISO()).length, "#6366f1");
-      push("sales", "discounts", "Quotation approvals waiting", (DB.quotations || []).filter((x) => x.status === "Pending Approval").length, "#f59e0b");
-      push("sales", "revisions", "Sales order revisions waiting approval", (DB.salesOrders || []).filter((x) => x.revisionPendingApproval).length, "#f59e0b");
+      const aprPending = (DB.approvalRequests || []).filter((x) => x.status === "Pending" || x.status === "Escalated").length;
+      const quoPending = (DB.quotations || []).filter((x) => x.status === "Pending Approval").length;
+      const revPending = (DB.salesOrders || []).filter((x) => x.revisionPendingApproval).length;
+      push("sales", "approvals", "Approvals waiting", aprPending || quoPending + revPending, "#f59e0b");
+      push("sales", "discounts", "Quotation discount queue", quoPending, "#f59e0b");
+      push("sales", "revisions", "SO revision queue", revPending, "#f59e0b");
+      const unread = (DB.notificationInbox || []).filter((n) => !n.read).length;
+      if (unread) push("sales", "commcenter", "Unread alerts", unread, "#60a5fa");
       push("production", "orders", "Work orders pending BOM", (DB.workOrders || []).filter((x) => x.status === "BOM Pending" || x.status === "BOM Under Review").length, "#ef4444");
       push("production", "orders", "WOs in progress", (DB.workOrders || []).filter((x) => x.status === "Production In Progress" || x.status === "Running" || x.status === "Released").length, "#f59e0b");
       push("production", "orders", "Approved revisions to acknowledge", (DB.workOrders || []).filter((w) => w.revisionPendingAck).length, "#22d3ee");
@@ -3607,6 +3624,10 @@
         _usePostgres = false;
       }
       this.backfillMissingWorkOrders();
+      if (typeof VG !== "undefined" && VG.approvalEngine && VG.approvalEngine.backfillQuotationRequests) {
+        VG.approvalEngine.backfillQuotationRequests();
+      }
+      this.runSalesAutomation("system");
       if (typeof VG !== "undefined" && VG.numberingEngine) {
         if (VG.numberingEngine.migrateNumbering) VG.numberingEngine.migrateNumbering(DB);
         else if (VG.numberingEngine.syncCountersFromData) VG.numberingEngine.syncCountersFromData(DB);
@@ -4401,6 +4422,145 @@
       this.audit(actor, "update", "dataPath", "settings", "Data path: " + prev + " → " + next);
       notify();
       return { ok: true, validation };
+    },
+
+    pushNotification(n) {
+      const row = {
+        id: uid("ntf"),
+        at: Date.now(),
+        read: false,
+        module: n.module || "sales",
+        section: n.section || "",
+        title: n.title || "Notification",
+        body: n.body || "",
+        tone: n.tone || "#6366f1",
+        refType: n.refType || "",
+        refId: n.refId || "",
+        roles: n.roles || [],
+        actor: n.actor || "system",
+      };
+      DB.notificationInbox = (DB.notificationInbox || []).concat(row);
+      if (DB.notificationInbox.length > 500) DB.notificationInbox = DB.notificationInbox.slice(-500);
+      notify();
+      return row;
+    },
+
+    listNotifications(roleKey) {
+      const rows = (DB.notificationInbox || []).slice().reverse();
+      if (!roleKey) return rows;
+      return rows.filter((n) => !n.roles || !n.roles.length || n.roles.includes(roleKey) || roleKey === "admin" || roleKey === "super");
+    },
+
+    markNotificationRead(id, actor) {
+      const n = (DB.notificationInbox || []).find((x) => x.id === id);
+      if (!n) return;
+      n.read = true;
+      n.readAt = Date.now();
+      n.readBy = actor;
+      notify();
+    },
+
+    async maybeSendApprovalEmail(req) {
+      const n = (DB.settings && DB.settings.notifications) || {};
+      if (!n.approvalAlerts || !n.smtpHost) return { skipped: true };
+      const approvers = req.approvers || ["admin"];
+      const emails = (DB.erpUsers || []).filter((u) => approvers.includes(u.roleKey) && u.email && !u.isDeleted).map((u) => u.email);
+      if (!emails.length) return { skipped: true };
+      const to = emails.join(",");
+      const subject = "[Veraglo] Approval required: " + (req.entityNo || req.process);
+      const text = req.process + "\nDocument: " + (req.entityNo || req.entityId) + "\nAmount: " + inr(req.amount) + "\nLevel: " + (req.currentLevel || 1) + " of " + (req.levels || 1);
+      if (typeof fetch === "undefined") return { skipped: true };
+      try {
+        const res = await fetch(apiBase() + "/api/notifications/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ to, subject, text }),
+        });
+        return await res.json();
+      } catch (e) {
+        return { ok: false, error: e.message };
+      }
+    },
+
+    runSalesAutomation(actor) {
+      const cfg = (DB.settings && DB.settings.salesAutomation) || {};
+      const now = Date.now();
+      const td = todayISO();
+      let created = 0;
+      const nset = (DB.settings && DB.settings.notifications) || {};
+
+      (DB.followups || []).forEach((f) => {
+        if (f.status !== "Pending" || !f.date || f.date > td) return;
+        const key = "fu-" + f.id;
+        if ((DB.notificationInbox || []).some((x) => x.refId === key)) return;
+        this.pushNotification({
+          module: "sales",
+          section: "followups",
+          title: "Follow-up due: " + ((DB.customers || []).find((c) => c.id === f.customerId) || {}).name || "Customer",
+          body: f.note || f.mode || "Pending follow-up",
+          tone: "#f59e0b",
+          refType: "followups",
+          refId: key,
+          roles: [f.owner || "sales"],
+        });
+        created++;
+      });
+
+      const staleDays = Number(cfg.staleQuoteDays) || 14;
+      const staleMs = staleDays * 86400000;
+      (DB.quotations || []).forEach((q) => {
+        if (!["Sent", "Approved"].includes(q.status)) return;
+        const sentAt = q.lastOfferAt || q.updatedAt || (q.date ? new Date(q.date).getTime() : 0);
+        if (!sentAt || now - sentAt < staleMs) return;
+        const key = "stale-" + q.id;
+        if ((DB.notificationInbox || []).some((x) => x.refId === key)) return;
+        this.pushNotification({
+          module: "sales",
+          section: "quotations",
+          title: "Stale quotation: " + (q.no || q.id),
+          body: "No outcome recorded in " + staleDays + "+ days — follow up or mark Won/Lost",
+          tone: "#a78bfa",
+          refType: "quotations",
+          refId: key,
+          roles: ["sales", "admin"],
+        });
+        created++;
+      });
+
+      (DB.quotations || []).forEach((q) => {
+        const validity = Number(q.validity) || 30;
+        const start = q.date || td;
+        const exp = new Date(start);
+        exp.setDate(exp.getDate() + validity);
+        const remindBefore = Number(cfg.quoteExpiryRemindDays) || 3;
+        const remindDate = new Date(exp);
+        remindDate.setDate(remindDate.getDate() - remindBefore);
+        const remindStr = remindDate.toISOString().slice(0, 10);
+        if (td < remindStr || td > exp.toISOString().slice(0, 10)) return;
+        if (!["Draft", "Approved", "Sent", "Pending Approval"].includes(q.status)) return;
+        const key = "exp-" + q.id;
+        if ((DB.notificationInbox || []).some((x) => x.refId === key)) return;
+        this.pushNotification({
+          module: "sales",
+          section: "quotations",
+          title: "Quote expiring: " + (q.no || q.id),
+          body: "Validity ends " + exp.toISOString().slice(0, 10),
+          tone: "#ef4444",
+          refType: "quotations",
+          refId: key,
+          roles: ["sales"],
+        });
+        created++;
+      });
+
+      if (typeof VG !== "undefined" && VG.approvalEngine && VG.approvalEngine.runEscalations) {
+        created += VG.approvalEngine.runEscalations() || 0;
+      }
+
+      if (!DB.settings.salesAutomation) DB.settings.salesAutomation = {};
+      DB.settings.salesAutomation.lastRunAt = now;
+      if (created) notify();
+      return created;
     },
 
     sessionHeartbeat(info) {

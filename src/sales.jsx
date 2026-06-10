@@ -232,6 +232,7 @@
         VG.toast("Quotation " + payload.no + " created");
       }
       if (saved && saved.enquiryId && VG.enquiryOnQuotationSaved) VG.enquiryOnQuotationSaved(saved, roleKey);
+      if (submit && willNeed && VG.approvalEngine) VG.approvalEngine.onQuotationSubmitted(saved, roleKey, totals.grand);
       onSaved && onSaved();
       onClose();
     }
@@ -699,7 +700,17 @@
     const act = (patch, msg) => { store.update("quotations", q.id, patch, roleKey); VG.toast(msg); onChange(); };
     function approve() {
       if (!can("approve")) return VG.toast("You don't have approval rights", "error");
-      act({ status: "Approved", approvedBy: roleKey, discountApproved: true }, "Quotation approved");
+      const remarks = window.prompt("Approval remarks (optional):", "") || "";
+      if (VG.approvalEngine) {
+        const r = VG.approvalEngine.approveQuotation(q.id, roleKey, remarks);
+        if (r.reason === "remarks_required") return VG.toast("Remarks are mandatory for this workflow", "warn");
+        if (!r.ok && r.reason === "no_rights") return VG.toast("You don't have approval rights", "error");
+      } else {
+        act({ status: "Approved", approvedBy: roleKey, discountApproved: true }, "Quotation approved");
+        return;
+      }
+      VG.toast("Quotation approved");
+      onChange();
     }
     const linkedPI = findProformaFromQuotation(q);
     const linkedShip = findShipmentFromQuotation(q);
@@ -2024,79 +2035,118 @@
     );
   }
 
-  function DiscountsPage({ roleKey, can }) {
-    VG.useDB();
-    const pending = store.list("quotations").filter((q) => q.status === "Pending Approval");
-    function approve(q) { store.update("quotations", q.id, { status: "Approved", approvedBy: roleKey, discountApproved: true }, roleKey); VG.toast("Approved " + q.no); }
-    function reject(q) { store.update("quotations", q.id, { status: "Draft" }, roleKey); VG.toast("Sent back to draft", "warn"); }
-    return (
-      <div>
-        <PageHead title="Discount Approval" desc={"Quotations with discount above " + DISCOUNT_LIMIT + "% need approval"} />
-        {pending.length === 0 ? <Card className="p-10 text-center opacity-60">No pending discount approvals</Card> : (
-          <div className="space-y-3">{pending.map((q) => { const t = computeQuote(q); const dpct = t.sub ? (t.discount / t.sub * 100).toFixed(1) : 0; return (
-            <Card key={q.id} className="p-4 flex flex-wrap items-center gap-4">
-              <div className="flex-1 min-w-[200px]"><div className="font-mono text-sm">{q.no}</div><div className="opacity-70 text-sm">{custName(q.customerId)} · {inr(t.grand)}</div></div>
-              <Pill color="#f59e0b">discount {dpct}%</Pill>
-              {can("approve") ? <div className="flex gap-2"><Button icon="check" onClick={() => approve(q)}>Approve</Button><Button variant="soft" onClick={() => reject(q)}>Reject</Button></div> : <Pill>view only — no approval rights</Pill>}
-            </Card>); })}</div>
-        )}
-      </div>
-    );
+  function DiscountsPage({ roleKey, can, go }) {
+    return <ApprovalCenterPage roleKey={roleKey} can={can} go={go} filter="quotations" />;
   }
 
-  function RevisionApprovalPage({ roleKey, can }) {
+  function ApprovalCenterPage({ roleKey, can, go, filter }) {
     VG.useDB();
-    const [tick, setTick] = useState(0);
-    const pending = store.list("salesOrders").filter((o) => o.revisionPendingApproval).slice().reverse();
-    function approve(o) {
-      store.approveSalesOrderRevision(o.id, roleKey);
-      VG.toast("Revision approved and production notified");
-      setTick((x) => x + 1);
+    const [remarks, setRemarks] = useState({});
+    const engine = VG.approvalEngine;
+    const requests = engine ? engine.listPending(filter) : [];
+    const legacyQuotes = (!filter || filter === "quotations") ? store.list("quotations").filter((q) => q.status === "Pending Approval" && !(engine && engine.findOpenRequest("quotations", q.id))) : [];
+    const legacyRevs = (!filter || filter === "revisions") ? store.list("salesOrders").filter((o) => o.revisionPendingApproval) : [];
+
+    function approveReq(req) {
+      const rm = remarks[req.id] || "";
+      const r = engine.approveRequest(req.id, roleKey, rm);
+      if (r.reason === "remarks_required") return VG.toast("Remarks required", "warn");
+      if (!r.ok) return VG.toast("Cannot approve", "error");
+      VG.toast(req.entityNo + (r.done ? " approved" : " — level " + (r.level || "") + " pending"));
     }
-    function reject(o) {
-      const reason = window.prompt("Reason for rejection (optional):", "") || "";
-      store.rejectSalesOrderRevision(o.id, roleKey, reason);
-      VG.toast("Revision rejected", "warn");
-      setTick((x) => x + 1);
+    function rejectReq(req) {
+      const rm = remarks[req.id] || window.prompt("Rejection reason:", "") || "";
+      engine.rejectRequest(req.id, roleKey, rm);
+      VG.toast("Rejected", "warn");
     }
+    function approveQuote(q) {
+      const rm = remarks[q.id] || "";
+      if (engine) engine.approveQuotation(q.id, roleKey, rm);
+      else store.update("quotations", q.id, { status: "Approved", approvedBy: roleKey, discountApproved: true }, roleKey);
+      VG.toast("Approved " + q.no);
+    }
+    function rejectQuote(q) {
+      const rm = remarks[q.id] || window.prompt("Reason:", "") || "";
+      if (engine) engine.rejectQuotation(q.id, roleKey, rm);
+      else store.update("quotations", q.id, { status: "Draft" }, roleKey);
+      VG.toast("Sent back to draft", "warn");
+    }
+
+    const total = requests.length + legacyQuotes.length + legacyRevs.length;
     return (
-      <div key={tick}>
-        <PageHead title="Revision Approval Queue" desc="Approve post-send sales order revisions and notify production" />
-        {pending.length === 0 ? <Card className="p-10 text-center opacity-60">No pending sales order revisions</Card> : (
+      <div>
+        <PageHead title="Approval Center" desc="Multi-level quotation discount and sales order revision approvals" />
+        <div className="flex flex-wrap gap-2 mb-4">
+          <Pill color="#f59e0b">{total} pending</Pill>
+          {go && <Button variant="soft" onClick={() => go("discounts")}>Discount queue</Button>}
+          {go && <Button variant="soft" onClick={() => go("revisions")}>Revision queue</Button>}
+        </div>
+        {total === 0 ? <Card className="p-10 text-center opacity-60">No pending approvals</Card> : (
           <div className="space-y-3">
-            {pending.map((o) => (
-              <Card key={o.id} className="p-4">
-                <div className="flex flex-wrap items-start gap-3">
-                  <div className="flex-1 min-w-[240px]">
-                    <div className="font-mono text-sm">{o.no}</div>
-                    <div className="opacity-70 text-sm mt-1">{custName(o.customerId)} · Rev {o.revisionNo || 0}</div>
-                    <div className="opacity-55 text-xs mt-1">Delivery: {o.deliveryDate || "—"} · Priority: {o.priority || "Normal"}</div>
-                    <div className="opacity-55 text-xs mt-1">{(o.technicalSpec || "").slice(0, 140) || "No technical spec"}{(o.technicalSpec || "").length > 140 ? "..." : ""}</div>
-                  </div>
-                  <Pill color="#f59e0b">Pending approval</Pill>
-                  {can("approve") ? (
-                    <div className="flex gap-2">
-                      <Button icon="check" onClick={() => approve(o)}>Approve</Button>
-                      <Button variant="soft" onClick={() => reject(o)}>Reject</Button>
+            {requests.map((req) => {
+              const wf = engine.workflowFor(req.process);
+              const q = req.entityType === "quotations" ? store.get("quotations", req.entityId) : null;
+              const t = q ? computeQuote(q) : null;
+              return (
+                <Card key={req.id} className="p-4">
+                  <div className="flex flex-wrap items-start gap-3">
+                    <div className="flex-1 min-w-[220px]">
+                      <div className="font-mono text-sm">{req.entityNo || req.entityId}</div>
+                      <div className="opacity-70 text-sm mt-1">{req.process} · {inr(req.amount)}</div>
+                      <div className="opacity-55 text-xs mt-1">Level {req.currentLevel} of {req.levels} · {req.status}{q ? " · " + custName(q.customerId) : ""}</div>
+                      {t && <Pill color="#f59e0b" className="mt-2">discount {t.sub ? (t.discount / t.sub * 100).toFixed(1) : 0}%</Pill>}
                     </div>
-                  ) : <Pill>view only — no approval rights</Pill>}
-                </div>
-                {(o.revisionHistory || []).length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-white/10">
-                    <div className="text-[11px] uppercase opacity-60 mb-2">Revision history</div>
-                    <div className="space-y-1">
-                      {(o.revisionHistory || []).slice().reverse().slice(0, 3).map((h, i) => (
-                        <div key={i} className="text-xs opacity-75">Rev {h.rev} · {new Date(h.ts || Date.now()).toLocaleString()} · {h.by}</div>
+                    {can("approve") && engine.canApprove(roleKey, wf) ? (
+                      <div className="flex flex-col gap-2 min-w-[200px]">
+                        <Text value={remarks[req.id] || ""} onChange={(v) => setRemarks((m) => ({ ...m, [req.id]: v }))} placeholder={wf && wf.remarksMandatory ? "Remarks required" : "Remarks (optional)"} />
+                        <div className="flex gap-2">
+                          <Button icon="check" onClick={() => approveReq(req)}>Approve</Button>
+                          <Button variant="soft" onClick={() => rejectReq(req)}>Reject</Button>
+                        </div>
+                      </div>
+                    ) : <Pill>view only</Pill>}
+                  </div>
+                  {(req.trail || []).length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-white/10 text-xs opacity-60 space-y-1">
+                      {(req.trail || []).slice(-3).map((h, i) => (
+                        <div key={i}>L{h.level} {h.action} · {h.by} · {new Date(h.at).toLocaleString()}</div>
                       ))}
                     </div>
+                  )}
+                </Card>
+              );
+            })}
+            {legacyQuotes.map((q) => {
+              const t = computeQuote(q);
+              const dpct = t.sub ? (t.discount / t.sub * 100).toFixed(1) : 0;
+              return (
+                <Card key={q.id} className="p-4 flex flex-wrap items-center gap-4">
+                  <div className="flex-1 min-w-[200px]"><div className="font-mono text-sm">{q.no}</div><div className="opacity-70 text-sm">{custName(q.customerId)} · {inr(t.grand)}</div></div>
+                  <Pill color="#f59e0b">discount {dpct}%</Pill>
+                  {can("approve") ? <div className="flex gap-2"><Button icon="check" onClick={() => approveQuote(q)}>Approve</Button><Button variant="soft" onClick={() => rejectQuote(q)}>Reject</Button></div> : <Pill>view only</Pill>}
+                </Card>
+              );
+            })}
+            {legacyRevs.map((o) => (
+              <Card key={o.id} className="p-4 flex flex-wrap items-center gap-4">
+                <div className="flex-1"><div className="font-mono text-sm">{o.no}</div><div className="opacity-70 text-sm">{custName(o.customerId)} · Rev {o.revisionNo || 0}</div></div>
+                <Pill color="#f59e0b">SO revision</Pill>
+                {can("approve") ? (
+                  <div className="flex gap-2">
+                    <Button icon="check" onClick={() => { store.approveSalesOrderRevision(o.id, roleKey); VG.toast("Approved"); }}>Approve</Button>
+                    <Button variant="soft" onClick={() => { store.rejectSalesOrderRevision(o.id, roleKey, ""); VG.toast("Rejected", "warn"); }}>Reject</Button>
                   </div>
-                )}
+                ) : <Pill>view only</Pill>}
               </Card>
             ))}
           </div>
         )}
       </div>
     );
+  }
+
+  function RevisionApprovalPage({ roleKey, can, go }) {
+    return <ApprovalCenterPage roleKey={roleKey} can={can} go={go} filter="revisions" />;
   }
 
   function CommsPage({ roleKey, can }) {
@@ -2207,7 +2257,9 @@
     { id: "enquiries", label: "Enquiries", icon: "message", group: "Sales & CRM" },
     { id: "leads", label: "Leads", icon: "inbox", group: "Sales & CRM" },
     { id: "followups", label: "Follow-ups", icon: "bell", group: "Sales & CRM" },
+    { id: "commcenter", label: "Comm. Center", icon: "message", group: "Sales & CRM" },
     { id: "comms", label: "Communication", icon: "headset", group: "Sales & CRM" },
+    { id: "approvals", label: "Approval Center", icon: "shield", group: "Sales & CRM" },
     { id: "quotations", label: "Quotations", icon: "edit", group: "Sales & CRM" },
     { id: "proformas", label: "Proforma Invoice", icon: "rupee", group: "Sales & CRM" },
     { id: "invoices", label: "Tax Invoices", icon: "rupee", group: "Sales & CRM" },
@@ -2219,6 +2271,7 @@
     { id: "pricelist", label: "Price List", icon: "rupee", group: "Setup" },
     { id: "currencies", label: "Currencies", icon: "rupee", group: "Setup" },
     { id: "pincodes", label: "PIN Codes", icon: "grid", group: "Setup" },
+    { id: "analytics", label: "Analytics", icon: "trending", group: "Reports" },
     { id: "reports", label: "Reports", icon: "chart", group: "Reports" },
   ];
   if (VG.registerModuleSections) VG.registerModuleSections("sales", SECTIONS);
@@ -2227,7 +2280,12 @@
     customers: (p) => React.createElement(VG.CustomersPage, p),
     currencies: (p) => React.createElement(VG.CustomerPages.currencies, p),
     pincodes: (p) => React.createElement(VG.CustomerPages.pincodes, p),
-    pricelist: PriceListPage, leads: LeadsPage, enquiries: (p) => React.createElement(VG.EnquiriesPage, p), followups: FollowupsPage, comms: CommsPage, quotations: QuotationsPage, discounts: DiscountsPage, revisions: RevisionApprovalPage, proformas: ProformasPage, invoices: InvoicesPage, orders: OrdersPage, tracking: TrackingPage, history: OrderHistoryPage, reports: ReportsPage,
+    pricelist: PriceListPage, leads: LeadsPage, enquiries: (p) => React.createElement(VG.EnquiriesPage, p), followups: FollowupsPage,
+    commcenter: (p) => React.createElement(VG.CommunicationCenterPage, p),
+    comms: CommsPage, approvals: ApprovalCenterPage, quotations: QuotationsPage, discounts: DiscountsPage, revisions: RevisionApprovalPage,
+    proformas: ProformasPage, invoices: InvoicesPage, orders: OrdersPage, tracking: TrackingPage, history: OrderHistoryPage,
+    analytics: (p) => React.createElement(VG.SalesAnalyticsPage, p),
+    reports: ReportsPage,
   };
 
   VG.modules = VG.modules || {};

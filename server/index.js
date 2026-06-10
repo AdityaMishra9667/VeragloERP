@@ -10,6 +10,7 @@ import { createAdminUser, generatePassword, hasLoginUsers } from "./auth-utils.j
 import { ensureDeploymentReady } from "./first-run.js";
 import * as weather from "./weather.js";
 import * as passwordReset from "./password-reset.js";
+import { sendMail } from "./mail.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.join(__dirname, "..");
@@ -312,6 +313,19 @@ app.get("/api/sessions", async (_req, res) => {
     res.json((state && state.connectedSessions) || []);
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+/** Send notification email via SMTP settings in ERP state. */
+app.post("/api/notifications/send", async (req, res) => {
+  try {
+    const { to, subject, text, html } = req.body || {};
+    if (!to || !subject) return res.status(400).json({ ok: false, error: "to and subject are required" });
+    const state = (await db.getState()) || { settings: { notifications: {} } };
+    const result = await sendMail(state, { to, subject, text: text || "", html });
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
   }
 });
 
