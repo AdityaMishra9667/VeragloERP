@@ -5,7 +5,7 @@
 (function (VG) {
   const { useState, useEffect } = React;
   const KEY = "veraglo-erp-db";
-  const VERSION = 17;
+  const VERSION = 18;
   const ITEM_DESC_MAX = 30000;
   const AUTH_INACTIVE_MSG = "User account does not exist or has been deactivated.";
   const ITEM_MFR_DUP_MSG = "This manufacturer and part number already exist in Item Master. Duplicate item cannot be created.";
@@ -286,6 +286,7 @@
       returns: [],
       scrap: [],
       physicalVerifications: [],
+      openingBalances: [],
       stockLedger,
       auditLog: [
         { id: "A0", ts: Date.now(), actor: "system", action: "seed", entity: "system", refId: "-", summary: "Database initialised with master data" },
@@ -405,7 +406,7 @@
     if (!db.settings.backup) db.settings.backup = defaultSettings().backup;
     if (!Array.isArray(db.backups)) db.backups = [];
     ["purchaseRequests", "purchaseOrders", "rfqs", "vendorQuotations", "vendorBills", "vendorPayments", "qcInspections", "qcIssues", "ncrs", "boms", "workOrders", "materialRequirements", "finishedGoodsTransfers", "dispatchQueue", "orderHistory", "shipments", "invoices", "payments", "employees", "leaveRequests", "attendanceRecords", "payrollRuns", "salarySlips",
-      "erpUsers", "customRoles", "loginLog", "approvalWorkflows", "documentTemplates", "numberSeries", "fieldPermissions", "departments", "designations", "itemLocations"].forEach((k) => { if (!Array.isArray(db[k])) db[k] = []; });
+      "erpUsers", "customRoles", "loginLog", "approvalWorkflows", "documentTemplates", "numberSeries", "fieldPermissions", "departments", "designations", "itemLocations", "openingBalances"].forEach((k) => { if (!Array.isArray(db[k])) db[k] = []; });
     if (!db.settings.security) db.settings.security = defaultSettings().security;
     else db.settings.security = { ...defaultSettings().security, ...db.settings.security };
     if (!db.settings.theme) db.settings.theme = defaultSettings().theme;
@@ -1470,6 +1471,155 @@
       });
       return out;
     },
+    normalizeIssueLines(issue) {
+      if (!issue) return [];
+      if (issue.lines && issue.lines.length) return issue.lines;
+      if (!issue.itemId) return [];
+      const it = this.get("items", issue.itemId) || {};
+      return [{
+        lineNo: 1,
+        itemId: issue.itemId,
+        sku: it.sku,
+        description: it.description || it.name,
+        qtyRequested: issue.qtyRequested != null ? issue.qtyRequested : issue.qtyIssued,
+        qtyIssued: issue.qtyIssued,
+        unit: issue.unit || it.unit,
+        locationId: issue.locationId || it.locationId,
+        itemLocationId: issue.itemLocationId || it.itemLocationId,
+        batch: issue.batch,
+        remarks: issue.remarks,
+      }];
+    },
+    issueItemsLabel(issue) {
+      const lines = this.normalizeIssueLines(issue);
+      if (!lines.length) return "—";
+      const name = (VG.itemDisplay && VG.itemDisplay.tableLabel(lines[0].itemId)) || (this.get("items", lines[0].itemId) || {}).name || "—";
+      if (lines.length <= 1) return name;
+      return name + " +" + (lines.length - 1) + " more";
+    },
+    nextOpeningBalanceNo(dateRef) {
+      const dt = dateRef || todayISO();
+      const y = String(dt).slice(0, 4);
+      DB.seq = DB.seq || {};
+      const key = "OB_" + y;
+      DB.seq[key] = (Number(DB.seq[key]) || 0) + 1;
+      return "OB" + y + String(DB.seq[key]).padStart(5, "0");
+    },
+    normalizeOpeningBalanceLines(doc) {
+      if (!doc) return [];
+      if (doc.lines && doc.lines.length) return doc.lines;
+      return [];
+    },
+    ledgerTypeLabel(type) {
+      const map = {
+        opening: "Opening balance", receipt: "Material receipt", issue: "Material issue",
+        "transfer-in": "Stock transfer in", "transfer-out": "Stock transfer out",
+        return: "Return", scrap: "Scrap / rejection", adjustment: "Stock adjustment",
+        "opening-balance": "Opening balance entry",
+      };
+      return map[type] || type || "—";
+    },
+    filterLedgerEntries(entries, filters) {
+      const f = filters || {};
+      return (entries || []).filter((e) => {
+        if (f.itemId && e.itemId !== f.itemId) return false;
+        if (f.locationId && e.locationId !== f.locationId) return false;
+        if (f.itemLocationId && e.itemLocationId !== f.itemLocationId) return false;
+        if (f.type && e.type !== f.type) return false;
+        if (f.ref && !String(e.ref || "").toLowerCase().includes(String(f.ref).toLowerCase())) return false;
+        if (f.batch && !String(e.batch || "").toLowerCase().includes(String(f.batch).toLowerCase())) return false;
+        if (f.createdBy && e.by !== f.createdBy) return false;
+        if (f.dateFrom && e.date < f.dateFrom) return false;
+        if (f.dateTo && e.date > f.dateTo) return false;
+        if (f.month) {
+          const m = String(e.date || "").slice(0, 7);
+          if (m !== f.month) return false;
+        }
+        if (f.fy) {
+          const code = fyCode(e.date);
+          if (code !== f.fy) return false;
+        }
+        if (f.categoryId) {
+          const it = this.get("items", e.itemId) || {};
+          if (it.categoryId !== f.categoryId) return false;
+        }
+        if (f.department && e.department !== f.department) return false;
+        if (f.workOrderId && e.workOrderId !== f.workOrderId) return false;
+        if (f.supplierId && e.supplierId !== f.supplierId) return false;
+        if (f.customerId && e.customerId !== f.customerId) return false;
+        return true;
+      });
+    },
+    itemLedgerMeta(itemId) {
+      const it = this.get("items", itemId) || {};
+      const qty = this.onHand(itemId);
+      const reserved = (DB.materialRequirements || []).filter((mr) => mr.itemId === itemId && mr.status !== "Closed" && mr.status !== "Cancelled")
+        .reduce((s, mr) => s + (Number(mr.qty) || 0), 0);
+      const rejected = Math.abs((DB.stockLedger || []).filter((e) => e.itemId === itemId && e.type === "scrap").reduce((s, e) => s + (Number(e.qty) || 0), 0));
+      const opening = (DB.stockLedger || []).filter((e) => e.itemId === itemId && (e.type === "opening" || e.type === "opening-balance"))
+        .reduce((s, e) => s + (Number(e.qty) || 0), 0);
+      const stockIn = (DB.stockLedger || []).filter((e) => e.itemId === itemId && Number(e.qty) > 0 && e.type !== "opening" && e.type !== "opening-balance")
+        .reduce((s, e) => s + (Number(e.qty) || 0), 0);
+      const stockOut = Math.abs((DB.stockLedger || []).filter((e) => e.itemId === itemId && Number(e.qty) < 0)
+        .reduce((s, e) => s + (Number(e.qty) || 0), 0));
+      const locStock = {};
+      (DB.stockLedger || []).filter((e) => e.itemId === itemId).forEach((e) => {
+        const k = (e.locationId || "") + "|" + (e.itemLocationId || "");
+        locStock[k] = (locStock[k] || 0) + (Number(e.qty) || 0);
+      });
+      const topLoc = Object.entries(locStock).sort((a, b) => b[1] - a[1])[0];
+      let storeLocation = it.locationId;
+      let itemLocation = it.itemLocationId;
+      if (topLoc) {
+        const parts = topLoc[0].split("|");
+        storeLocation = parts[0] || storeLocation;
+        itemLocation = parts[1] || itemLocation;
+      }
+      return {
+        item: it,
+        sku: it.sku || "",
+        name: it.name || "",
+        unit: it.unit || "Nos",
+        opening,
+        stockIn,
+        stockOut,
+        closing: qty,
+        available: qty,
+        reserved,
+        rejected,
+        value: qty * (it.rate || 0),
+        locationId: storeLocation,
+        itemLocationId: itemLocation,
+      };
+    },
+    itemLedgerRows(itemId, filters) {
+      const rows = this.filterLedgerEntries(
+        (DB.stockLedger || []).filter((e) => e.itemId === itemId).slice().sort((a, b) => {
+          const da = (a.date || "") + (a.id || "");
+          const db = (b.date || "") + (b.id || "");
+          return da < db ? -1 : da > db ? 1 : 0;
+        }),
+        filters
+      );
+      let balance = 0;
+      return rows.map((e) => {
+        balance += Number(e.qty) || 0;
+        return { ...e, balance, typeLabel: this.ledgerTypeLabel(e.type) };
+      });
+    },
+    linkedDocForLedger(entry) {
+      const ref = entry.ref || "";
+      if (!ref) return null;
+      const find = (coll, field) => (DB[coll] || []).find((r) => r.no === ref);
+      if (entry.type === "receipt" || ref.startsWith("GRN") || ref.startsWith("MRN")) return { coll: "materialReceipts", rec: find("materialReceipts", "no") };
+      if (entry.type === "issue") return { coll: "materialIssues", rec: find("materialIssues", "no") };
+      if (entry.type === "opening-balance") return { coll: "openingBalances", rec: find("openingBalances", "no") };
+      if (entry.type === "adjustment") return { coll: "physicalVerifications", rec: find("physicalVerifications", "no") };
+      if (entry.type === "return") return { coll: "returns", rec: find("returns", "no") };
+      if (entry.type === "scrap") return { coll: "scrap", rec: find("scrap", "no") };
+      if (entry.type === "transfer-in" || entry.type === "transfer-out") return { coll: "stockTransfers", rec: find("stockTransfers", "no") };
+      return { coll: null, rec: null, ref };
+    },
     postLedger(entry, actor) {
       const rec = { id: uid("L"), date: entry.date || todayISO(), batch: "", ref: "", by: actor || "system", ...entry };
       DB.stockLedger = DB.stockLedger.concat(rec);
@@ -1571,6 +1721,174 @@
       }
       if (receipt.poId || receipt.poNo) this.syncPOReceiptFromGRN(rec.id, actor);
       return rec;
+    },
+    postIssue(issue, actor) {
+      const linesIn = (issue.lines && issue.lines.length) ? issue.lines : (issue.itemId ? [issue] : []);
+      if (!linesIn.length) return null;
+      const no = issue.no || this.nextNo("MIN", issue.date);
+      const normalizedLines = [];
+      linesIn.forEach((raw, idx) => {
+        const it = this.get("items", raw.itemId) || {};
+        const qtyRequested = Number(raw.qtyRequested != null ? raw.qtyRequested : raw.qtyIssued) || 0;
+        const qtyIssued = Number(raw.qtyIssued) || 0;
+        normalizedLines.push({
+          lineNo: idx + 1,
+          itemId: raw.itemId,
+          sku: it.sku || raw.sku || "",
+          description: it.description || raw.description || it.name || "",
+          qtyRequested,
+          qtyIssued,
+          pendingQty: Math.max(0, qtyRequested - qtyIssued),
+          unit: it.unit || raw.unit || "Nos",
+          locationId: raw.locationId || it.locationId,
+          itemLocationId: raw.itemLocationId || it.itemLocationId || "",
+          batch: raw.batch || "",
+          remarks: raw.remarks || "",
+        });
+      });
+      const first = normalizedLines[0] || {};
+      const returnable = issue.type === "Vendor Returnable Challan";
+      const rec = this.create("materialIssues", {
+        ...issue,
+        lines: normalizedLines,
+        lineCount: normalizedLines.length,
+        itemId: first.itemId,
+        unit: first.unit,
+        locationId: first.locationId,
+        itemLocationId: first.itemLocationId,
+        qtyRequested: normalizedLines.reduce((s, l) => s + (Number(l.qtyRequested) || 0), 0),
+        qtyIssued: normalizedLines.reduce((s, l) => s + (Number(l.qtyIssued) || 0), 0),
+        no,
+        issuedBy: actor,
+        pendingReturn: returnable,
+        returnedQty: 0,
+      }, actor);
+      for (let i = 0; i < normalizedLines.length; i++) {
+        const ln = normalizedLines[i];
+        const qty = Number(ln.qtyIssued) || 0;
+        if (qty <= 0) continue;
+        const avail = this.onHand(ln.itemId, ln.locationId, ln.itemLocationId || undefined);
+        if (qty > avail) {
+          this.remove("materialIssues", rec.id, actor);
+          return { error: "Row " + (i + 1) + ": insufficient stock — only " + avail + " available" };
+        }
+      }
+      normalizedLines.forEach((ln) => {
+        const qty = Number(ln.qtyIssued) || 0;
+        if (qty <= 0) return;
+        this.postLedger({
+          itemId: ln.itemId,
+          locationId: ln.locationId,
+          itemLocationId: ln.itemLocationId || "",
+          type: "issue",
+          qty: -qty,
+          ref: no,
+          batch: ln.batch || "",
+          date: issue.date,
+          department: issue.department || "",
+          workOrderId: issue.workOrderId || "",
+          supplierId: issue.vendorId || "",
+          customerId: issue.customerId || "",
+          by: actor,
+        }, actor);
+      });
+      this.audit(actor, "stock-out", "stockLedger", no, "MIN " + no + " — " + normalizedLines.length + " line(s)");
+      return rec;
+    },
+    saveOpeningBalance(payload, actor) {
+      const linesIn = payload.lines || [];
+      if (!linesIn.length) return null;
+      const normalizedLines = linesIn.map((raw, idx) => {
+        const it = this.get("items", raw.itemId) || {};
+        const qty = Number(raw.qty) || 0;
+        const rate = Number(raw.rate != null ? raw.rate : it.rate) || 0;
+        return {
+          lineNo: idx + 1,
+          itemId: raw.itemId,
+          sku: it.sku || "",
+          description: it.description || it.name || "",
+          qty,
+          unit: it.unit || raw.unit || "Nos",
+          locationId: raw.locationId || it.locationId,
+          itemLocationId: raw.itemLocationId || it.itemLocationId || "",
+          rate,
+          lineValue: Math.round(qty * rate * 100) / 100,
+          batch: raw.batch || "",
+          remarks: raw.remarks || "",
+        };
+      });
+      const totalValue = normalizedLines.reduce((s, l) => s + (Number(l.lineValue) || 0), 0);
+      const existing = payload.id ? this.get("openingBalances", payload.id) : null;
+      if (existing && existing.status === "Approved") return null;
+      const body = {
+        ...payload,
+        lines: normalizedLines,
+        lineCount: normalizedLines.length,
+        totalValue,
+        status: payload.submit ? "Submitted" : (payload.status || "Draft"),
+        updatedAt: Date.now(),
+      };
+      if (existing) {
+        return this.update("openingBalances", existing.id, body, actor);
+      }
+      return this.create("openingBalances", {
+        ...body,
+        no: this.nextOpeningBalanceNo(payload.date),
+        date: payload.date || todayISO(),
+        createdBy: actor,
+        status: body.status,
+      }, actor);
+    },
+    approveOpeningBalance(id, actor) {
+      const doc = this.get("openingBalances", id);
+      if (!doc || doc.status === "Approved") return null;
+      if (!VG.can(actor, "approve", "inventory")) {
+        throw new Error("Not authorized to approve opening balance");
+      }
+      (doc.lines || []).forEach((ln) => {
+        const qty = Number(ln.qty) || 0;
+        if (qty <= 0) return;
+        this.postLedger({
+          itemId: ln.itemId,
+          locationId: ln.locationId,
+          itemLocationId: ln.itemLocationId || "",
+          type: "opening-balance",
+          qty,
+          ref: doc.no,
+          batch: ln.batch || "",
+          date: doc.date,
+          by: actor,
+        }, actor);
+      });
+      return this.update("openingBalances", id, {
+        status: "Approved",
+        approvedBy: actor,
+        approvedAt: Date.now(),
+        locked: true,
+      }, actor);
+    },
+    reverseOpeningBalance(id, actor) {
+      const doc = this.get("openingBalances", id);
+      if (!doc || doc.status !== "Approved") return null;
+      if (!VG.can(actor, "approve", "inventory")) {
+        throw new Error("Not authorized to reverse opening balance");
+      }
+      (doc.lines || []).forEach((ln) => {
+        const qty = Number(ln.qty) || 0;
+        if (qty <= 0) return;
+        this.postLedger({
+          itemId: ln.itemId,
+          locationId: ln.locationId,
+          itemLocationId: ln.itemLocationId || "",
+          type: "opening-balance",
+          qty: -qty,
+          ref: doc.no + "-REV",
+          batch: ln.batch || "",
+          date: todayISO(),
+          by: actor,
+        }, actor);
+      });
+      return this.update("openingBalances", id, { status: "Reversed", reversedBy: actor, reversedAt: Date.now() }, actor);
     },
     // Quality decision on an incoming inspection.
     decideInspection(inspId, result, payload, actor) {

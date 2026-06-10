@@ -560,38 +560,128 @@
   }
 
   /* ================= Stock ledger ================= */
+  const LEDGER_TYPE_COLOR = { opening: "#64748b", "opening-balance": "#64748b", receipt: "#34d399", issue: "#f87171", "transfer-in": "#60a5fa", "transfer-out": "#f59e0b", return: "#22d3ee", scrap: "#ef4444", adjustment: "#a78bfa" };
+  const LEDGER_TYPE_OPTS = ["opening", "opening-balance", "receipt", "issue", "transfer-in", "transfer-out", "return", "scrap", "adjustment"];
+
+  function ItemLedgerDetail({ itemId, roleKey, can, onBack }) {
+    VG.useDB();
+    const meta = store.itemLedgerMeta ? store.itemLedgerMeta(itemId) : { available: 0 };
+    const [filters, setFilters] = useState({});
+    const setF = (k, v) => setFilters((p) => ({ ...p, [k]: v }));
+    const rows = store.itemLedgerRows ? store.itemLedgerRows(itemId, filters) : [];
+    const fmtDate = (d) => (VG.fmt.formatDate ? VG.fmt.formatDate(d) : d);
+    const cols = [
+      { key: "date", label: "Date", render: (r) => fmtDate(r.date), csv: (r) => r.date },
+      { key: "typeLabel", label: "Transaction", render: (r) => <Pill color={LEDGER_TYPE_COLOR[r.type] || "#94a3b8"}>{r.typeLabel || r.type}</Pill>, csv: (r) => r.typeLabel || r.type },
+      { key: "qty", label: "In/Out", render: (r) => <span className={r.qty < 0 ? "text-rose-400" : "text-emerald-400"}>{r.qty > 0 ? "+" : ""}{r.qty}</span> },
+      { key: "balance", label: "Balance", render: (r) => <span className="font-medium">{r.balance}</span> },
+      { key: "locationId", label: "Store", render: (r) => locName(r.locationId), csv: (r) => locName(r.locationId) },
+      { key: "itemLocationId", label: "Item loc.", render: (r) => itemLocName(r.itemLocationId), csv: (r) => itemLocName(r.itemLocationId) },
+      { key: "ref", label: "Document" },
+      { key: "batch", label: "Batch" },
+      { key: "by", label: "By" },
+    ];
+    function printLedger() {
+      fx.printTable("Item Ledger — " + meta.sku, cols.map((c) => ({ key: c.key, label: c.label, csv: c.csv })), rows, { subtitle: meta.name });
+    }
+    function exportLedger() {
+      if (exportCSV) exportCSV("item-ledger-" + meta.sku, cols, rows);
+      else printLedger();
+    }
+    function viewLinked(r) {
+      const link = store.linkedDocForLedger ? store.linkedDocForLedger(r) : null;
+      if (!link || !link.rec) return VG.toast("No linked document for " + (r.ref || "entry"), "info");
+      VG.toast("Linked: " + (link.rec.no || link.rec.id) + " (" + (link.coll || "doc") + ")");
+    }
+    return (
+      <div className="space-y-4">
+        <PageHead title={"Item Ledger — " + meta.sku} desc={meta.name}>
+          <div className="flex gap-2 flex-wrap">
+            <Button variant="soft" onClick={onBack}>Back to stock ledger</Button>
+            {can("print") && <Button variant="soft" icon="printer" onClick={printLedger}>Print</Button>}
+            {can("export") && <Button variant="soft" icon="download" onClick={exportLedger}>Export Excel</Button>}
+          </div>
+        </PageHead>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {[["Opening", meta.opening], ["Stock in", meta.stockIn], ["Stock out", meta.stockOut], ["Closing", meta.closing]].map(([l, v]) => (
+            <Card key={l} className="p-4"><div className="text-[11px] uppercase opacity-60">{l}</div><div className="text-xl font-semibold mt-1">{v} {meta.unit}</div></Card>
+          ))}
+        </div>
+        <Card className="p-4 grid sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
+          <div><span className="opacity-60">Available</span><div className="font-semibold">{meta.available} {meta.unit}</div></div>
+          <div><span className="opacity-60">Reserved</span><div className="font-semibold">{meta.reserved} {meta.unit}</div></div>
+          <div><span className="opacity-60">Rejected / scrap</span><div className="font-semibold">{meta.rejected} {meta.unit}</div></div>
+          <div><span className="opacity-60">Valuation</span><div className="font-semibold">{inr(meta.value)}</div></div>
+          <div className="sm:col-span-2"><span className="opacity-60">Store location</span><div>{locName(meta.locationId)}</div></div>
+          <div className="sm:col-span-2"><span className="opacity-60">Item location</span><div>{itemLocName(meta.itemLocationId)}</div></div>
+        </Card>
+        <Card className="p-4">
+          <div className="text-xs font-semibold uppercase opacity-60 mb-3">Filters</div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <Field label="Date from"><DateF value={filters.dateFrom || ""} onChange={(v) => setF("dateFrom", v)} /></Field>
+            <Field label="Date to"><DateF value={filters.dateTo || ""} onChange={(v) => setF("dateTo", v)} /></Field>
+            <Field label="Month (YYYY-MM)"><Text value={filters.month || ""} onChange={(v) => setF("month", v)} placeholder="2026-06" /></Field>
+            <Field label="Financial year"><Text value={filters.fy || ""} onChange={(v) => setF("fy", v)} placeholder="2627" /></Field>
+            <Field label="Transaction type"><Select value={filters.type || ""} onChange={(v) => setF("type", v)} options={[{ value: "", label: "All" }].concat(LEDGER_TYPE_OPTS.map((t) => ({ value: t, label: store.ledgerTypeLabel ? store.ledgerTypeLabel(t) : t })))} /></Field>
+            <Field label="Document no."><Text value={filters.ref || ""} onChange={(v) => setF("ref", v)} /></Field>
+            <Field label="Store location"><MasterSelect collection="locations" value={filters.locationId || ""} onChange={(v) => setF("locationId", v)} actorRole={roleKey} allowCreate={false} /></Field>
+            <Field label="Item location"><Select value={filters.itemLocationId || ""} onChange={(v) => setF("itemLocationId", v)} options={[{ value: "", label: "All" }].concat((store.itemLocationsForStorage ? store.itemLocationsForStorage(filters.locationId, false) : store.list("itemLocations")).map((il) => ({ value: il.id, label: itemLocName(il.id) })))} /></Field>
+            <Field label="Batch / lot"><Text value={filters.batch || ""} onChange={(v) => setF("batch", v)} /></Field>
+            <Field label="Category"><MasterSelect collection="categories" value={filters.categoryId || ""} onChange={(v) => setF("categoryId", v)} actorRole={roleKey} allowCreate={false} /></Field>
+            <Field label="Created by"><Text value={filters.createdBy || ""} onChange={(v) => setF("createdBy", v)} /></Field>
+          </div>
+          <div className="mt-3"><Button variant="ghost" onClick={() => setFilters({})}>Clear filters</Button></div>
+        </Card>
+        <RecordTable title="Stock movements" columns={cols} rows={rows.slice().reverse()} can={can} printTitle={"Item Ledger " + meta.sku} searchKeys={["ref", "batch"]}
+          onView={can("view") ? viewLinked : null} empty="No movements for selected filters" />
+      </div>
+    );
+  }
+
   function LedgerPage({ roleKey, can }) {
     VG.useDB();
-    const [item, setItem] = useState("");
+    const [viewItem, setViewItem] = useState("");
+    const [filters, setFilters] = useState({});
+    const setF = (k, v) => setFilters((p) => ({ ...p, [k]: v }));
     const summary = store.stockSummary();
-    let entries = store.list("stockLedger").slice().reverse();
-    if (item) entries = entries.filter((e) => e.itemId === item);
-    const TYPE_COLOR = { opening: "#64748b", receipt: "#34d399", issue: "#f87171", "transfer-in": "#60a5fa", "transfer-out": "#f59e0b", return: "#22d3ee", scrap: "#ef4444", adjustment: "#a78bfa" };
+    if (viewItem) return <ItemLedgerDetail itemId={viewItem} roleKey={roleKey} can={can} onBack={() => setViewItem("")} />;
+    let entries = store.filterLedgerEntries ? store.filterLedgerEntries(store.list("stockLedger"), filters) : store.list("stockLedger");
+    entries = entries.slice().reverse();
     const ecols = [
       { key: "date", label: "Date" }, { key: "itemId", label: "Item", render: (r) => itemName(r.itemId), csv: (r) => itemName(r.itemId) },
       { key: "locationId", label: "Storage", render: (r) => locName(r.locationId), csv: (r) => locName(r.locationId) },
       { key: "itemLocationId", label: "Item location", render: (r) => itemLocName(r.itemLocationId), csv: (r) => itemLocName(r.itemLocationId) },
-      { key: "type", label: "Type", render: (r) => <Pill color={TYPE_COLOR[r.type] || "#94a3b8"}>{r.type}</Pill> },
+      { key: "type", label: "Type", render: (r) => <Pill color={LEDGER_TYPE_COLOR[r.type] || "#94a3b8"}>{store.ledgerTypeLabel ? store.ledgerTypeLabel(r.type) : r.type}</Pill>, csv: (r) => r.type },
       { key: "qty", label: "Qty", render: (r) => <span className={r.qty < 0 ? "text-rose-400" : "text-emerald-400"}>{r.qty > 0 ? "+" : ""}{r.qty}</span> },
-      { key: "ref", label: "Reference" }, { key: "batch", label: "Batch" },
+      { key: "ref", label: "Reference" }, { key: "batch", label: "Batch" }, { key: "by", label: "By" },
     ];
     return (
       <div className="space-y-4">
-        <PageHead title="Stock Ledger" desc="Every transaction posts here automatically" />
+        <PageHead title="Stock Ledger" desc="Click any item row to open full item ledger with stock in/out history" />
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {[["SKUs", summary.length], ["Stock value", inr(summary.reduce((s, x) => s + x.value, 0))], ["Below min", summary.filter((x) => x.below).length], ["Reorder due", summary.filter((x) => x.reorderNeeded).length]].map(([l, v], i) => (
+          {[["SKUs", summary.length], ["Stock value", inr(summary.reduce((s, x) => s + x.value, 0))], ["Below min", summary.filter((x) => x.below).length], ["Reorder due", summary.filter((x) => x.reorderNeeded).length]].map(([l, v]) => (
             <Card key={l} className="p-4"><div className="text-[11px] uppercase tracking-wider opacity-60">{l}</div><div className="text-2xl font-semibold font-display mt-1">{v}</div></Card>
           ))}
         </div>
         <Card className="p-0 overflow-hidden">
-          <div className="p-4 font-semibold text-sm border-b border-white/10">Stock summary</div>
+          <div className="p-4 font-semibold text-sm border-b border-white/10">Stock summary — click a row for item ledger</div>
           <div className="overflow-x-auto"><table className="w-full text-sm">
             <thead><tr className="text-left text-[11px] uppercase opacity-55 border-b border-white/10"><th className="px-4 py-2">SKU</th><th className="px-4 py-2">Item</th><th className="px-4 py-2 text-right">On hand</th><th className="px-4 py-2 text-right">Min</th><th className="px-4 py-2 text-right">Reorder</th><th className="px-4 py-2 text-right">Value</th><th className="px-4 py-2">Status</th></tr></thead>
-            <tbody>{summary.map((s) => <tr key={s.id} className="border-b border-white/5 chrome-hover cursor-pointer" onClick={() => setItem(s.id === item ? "" : s.id)}><td className="px-4 py-2.5 font-mono text-xs">{s.sku}</td><td className="px-4 py-2.5">{s.name}</td><td className="px-4 py-2.5 text-right font-medium">{s.qty}</td><td className="px-4 py-2.5 text-right opacity-60">{s.minStock}</td><td className="px-4 py-2.5 text-right opacity-60">{s.reorder}</td><td className="px-4 py-2.5 text-right">{inr(s.value)}</td><td className="px-4 py-2.5">{s.below ? <Pill color="#ef4444">Below min</Pill> : s.reorderNeeded ? <Pill color="#f59e0b">Reorder</Pill> : <Pill color="#34d399">OK</Pill>}</td></tr>)}</tbody>
+            <tbody>{summary.map((s) => <tr key={s.id} className="border-b border-white/5 chrome-hover cursor-pointer" onClick={() => setViewItem(s.id)}><td className="px-4 py-2.5 font-mono text-xs">{s.sku}</td><td className="px-4 py-2.5">{s.name}</td><td className="px-4 py-2.5 text-right font-medium">{s.qty}</td><td className="px-4 py-2.5 text-right opacity-60">{s.minStock}</td><td className="px-4 py-2.5 text-right opacity-60">{s.reorder}</td><td className="px-4 py-2.5 text-right">{inr(s.value)}</td><td className="px-4 py-2.5">{s.below ? <Pill color="#ef4444">Below min</Pill> : s.reorderNeeded ? <Pill color="#f59e0b">Reorder</Pill> : <Pill color="#34d399">OK</Pill>}</td></tr>)}</tbody>
           </table></div>
         </Card>
-        <RecordTable title={"Stock movements" + (item ? " — " + itemName(item) : "")} columns={ecols} rows={entries} can={can} printTitle="Stock Ledger"
-          extra={item && <Button variant="soft" onClick={() => setItem("")}>Clear filter</Button>} search={false} />
+        <Card className="p-4">
+          <div className="text-xs font-semibold uppercase opacity-60 mb-3">Global ledger filters</div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <Field label="Date from"><DateF value={filters.dateFrom || ""} onChange={(v) => setF("dateFrom", v)} /></Field>
+            <Field label="Date to"><DateF value={filters.dateTo || ""} onChange={(v) => setF("dateTo", v)} /></Field>
+            <Field label="Item"><MasterSelect collection="items" value={filters.itemId || ""} onChange={(v) => setF("itemId", v)} actorRole={roleKey} allowCreate={false} /></Field>
+            <Field label="Transaction type"><Select value={filters.type || ""} onChange={(v) => setF("type", v)} options={[{ value: "", label: "All" }].concat(LEDGER_TYPE_OPTS.map((t) => ({ value: t, label: store.ledgerTypeLabel ? store.ledgerTypeLabel(t) : t })))} /></Field>
+            <Field label="Store location"><MasterSelect collection="locations" value={filters.locationId || ""} onChange={(v) => setF("locationId", v)} actorRole={roleKey} allowCreate={false} /></Field>
+            <Field label="Document no."><Text value={filters.ref || ""} onChange={(v) => setF("ref", v)} /></Field>
+          </div>
+        </Card>
+        <RecordTable title="All stock movements" columns={ecols} rows={entries} can={can} printTitle="Stock Ledger" searchKeys={["ref", "batch"]} />
       </div>
     );
   }
@@ -810,89 +900,163 @@
   }
 
   /* ================= Material Issue ================= */
+  function blankMinLine() {
+    return { key: Math.random().toString(36).slice(2), itemId: "", qtyRequested: "", qtyIssued: "", unit: "", locationId: "", itemLocationId: "", batch: "", remarks: "" };
+  }
+  function issueLineDesc(itemId) {
+    if (!itemId) return "";
+    if (VG.itemDisplay && VG.itemDisplay.itemDescription) return VG.itemDisplay.itemDescription(itemId);
+    const it = store.get("items", itemId) || {};
+    return it.description || it.name || "";
+  }
+  function issueItemsLabel(r) {
+    return store.issueItemsLabel ? store.issueItemsLabel(r) : itemName(r.itemId);
+  }
+  const MIN_TABLE_HEAD = (
+    <tr className="text-left border-b border-white/10 text-[11px] uppercase opacity-70">
+      <th className="w-10 px-2">Sr.</th>
+      <th className="min-w-[180px] px-2">Item SKU</th>
+      <th className="min-w-[140px] px-2">Description</th>
+      <th className="w-24 px-2">Qty Requested</th>
+      <th className="w-24 px-2">Qty Issued</th>
+      <th className="w-16 px-2">Unit</th>
+      <th className="w-20 px-2">Available</th>
+      <th className="min-w-[130px] px-2">Store Location</th>
+      <th className="min-w-[130px] px-2">Item Location</th>
+      <th className="w-20 px-2">Pending</th>
+      <th className="min-w-[100px] px-2">Remarks</th>
+      <th className="w-10" />
+    </tr>
+  );
   function IssueBuilder({ open, onClose, roleKey, can, initialType }) {
-    const [f, setF] = useState({ date: today(), type: initialType || ISSUE_TYPES[0], unit: "Nos", approval: "Pending" });
+    const [f, setF] = useState({ date: today(), type: initialType || ISSUE_TYPES[0], approval: "Pending" });
+    const [lines, setLines] = useState([blankMinLine()]);
     const [dirty, setDirty] = useState(false);
+    const canEditLocation = can("edit");
     const set = (k, v) => { setDirty(true); setF((p) => ({ ...p, [k]: v })); };
-    function pickItem(id) { const it = store.get("items", id) || {}; setF((p) => ({ ...p, itemId: id, unit: it.unit, locationId: it.locationId })); }
+    const setLine = (key, patch) => { setDirty(true); setLines((rows) => rows.map((r) => (r.key === key ? { ...r, ...patch } : r))); };
+    const addLine = () => setLines((rows) => [...rows, blankMinLine()]);
+    const delLine = (key) => { if (lines.length <= 1) return; setLines((rows) => rows.filter((r) => r.key !== key)); };
+    function pickItem(key, id) {
+      const it = store.get("items", id) || {};
+      setLine(key, { itemId: id, unit: it.unit || "Nos", locationId: it.locationId || "", itemLocationId: it.itemLocationId || "" });
+    }
+    function pickStorage(key, locationId) { setLine(key, { locationId, itemLocationId: "" }); }
     function pickOrder(id) { const o = store.get("salesOrders", id) || {}; setF((p) => ({ ...p, salesOrderId: id, customerId: o.customerId })); }
-    const avail = f.itemId ? store.onHand(f.itemId, f.locationId) : 0;
+    function validateLines() {
+      let issuedAny = false;
+      for (let i = 0; i < lines.length; i++) {
+        const ln = lines[i];
+        const n = i + 1;
+        if (!ln.itemId) return "Row " + n + ": select item SKU.";
+        if (!ln.locationId) return "Row " + n + ": select store location.";
+        const req = Number(ln.qtyRequested);
+        const iss = Number(ln.qtyIssued);
+        if (ln.qtyRequested !== "" && (!Number.isFinite(req) || req < 0)) return "Row " + n + ": invalid qty requested.";
+        if (!Number.isFinite(iss) || iss < 0) return "Row " + n + ": invalid qty issued.";
+        if (iss > 0) issuedAny = true;
+        if (iss > 0) {
+          const avail = store.onHand(ln.itemId, ln.locationId, ln.itemLocationId || undefined);
+          if (iss > avail) return "Row " + n + ": insufficient stock — only " + avail + " available.";
+          if (req > 0 && iss > req) return "Row " + n + ": qty issued cannot exceed qty requested.";
+        }
+        const locOpts = store.itemLocationsForStorage ? store.itemLocationsForStorage(ln.locationId) : [];
+        if (ln.itemLocationId && locOpts.length && !locOpts.some((x) => x.id === ln.itemLocationId)) return "Row " + n + ": item location does not belong to store.";
+      }
+      if (!issuedAny) return "Enter qty issued on at least one line.";
+      return "";
+    }
+    function buildPayload() {
+      return {
+        ...f,
+        lines: lines.map((ln, idx) => {
+          const it = store.get("items", ln.itemId) || {};
+          const req = ln.qtyRequested === "" ? Number(ln.qtyIssued) || 0 : Number(ln.qtyRequested) || 0;
+          const iss = Number(ln.qtyIssued) || 0;
+          return {
+            lineNo: idx + 1, itemId: ln.itemId, qtyRequested: req, qtyIssued: iss,
+            unit: it.unit || ln.unit || "Nos", locationId: ln.locationId, itemLocationId: ln.itemLocationId || "",
+            batch: ln.batch || "", remarks: ln.remarks || "",
+          };
+        }),
+      };
+    }
     function save() {
-      if (!f.itemId) return VG.toast("Select item from master", "error");
-      if (!f.locationId) return VG.toast("Select stock location", "error");
-      const qty = Number(f.qtyIssued) || 0;
-      if (qty <= 0) return VG.toast("Quantity must be > 0", "error");
-      if (qty > avail) return VG.toast("Insufficient stock — only " + avail + " available", "error");
-      const returnable = f.type === "Vendor Returnable Challan";
-      const no = store.nextNo("MIN", f.date);
-      store.create("materialIssues", { ...f, no, issuedBy: roleKey, pendingReturn: returnable, returnedQty: 0 }, roleKey);
-      store.postLedger({ itemId: f.itemId, locationId: f.locationId, type: "issue", qty: -qty, ref: no, batch: f.batch || "", date: f.date }, roleKey);
-      store.audit(roleKey, "stock-out", "stockLedger", no, "Issue " + qty + " × " + itemName(f.itemId) + " (" + f.type + ")");
-      VG.toast("Issue " + no + " posted · stock reduced");
+      const lineErr = validateLines();
+      if (lineErr) return VG.toast(lineErr, "error");
+      if (f.type === "Issue for Invoicing" && !f.salesOrderId) return VG.toast("Select sales order", "error");
+      if ((f.type === "Vendor Returnable Challan" || f.type === "Vendor Non-Returnable Challan") && !f.vendorId) return VG.toast("Select vendor", "error");
+      const rec = store.postIssue(buildPayload(), roleKey);
+      if (!rec) return VG.toast("Could not post issue", "error");
+      if (rec.error) return VG.toast(rec.error, "error");
+      VG.toast("Issue " + rec.no + " posted · " + (rec.lineCount || 1) + " line(s)");
       onClose();
     }
     return (
-      <InternalScreen onBack={onClose} backLabel="Back to issues" dirty={dirty} title="Material Issue" subtitle="Reduces stock on save · challan can be printed"
-        footer={<><Button variant="soft" icon="eye" onClick={() => printDocument(issueChallanDoc({ ...f, no: f.no || "DRAFT", issuedBy: roleKey }), "preview")}>Preview challan</Button><Button icon="check" onClick={save}>Post issue</Button></>}>
+      <InternalScreen onBack={onClose} backLabel="Back to issues" dirty={dirty} title="Material Issue" subtitle="Multi-item issue · unit auto-fetched from Item Master (read-only)"
+        footer={<><Button variant="soft" icon="eye" onClick={() => printDocument(issueChallanDoc({ ...buildPayload(), no: "DRAFT", issuedBy: roleKey }), "preview")}>Preview challan</Button><Button icon="check" onClick={save}>Post issue</Button></>}>
         <div className="grid lg:grid-cols-3 gap-3">
           <Field label="Issue date" required><DateF value={f.date} onChange={(v) => set("date", v)} /></Field>
           <Field label="Issue type" required className="lg:col-span-2"><Select value={f.type} onChange={(v) => set("type", v)} options={ISSUE_TYPES.map((t) => ({ value: t, label: t }))} /></Field>
-          <Field label="Item (master)" required className="lg:col-span-2"><MasterSelect variant="line" collection="items" value={f.itemId} onChange={pickItem} actorRole={roleKey} can={can("add")} /></Field>
-          <Field label="Stock location (master)" required><MasterSelect collection="locations" value={f.locationId} onChange={(v) => set("locationId", v)} actorRole={roleKey} can={can("add")} /></Field>
-          <Field label="Available stock"><div className={"rounded-lg glass px-3 py-2 text-sm " + (avail <= 0 ? "text-rose-400" : "opacity-80")}>{avail}</div></Field>
-          <Field label="Quantity issued" required><Num value={f.qtyIssued} onChange={(v) => set("qtyIssued", v)} /></Field>
-          <Field label="Unit"><Select value={f.unit} onChange={(v) => set("unit", v)} options={unitsOpt().map((u) => ({ value: u, label: u }))} /></Field>
           <Field label="Received by"><Text value={f.receivedBy} onChange={(v) => set("receivedBy", v)} /></Field>
           <Field label="Approval status"><Select value={f.approval} onChange={(v) => set("approval", v)} options={["Pending", "Approved"].map((x) => ({ value: x, label: x }))} /></Field>
           <Field label="Documents"><Text value={f.documents} onChange={(v) => set("documents", v)} placeholder="challan.pdf" /></Field>
         </div>
-
         <div className="my-3 h-px bg-white/10" />
-        <div className="text-[11px] uppercase tracking-wider opacity-55 mb-2">{f.type} — specific details</div>
-        <div className="grid lg:grid-cols-3 gap-3">
+        <div className="text-[11px] uppercase tracking-wider opacity-55 mb-2">{f.type} — reference</div>
+        <div className="grid lg:grid-cols-3 gap-3 mb-4">
           {f.type === "Issue for Invoicing" && <>
-            <Field label="Sales order (master)" required><MasterSelect collection="salesOrders" value={f.salesOrderId} onChange={pickOrder} actorRole={roleKey} allowCreate={false} /></Field>
+            <Field label="Sales order" required><MasterSelect collection="salesOrders" value={f.salesOrderId} onChange={pickOrder} actorRole={roleKey} allowCreate={false} /></Field>
             <Field label="Customer"><div className="rounded-lg glass px-3 py-2 text-sm opacity-80">{f.customerId ? (store.get("customers", f.customerId) || {}).name : "—"}</div></Field>
             <Field label="Invoice number"><Text value={f.invoiceNo} onChange={(v) => set("invoiceNo", v)} /></Field>
-            <Field label="Dispatch details"><Text value={f.dispatch} onChange={(v) => set("dispatch", v)} /></Field>
-            <Field label="Packing details"><Text value={f.packing} onChange={(v) => set("packing", v)} /></Field>
-            <Field label="Transport details"><Text value={f.transport} onChange={(v) => set("transport", v)} /></Field>
           </>}
           {f.type === "Internal Use / Production" && <>
-            <Field label="Work order #"><Text value={f.productionOrder} onChange={(v) => set("productionOrder", v)} placeholder="WO/2627/0001" /></Field>
-            <Field label="BOM">
-              <Select value={f.bomId || ""} onChange={(v) => {
-                const b = store.get("boms", v);
-                setF((p) => ({ ...p, bomId: v, bomRef: b ? b.no : "" }));
-              }} options={[{ value: "", label: "— Select BOM —" }].concat(
-                store.list("boms").filter((b) => b.status === "Active").map((b) => ({
-                  value: b.id,
-                  label: b.no + " · " + ((VG.itemDisplay && VG.itemDisplay.itemName(b.finishedItemId)) || itemName(b.finishedItemId).split(" — ")[0]),
-                }))
-              )} />
-            </Field>
+            <Field label="Work order #"><Text value={f.productionOrder} onChange={(v) => set("productionOrder", v)} /></Field>
             <Field label="Department"><Text value={f.department} onChange={(v) => set("department", v)} /></Field>
-            <Field label="Machine / project"><Text value={f.machineRef} onChange={(v) => set("machineRef", v)} /></Field>
-            <Field label="Consumption purpose"><Text value={f.purpose} onChange={(v) => set("purpose", v)} /></Field>
-            <Field label="WIP tracking"><Select value={f.wip} onChange={(v) => set("wip", v)} options={["Yes", "No"].map((x) => ({ value: x, label: x }))} /></Field>
+            <Field label="Purpose"><Text value={f.purpose} onChange={(v) => set("purpose", v)} /></Field>
           </>}
-          {f.type === "Vendor Returnable Challan" && <>
-            <Field label="Vendor (master)" required><MasterSelect collection="suppliers" value={f.vendorId} onChange={(v) => set("vendorId", v)} actorRole={roleKey} can={can("add")} /></Field>
-            <Field label="Returnable challan #"><Text value={f.challanNo} onChange={(v) => set("challanNo", v)} /></Field>
-            <Field label="Expected return date"><DateF value={f.expectedReturn} onChange={(v) => set("expectedReturn", v)} /></Field>
-            <Field label="Purpose"><Text value={f.purpose} onChange={(v) => set("purpose", v)} placeholder="Job work / repair" /></Field>
-            <Field label="Item condition before"><Text value={f.condition} onChange={(v) => set("condition", v)} /></Field>
-            <Field label="Partial return allowed"><Select value={f.partial} onChange={(v) => set("partial", v)} options={["Yes", "No"].map((x) => ({ value: x, label: x }))} /></Field>
+          {(f.type === "Vendor Returnable Challan" || f.type === "Vendor Non-Returnable Challan") && <>
+            <Field label="Vendor" required><MasterSelect collection="suppliers" value={f.vendorId} onChange={(v) => set("vendorId", v)} actorRole={roleKey} can={can("add")} /></Field>
+            <Field label="Challan #"><Text value={f.challanNo} onChange={(v) => set("challanNo", v)} /></Field>
           </>}
-          {f.type === "Vendor Non-Returnable Challan" && <>
-            <Field label="Vendor (master)" required><MasterSelect collection="suppliers" value={f.vendorId} onChange={(v) => set("vendorId", v)} actorRole={roleKey} can={can("add")} /></Field>
-            <Field label="Non-returnable challan #"><Text value={f.challanNo} onChange={(v) => set("challanNo", v)} /></Field>
-            <Field label="Reason"><Text value={f.reason} onChange={(v) => set("reason", v)} /></Field>
-            <Field label="Cost impact (₹)"><Num value={f.costImpact} onChange={(v) => set("costImpact", v)} /></Field>
-            <Field label="Approval required"><Select value={f.approvalRequired} onChange={(v) => set("approvalRequired", v)} options={["Yes", "No"].map((x) => ({ value: x, label: x }))} /></Field>
-          </>}
-          <Field label="Remarks" className="lg:col-span-3"><Area value={f.remarks} onChange={(v) => set("remarks", v)} rows={2} /></Field>
         </div>
+        <TransactionLinesShell title="Issue line items" onAddLine={addLine} addLabel="Add line item" minWidth={1320} headerRow={MIN_TABLE_HEAD}>
+          {lines.map((l, idx) => {
+            const avail = l.itemId && l.locationId ? store.onHand(l.itemId, l.locationId, l.itemLocationId || undefined) : 0;
+            const req = l.qtyRequested === "" ? null : Number(l.qtyRequested);
+            const iss = Number(l.qtyIssued) || 0;
+            const pending = req != null && Number.isFinite(req) ? Math.max(0, req - iss) : "—";
+            const ilOpts = store.itemLocationsForStorage ? store.itemLocationsForStorage(l.locationId) : [];
+            return (
+              <tr key={l.key} className="border-b border-white/5 align-top">
+                <td className="px-2 py-1.5 text-xs opacity-70">{idx + 1}</td>
+                <td className="min-w-[180px] px-2 py-1.5"><MasterSelect variant="line" collection="items" value={l.itemId} onChange={(id) => pickItem(l.key, id)} actorRole={roleKey} can={can("add")} /></td>
+                <td className="min-w-[140px] px-2 py-1.5"><div className="text-sm leading-snug py-1 pr-2 whitespace-pre-wrap">{issueLineDesc(l.itemId) || <span className="opacity-40">—</span>}</div></td>
+                <td className="px-2 py-1.5"><Num data-line-qty value={l.qtyRequested} onChange={(v) => setLine(l.key, { qtyRequested: v })} /></td>
+                <td className="px-2 py-1.5"><Num data-line-qty value={l.qtyIssued} onChange={(v) => setLine(l.key, { qtyIssued: v })} /></td>
+                <td className="px-2 py-1.5"><span className="text-sm opacity-80 py-2 inline-block">{l.unit || "—"}</span></td>
+                <td className="px-2 py-1.5 text-sm"><span className={avail <= 0 ? "text-rose-400" : "opacity-80"}>{l.itemId ? avail : "—"}</span></td>
+                <td className="min-w-[130px] px-2 py-1.5">
+                  {canEditLocation ? <MasterSelect collection="locations" value={l.locationId} onChange={(v) => pickStorage(l.key, v)} actorRole={roleKey} can={can("add")} />
+                    : <span className="text-sm opacity-80 py-2 inline-block">{locName(l.locationId)}</span>}
+                </td>
+                <td className="min-w-[130px] px-2 py-1.5">
+                  {canEditLocation ? (
+                    <select className="vg-input w-full text-xs" value={l.itemLocationId || ""} disabled={!l.locationId} onChange={(e) => setLine(l.key, { itemLocationId: e.target.value })}>
+                      <option value="">—</option>
+                      {ilOpts.map((il) => <option key={il.id} value={il.id}>{itemLocName(il.id)}</option>)}
+                    </select>
+                  ) : <span className="text-sm opacity-80 py-2 inline-block">{itemLocName(l.itemLocationId)}</span>}
+                </td>
+                <td className="px-2 py-1.5 text-xs opacity-70">{pending}</td>
+                <td className="min-w-[100px] px-2 py-1.5"><Text value={l.remarks} onChange={(v) => setLine(l.key, { remarks: v })} placeholder="Note…" /></td>
+                <td className="px-2 py-1.5"><button type="button" onClick={() => delLine(l.key)} disabled={lines.length <= 1} className="p-1 rounded chrome-hover hover:text-rose-400 disabled:opacity-30" title="Remove row"><Icon name="trash" size={14} /></button></td>
+              </tr>
+            );
+          })}
+        </TransactionLinesShell>
+        <Field label="Header remarks" className="mt-3"><Area value={f.remarks} onChange={(v) => set("remarks", v)} rows={2} /></Field>
+        <p className="text-[11px] opacity-55 mt-2">Unit is read-only from Item Master. Partial issue supported when qty issued &lt; qty requested.</p>
       </InternalScreen>
     );
   }
@@ -900,16 +1064,27 @@
   function issueChallanDoc(m) {
     const cust = m.customerId ? (store.get("customers", m.customerId) || {}) : null;
     const ship = cust && VG.customerAddr ? VG.customerAddr(cust, "shipping").text : "";
+    const docLines = store.normalizeIssueLines ? store.normalizeIssueLines(m) : [];
+    const rowsHtml = docLines.map((ln) => `<tr>
+      <td>${itemNameSkuPdf(ln.itemId)}</td>
+      <td class="vg-right">${ln.qtyRequested != null ? ln.qtyRequested : "—"}</td>
+      <td class="vg-right">${ln.qtyIssued || 0}</td>
+      <td>${ln.unit || ""}</td>
+      <td>${locName(ln.locationId)}</td>
+      <td>${itemLocName(ln.itemLocationId)}</td>
+      <td>${ln.batch || "—"}</td>
+      <td>${ln.remarks || "—"}</td>
+    </tr>`).join("");
     const inner = `
       <div class="vg-cols">
         <div class="vg-card"><b>Issue / Challan</b>No: ${m.no}<br>Date: ${m.date}<br>Type: ${m.type}</div>
-        <div class="vg-card"><b>Reference</b>${m.salesOrderId ? "SO: " + (store.get("salesOrders", m.salesOrderId) || {}).no : m.vendorId ? "Vendor: " + suppName(m.vendorId) : m.productionOrder ? "Prod: " + m.productionOrder : "—"}<br>${m.challanNo ? "Challan: " + m.challanNo : ""}${m.invoiceNo ? "<br>Invoice: " + m.invoiceNo : ""}</div>
-        ${cust ? `<div class="vg-card"><b>Ship To</b>${cust.name || ""}<br>${ship || ""}</div>` : `<div class="vg-card"><b>Location</b>${locName(m.locationId)}</div>`}
+        <div class="vg-card"><b>Reference</b>${m.salesOrderId ? "SO: " + (store.get("salesOrders", m.salesOrderId) || {}).no : m.vendorId ? "Vendor: " + suppName(m.vendorId) : m.productionOrder ? "WO: " + m.productionOrder : "—"}</div>
+        ${cust ? `<div class="vg-card"><b>Ship To</b>${cust.name || ""}<br>${ship || ""}</div>` : ""}
       </div>
-      <table class="vg-tbl"><thead><tr><th>Item Name / SKU</th><th class="vg-right">Qty</th><th>Unit</th><th>Location</th><th>Batch</th></tr></thead>
-      <tbody><tr><td>${itemNameSkuPdf(m.itemId)}</td><td class="vg-right">${m.qtyIssued || 0}</td><td>${m.unit}</td><td>${locName(m.locationId)}</td><td>${m.batch || "—"}</td></tr></tbody></table>
-      <div class="vg-terms">${m.purpose ? "<b>Purpose:</b> " + m.purpose + "<br>" : ""}${m.remarks ? "<b>Remarks:</b> " + m.remarks : ""}</div>
-      <div class="vg-sign"><div>Issued by: <b>${m.issuedBy || "—"}</b></div><div>Checked by: <b>—</b></div><div>Received by: <b>${m.receivedBy || "—"}</b></div><div>For ${store.company().name}</div></div>`;
+      <table class="vg-tbl"><thead><tr><th>Item SKU</th><th class="vg-right">Requested</th><th class="vg-right">Issued</th><th>Unit</th><th>Store</th><th>Item location</th><th>Batch</th><th>Remarks</th></tr></thead>
+      <tbody>${rowsHtml || "<tr><td colspan='8'>No lines</td></tr>"}</tbody></table>
+      <div class="vg-terms">${m.remarks ? "<b>Remarks:</b> " + m.remarks : ""}</div>
+      <div class="vg-sign"><div>Issued by: <b>${m.issuedBy || "—"}</b></div><div>Received by: <b>${m.receivedBy || "—"}</b></div><div>For ${store.company().name}</div></div>`;
     return { title: m.type || "Material Issue", subtitle: m.no + " · " + m.date, inner };
   }
   function IssuePage({ roleKey, can, defaultType }) {
@@ -919,16 +1094,18 @@
     const cols = [
       { key: "no", label: "MIN", render: (r) => <span className="font-mono text-xs">{r.no}</span> }, { key: "date", label: "Date" },
       { key: "type", label: "Type", render: (r) => <Pill color="#6366f1">{r.type.replace(" Challan", "").replace("Issue for ", "")}</Pill>, csv: (r) => r.type },
-      { key: "itemId", label: "Item", render: (r) => itemName(r.itemId), csv: (r) => itemName(r.itemId) },
-      { key: "qtyIssued", label: "Qty", render: (r) => r.qtyIssued + " " + r.unit },
-      { key: "ref", label: "Reference", render: (r) => r.salesOrderId ? (store.get("salesOrders", r.salesOrderId) || {}).no : r.vendorId ? suppName(r.vendorId) : r.productionOrder || "—", csv: (r) => r.salesOrderId || r.vendorId || r.productionOrder || "" },
+      { key: "lineCount", label: "Lines", render: (r) => r.lineCount || (store.normalizeIssueLines ? store.normalizeIssueLines(r).length : 1) },
+      { key: "itemId", label: "Item(s)", render: (r) => issueItemsLabel(r), csv: (r) => issueItemsLabel(r) },
+      { key: "qtyRequested", label: "Requested", render: (r) => r.qtyRequested != null ? r.qtyRequested : "—" },
+      { key: "qtyIssued", label: "Issued", render: (r) => (r.qtyIssued || 0) + (r.unit ? " " + r.unit : "") },
+      { key: "ref", label: "Reference", render: (r) => r.salesOrderId ? (store.get("salesOrders", r.salesOrderId) || {}).no : r.vendorId ? suppName(r.vendorId) : r.productionOrder || "—" },
       { key: "pendingReturn", label: "Return", render: (r) => r.type === "Vendor Returnable Challan" ? (r.pendingReturn ? <Pill color="#f59e0b">Pending</Pill> : <Pill color="#34d399">Returned</Pill>) : "—" },
     ];
     if (build) {
       return <IssueBuilder open onClose={() => setBuild(false)} roleKey={roleKey} can={can} initialType={defaultType} />;
     }
     return (
-      <ListPage title={defaultType === "Vendor Returnable Challan" ? "Returnable Challan" : defaultType === "Vendor Non-Returnable Challan" ? "Non-Returnable Challan" : "Material Issue"} desc="Invoicing · Production · Vendor challans" onNew={() => setBuild(true)} newLabel="Add Issue" can={can}>
+      <ListPage title={defaultType === "Vendor Returnable Challan" ? "Returnable Challan" : defaultType === "Vendor Non-Returnable Challan" ? "Non-Returnable Challan" : "Material Issue"} desc="Multi-item tabular issue · qty requested & issued · store + item location" onNew={() => setBuild(true)} newLabel="Add Issue" can={can}>
         <RecordTable embedded suppressNew title="Issue List" columns={cols} rows={rows} can={can} printTitle="Material Issues" searchKeys={["no", "type"]}
           filters={defaultType ? [] : [{ key: "type", label: "All types", options: ISSUE_TYPES }]}
           onNew={() => setBuild(true)} onView={(r) => issueChallanPDF(r, "preview")} empty="No issues yet" />
@@ -1070,6 +1247,176 @@
     return (
       <ListPage title="Scrap / Rejection Entry" desc="Write off rejected / damaged stock" onNew={() => setBuild(true)} newLabel="Add Scrap Entry" can={can}>
         <RecordTable embedded suppressNew title="Scrap List" columns={cols} rows={rows} can={can} printTitle="Scrap" searchKeys={["no", "reason"]} onNew={() => setBuild(true)} empty="No scrap entries" />
+      </ListPage>
+    );
+  }
+
+  /* ================= Opening Balance ================= */
+  function blankObLine() {
+    return { key: Math.random().toString(36).slice(2), itemId: "", qty: "", unit: "", locationId: "", itemLocationId: "", rate: "", batch: "", remarks: "" };
+  }
+  const OB_TABLE_HEAD = (
+    <tr className="text-left border-b border-white/10 text-[11px] uppercase opacity-70">
+      <th className="w-10 px-2">Sr.</th>
+      <th className="min-w-[180px] px-2">Item SKU</th>
+      <th className="min-w-[140px] px-2">Description</th>
+      <th className="w-24 px-2">Opening Qty</th>
+      <th className="w-16 px-2">Unit</th>
+      <th className="min-w-[130px] px-2">Store Location</th>
+      <th className="min-w-[130px] px-2">Item Location</th>
+      <th className="w-24 px-2">Rate</th>
+      <th className="w-24 px-2">Value</th>
+      <th className="w-20 px-2">Batch</th>
+      <th className="min-w-[90px] px-2">Remarks</th>
+      <th className="w-10" />
+    </tr>
+  );
+  function OpeningBalanceBuilder({ open, onClose, roleKey, can, record }) {
+    const isEdit = !!(record && record.id);
+    const locked = record && (record.status === "Approved" || record.locked);
+    const [f, setF] = useState(() => ({ date: today(), remarks: "", ...(record || {}) }));
+    const [lines, setLines] = useState(() => (record && record.lines && record.lines.length)
+      ? record.lines.map((ln) => ({ ...blankObLine(), ...ln, key: Math.random().toString(36).slice(2) }))
+      : [blankObLine()]);
+    const [dirty, setDirty] = useState(false);
+    const set = (k, v) => { if (!locked) { setDirty(true); setF((p) => ({ ...p, [k]: v })); } };
+    const setLine = (key, patch) => { if (!locked) { setDirty(true); setLines((rows) => rows.map((r) => (r.key === key ? { ...r, ...patch } : r))); } };
+    const addLine = () => { if (!locked) setLines((rows) => [...rows, blankObLine()]); };
+    const delLine = (key) => { if (!locked && lines.length > 1) setLines((rows) => rows.filter((r) => r.key !== key)); };
+    function pickItem(key, id) {
+      const it = store.get("items", id) || {};
+      setLine(key, { itemId: id, unit: it.unit || "Nos", rate: it.rate || 0, locationId: it.locationId || "", itemLocationId: it.itemLocationId || "" });
+    }
+    function pickStorage(key, locationId) { setLine(key, { locationId, itemLocationId: "" }); }
+    const lineValues = lines.map((l) => (Number(l.qty) || 0) * (Number(l.rate) || 0));
+    const totalValue = lineValues.reduce((s, v) => s + v, 0);
+    function validateLines() {
+      for (let i = 0; i < lines.length; i++) {
+        const ln = lines[i];
+        const n = i + 1;
+        if (!ln.itemId) return "Row " + n + ": select item SKU.";
+        if (!ln.locationId) return "Row " + n + ": select store location.";
+        const qty = Number(ln.qty);
+        if (!Number.isFinite(qty) || qty <= 0) return "Row " + n + ": opening qty must be > 0.";
+      }
+      return "";
+    }
+    function persist(submit) {
+      if (!can("add") && !isEdit) return VG.toast("No permission", "error");
+      if (locked) return VG.toast("Approved opening balance is locked", "error");
+      const err = validateLines();
+      if (err) return VG.toast(err, "error");
+      const payload = {
+        id: record && record.id,
+        date: f.date,
+        remarks: f.remarks,
+        submit: !!submit,
+        lines: lines.map((ln, idx) => ({
+          lineNo: idx + 1, itemId: ln.itemId, qty: Number(ln.qty) || 0,
+          unit: (store.get("items", ln.itemId) || {}).unit || ln.unit,
+          locationId: ln.locationId, itemLocationId: ln.itemLocationId || "",
+          rate: Number(ln.rate) || 0, batch: ln.batch || "", remarks: ln.remarks || "",
+        })),
+      };
+      const doc = store.saveOpeningBalance(payload, roleKey);
+      if (!doc) return VG.toast("Could not save", "error");
+      VG.toast(submit ? "Submitted for approval" : "Draft saved");
+      onClose();
+    }
+    async function approveDoc() {
+      if (!can("approve")) return VG.toast("Approval permission required", "error");
+      const ok = await VG.confirm({ title: "Approve opening balance?", message: "Stock ledger will be updated. This cannot be edited after approval.", confirmLabel: "Approve" });
+      if (!ok) return;
+      let doc = record;
+      if (dirty || !record) {
+        const err = validateLines();
+        if (err) return VG.toast(err, "error");
+        doc = store.saveOpeningBalance({ id: record && record.id, date: f.date, remarks: f.remarks, submit: true, lines: lines.map((ln, idx) => ({ lineNo: idx + 1, itemId: ln.itemId, qty: Number(ln.qty), unit: ln.unit, locationId: ln.locationId, itemLocationId: ln.itemLocationId || "", rate: Number(ln.rate) || 0, batch: ln.batch || "", remarks: ln.remarks || "" })) }, roleKey);
+      }
+      if (!doc) return;
+      const approved = store.approveOpeningBalance(doc.id, roleKey);
+      if (!approved) return VG.toast("Could not approve", "error");
+      VG.toast("Opening balance approved · stock updated");
+      onClose();
+    }
+    return (
+      <InternalScreen onBack={onClose} backLabel="Back to opening balance" dirty={dirty} title={isEdit ? "Edit Opening Balance" : "Opening Balance Entry"} subtitle={locked ? "Approved — locked" : "Initial stock setup · approval required"}
+        footer={<>
+          {!locked && can("add") && <Button variant="soft" onClick={() => persist(false)}>Save draft</Button>}
+          {!locked && can("add") && <Button variant="soft" onClick={() => persist(true)}>Submit</Button>}
+          {can("approve") && !locked && <Button icon="check" onClick={approveDoc}>Approve</Button>}
+        </>}>
+        <div className="grid lg:grid-cols-3 gap-3 mb-4">
+          <Field label="Entry date" required><DateF value={f.date} onChange={(v) => set("date", v)} disabled={locked} /></Field>
+          <Field label="Status"><div className="rounded-lg glass px-3 py-2 text-sm">{f.status || record?.status || "Draft"}</div></Field>
+          <Field label="Total value"><div className="rounded-lg glass px-3 py-2 text-sm font-semibold">{inr(totalValue)}</div></Field>
+          <Field label="Remarks" className="lg:col-span-3"><Area value={f.remarks || ""} onChange={(v) => set("remarks", v)} rows={2} disabled={locked} /></Field>
+        </div>
+        <TransactionLinesShell title="Opening balance lines" onAddLine={locked ? null : addLine} addLabel="Add line item" minWidth={1280} headerRow={OB_TABLE_HEAD}>
+          {lines.map((l, idx) => {
+            const ilOpts = store.itemLocationsForStorage ? store.itemLocationsForStorage(l.locationId) : [];
+            const lv = (Number(l.qty) || 0) * (Number(l.rate) || 0);
+            return (
+              <tr key={l.key} className="border-b border-white/5 align-top">
+                <td className="px-2 py-1.5 text-xs opacity-70">{idx + 1}</td>
+                <td className="px-2 py-1.5"><MasterSelect variant="line" collection="items" value={l.itemId} onChange={(id) => pickItem(l.key, id)} actorRole={roleKey} can={can("add")} disabled={locked} /></td>
+                <td className="px-2 py-1.5"><div className="text-sm py-1">{issueLineDesc(l.itemId) || "—"}</div></td>
+                <td className="px-2 py-1.5"><Num value={l.qty} onChange={(v) => setLine(l.key, { qty: v })} disabled={locked} /></td>
+                <td className="px-2 py-1.5"><span className="text-sm opacity-80">{l.unit || "—"}</span></td>
+                <td className="px-2 py-1.5"><MasterSelect collection="locations" value={l.locationId} onChange={(v) => pickStorage(l.key, v)} actorRole={roleKey} can={can("add")} disabled={locked} /></td>
+                <td className="px-2 py-1.5">
+                  <select className="vg-input w-full text-xs" value={l.itemLocationId || ""} disabled={locked || !l.locationId} onChange={(e) => setLine(l.key, { itemLocationId: e.target.value })}>
+                    <option value="">—</option>
+                    {ilOpts.map((il) => <option key={il.id} value={il.id}>{itemLocName(il.id)}</option>)}
+                  </select>
+                </td>
+                <td className="px-2 py-1.5"><Num value={l.rate} onChange={(v) => setLine(l.key, { rate: v })} disabled={locked} /></td>
+                <td className="px-2 py-1.5 text-sm opacity-80">{inr(lv)}</td>
+                <td className="px-2 py-1.5"><Text value={l.batch} onChange={(v) => setLine(l.key, { batch: v })} disabled={locked} /></td>
+                <td className="px-2 py-1.5"><Text value={l.remarks} onChange={(v) => setLine(l.key, { remarks: v })} disabled={locked} /></td>
+                <td className="px-2 py-1.5">{!locked && <button type="button" onClick={() => delLine(l.key)} disabled={lines.length <= 1} className="p-1 rounded chrome-hover hover:text-rose-400 disabled:opacity-30"><Icon name="trash" size={14} /></button>}</td>
+              </tr>
+            );
+          })}
+        </TransactionLinesShell>
+        <p className="text-[11px] opacity-55 mt-2">Only authorized users can approve. Approved entries update stock ledger and are locked.</p>
+      </InternalScreen>
+    );
+  }
+  function OpeningBalancePage({ roleKey, can }) {
+    VG.useDB();
+    const [build, setBuild] = useState(false);
+    const [edit, setEdit] = useState(null);
+    const rows = store.list("openingBalances").slice().reverse();
+    const cols = [
+      { key: "no", label: "OB No.", render: (r) => <span className="font-mono text-xs">{r.no}</span> },
+      { key: "date", label: "Date" },
+      { key: "lineCount", label: "Lines", render: (r) => r.lineCount || (r.lines || []).length },
+      { key: "totalValue", label: "Value", render: (r) => inr(r.totalValue) },
+      { key: "status", label: "Status", render: (r) => <StatusTag value={r.status || "Draft"} map={{ Draft: "#94a3b8", Submitted: "#f59e0b", Approved: "#34d399", Reversed: "#ef4444" }} /> },
+      { key: "createdBy", label: "Created by" },
+      { key: "approvedBy", label: "Approved by", render: (r) => r.approvedBy || "—" },
+    ];
+    if (build || edit) {
+      return <OpeningBalanceBuilder open onClose={() => { setBuild(false); setEdit(null); }} roleKey={roleKey} can={can} record={edit} />;
+    }
+    return (
+      <ListPage title="Opening Balance Entry" desc="Initial stock setup in tabular form · draft, submit, approve workflow" onNew={can("add") ? () => setBuild(true) : null} newLabel="New opening balance" can={can}>
+        <RecordTable embedded suppressNew title="Opening balance documents" columns={cols} rows={rows} can={can} printTitle="Opening Balance" searchKeys={["no", "status"]}
+          onNew={can("add") ? () => setBuild(true) : null}
+          onEdit={can("edit") ? (r) => { if (r.status === "Approved") return VG.toast("Approved document is locked", "error"); setEdit(r); } : null}
+          onDelete={can("approve") ? async (r) => {
+            if (r.status === "Approved") {
+              const ok = await VG.confirm({ title: "Reverse opening balance?", danger: true, confirmLabel: "Reverse" });
+              if (!ok) return;
+              store.reverseOpeningBalance(r.id, roleKey);
+              VG.toast("Opening balance reversed");
+            } else if (can("delete")) {
+              const ok = await VG.confirm({ title: "Delete draft?", danger: true, confirmLabel: "Delete" });
+              if (ok) { store.remove("openingBalances", r.id, roleKey); VG.toast("Deleted"); }
+            }
+          } : null}
+          empty="No opening balance entries yet" />
       </ListPage>
     );
   }
@@ -1283,6 +1630,7 @@
     { id: "transfer", label: "Stock Transfer", icon: "truck", group: "Operations" },
     { id: "returns", label: "Returns", icon: "chevronLeft", group: "Operations" },
     { id: "scrap", label: "Scrap / Rejection", icon: "trash", group: "Operations" },
+    { id: "openingBalance", label: "Opening Balance", icon: "database", group: "Operations" },
     { id: "physical", label: "Physical Verification", icon: "check", group: "Operations" },
     { id: "alerts", label: "Stock Alerts", icon: "alert", group: "Reports" },
     { id: "batches", label: "Batch / Lot", icon: "box", group: "Reports" },
@@ -1298,7 +1646,7 @@
     suppliers: SuppliersPage, locations: LocationsPage, itemLocations: ItemLocationsPage, ledger: LedgerPage, receipt: ReceiptPage, issue: IssuePage, requirements: MaterialReqPage,
     "issue-ret": (p) => React.createElement(IssuePage, { ...p, defaultType: "Vendor Returnable Challan" }),
     "issue-nr": (p) => React.createElement(IssuePage, { ...p, defaultType: "Vendor Non-Returnable Challan" }),
-    transfer: TransferPage, returns: ReturnsPage, scrap: ScrapPage, physical: PhysicalPage, alerts: AlertsPage, batches: BatchesPage, reports: ReportsPage,
+    transfer: TransferPage, returns: ReturnsPage, scrap: ScrapPage, openingBalance: OpeningBalancePage, physical: PhysicalPage, alerts: AlertsPage, batches: BatchesPage, reports: ReportsPage,
   };
 
   VG.modules = VG.modules || {};
